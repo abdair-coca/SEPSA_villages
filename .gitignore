@@ -1,0 +1,8 @@
+# Tooling local
+.atl/
+.playwright-mcp/
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log
