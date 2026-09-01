@@ -434,7 +434,7 @@ const UI = {
     $("#conn-dot").className = "dot " + (ok ? "green" : "orange");
     $("#conn-text").textContent = ok ? "Sincronizado" : "Sin conexión";
     $("#conn-card-dot").className = "dot " + (ok ? "green" : "orange");
-    $("#conn-card-text").textContent = ok ? "🟢 Sincronizado" : "🟠 Sin conexión · trabajando localmente";
+    $("#conn-card-text").textContent = ok ? "Sincronizado" : "Sin conexión · trabajando localmente";
     $("#offline-hint").classList.toggle("hidden", ok);
     $("#offline-banner").classList.toggle("hidden", ok);
     const pend = App.pendientes();
@@ -477,7 +477,7 @@ const UI = {
             <div class="dom-codigo">Código ${d.codigo}</div>
             <div class="dom-localidad">${d.localidad}</div>
           </div>
-          <span class="dom-badge badge-${est}">${est === "al-dia" ? "🟢 Al día" : est === "visitado" ? "🟡 Visitado" : "🔴 Pendiente"}</span>
+          <span class="dom-badge badge-${est}">${est === "al-dia" ? "Al día" : est === "visitado" ? "Visitado" : "Pendiente"}</span>
         </div>
         <div class="dom-bottom">
           <span class="dom-meses">${d.meses.length} ${d.meses.length === 1 ? "mes" : "meses"} pendientes</span>
@@ -497,7 +497,7 @@ const UI = {
     $("#det-direccion").textContent = d.direccion;
     $("#det-localidad").textContent = d.localidad;
     $("#det-medidor").textContent = d.medidor;
-    $("#det-estado").textContent = est === "al-dia" ? "🟢 Al día" : est === "visitado" ? "🟡 Visitado" : "🔴 Pendiente";
+    $("#det-estado").textContent = est === "al-dia" ? "Al día" : est === "visitado" ? "Visitado" : "Pendiente";
     $("#det-meses").textContent = d.meses.length === 0 ? "Sin deuda" : `${d.meses.length} meses`;
     $("#det-deuda").textContent = fmtBs(Dominio.totalCentavos(d.meses));
 
@@ -556,7 +556,7 @@ const UI = {
     $("#pago-total").textContent = fmtBs(c.totalCentavos);
     const restante = d ? Dominio.totalCentavos(d.meses) : 0;
     $("#pago-restante").textContent = `${d ? d.meses.length : 0} meses · ${fmtBs(restante)}`;
-    $("#pago-estado").textContent = App.online ? "✓ Sincronizado" : "🕐 Pendiente de sincronización";
+    $("#pago-estado").textContent = App.online ? "Sincronizado" : "Pendiente de sincronización";
   },
 
   renderComprobante() {
@@ -590,7 +590,7 @@ const UI = {
       li.innerHTML = `
         <div class="cobro-top">
           <span class="cobro-nombre">${d ? d.nombre : "—"}</span>
-          <span class="cobro-sync ${syncOk ? "sync-ok" : "sync-pend"}">${syncOk ? "✓ Sincronizado" : "🕐 Pendiente"}</span>
+          <span class="cobro-sync ${syncOk ? "sync-ok" : "sync-pend"}">${syncOk ? "Sincronizado" : "Pendiente"}</span>
         </div>
         <div class="cobro-meta">
           <span>${c.cantidadMeses} ${c.cantidadMeses === 1 ? "mes" : "meses"}</span>
