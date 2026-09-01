@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>SEPSA · Cobranza</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="phone-frame">
+
+    <div id="offline-banner" class="offline-banner hidden" role="status">
+      <span class="dot orange"></span>
+      <span>Sin conexión · trabajando localmente</span>
+    </div>
+    <div id="pending-banner" class="pending-banner hidden" role="status">
+      <span id="pending-count">0</span> <span>cambios pendientes</span>
+    </div>
+
+    <header class="app-header">
+      <button id="btn-back" class="icon-btn hidden" aria-label="Volver">‹</button>
+      <h1 id="app-title">SEPSA</h1>
+      <div id="conn-status" class="conn-status">
+        <span class="dot" id="conn-dot"></span>
+        <span id="conn-text">Sincronizado</span>
+      </div>
+    </header>
+
+    <main id="main" class="main">
+
+      <!-- ============ PANTALLA 1: INICIO ============ -->
+      <section id="screen-inicio" class="screen active">
+        <div class="welcome">
+          <p class="greeting" id="greeting">Hola</p>
+          <p class="zone" id="zone">Cargando zona…</p>
+        </div>
+
+        <div class="card conn-card" id="conn-card">
+          <div class="conn-card-row">
+            <span id="conn-card-dot" class="dot"></span>
+            <span id="conn-card-text">Sincronizado</span>
+          </div>
+          <div class="last-sync">
+            <span class="muted">Última sincronización</span>
+            <strong id="last-sync-text">—</strong>
+          </div>
+          <p id="offline-hint" class="offline-hint hidden">
+            Los cambios se guardarán automáticamente y se sincronizarán cuando vuelva la conexión.
+          </p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-value" id="stat-asignados">0</span>
+            <span class="stat-label">Domicilios asignados</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="stat-visitados">0</span>
+            <span class="stat-label">Visitados</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="stat-pendientes">0</span>
+            <span class="stat-label">Pendientes</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="stat-cobros">0</span>
+            <span class="stat-label">Cobros hoy</span>
+          </div>
+        </div>
+
+        <div class="card money-card">
+          <span class="muted">Dinero cobrado hoy</span>
+          <span class="money" id="stat-monto">Bs 0</span>
+        </div>
+      </section>
+
+      <!-- ============ PANTALLA 2: DOMICILIOS ============ -->
+      <section id="screen-domicilios" class="screen">
+        <div class="toolbar">
+          <input id="search-input" class="search" type="search" placeholder="Buscar por nombre o código…">
+          <div class="filters">
+            <button class="filter-chip active" data-filter="todos">Todos</button>
+            <button class="filter-chip" data-filter="pendiente">Pendiente</button>
+            <button class="filter-chip" data-filter="al-dia">Al día</button>
+          </div>
+        </div>
+        <ul id="domicilio-list" class="domicilio-list"></ul>
+        <p id="empty-state" class="empty hidden">No hay domicilios que coincidan.</p>
+      </section>
+
+      <!-- ============ PANTALLA 3: DETALLE DOMICILIO ============ -->
+      <section id="screen-detalle" class="screen">
+        <div class="detail-header">
+          <h2 id="det-nombre">—</h2>
+          <p class="muted">Código <span id="det-codigo">—</span></p>
+        </div>
+
+        <div class="card info-grid">
+          <div><span class="muted">Dirección</span><strong id="det-direccion">—</strong></div>
+          <div><span class="muted">Localidad</span><strong id="det-localidad">—</strong></div>
+          <div><span class="muted">Medidor</span><strong id="det-medidor">—</strong></div>
+          <div><span class="muted">Estado</span><strong id="det-estado">—</strong></div>
+        </div>
+
+        <div class="card debt-card">
+          <span class="muted">Deuda pendiente</span>
+          <span class="debt-months" id="det-meses">—</span>
+          <span class="debt-money" id="det-deuda">—</span>
+        </div>
+
+        <h3 class="section-title">Meses pendientes</h3>
+        <ul id="det-meses-list" class="meses-list"></ul>
+
+        <div class="actions">
+          <button id="btn-visita" class="btn btn-secondary">Registrar visita</button>
+          <button id="btn-cobrar" class="btn btn-primary">Cobrar</button>
+        </div>
+      </section>
+
+      <!-- ============ PANTALLA 5: COBRANZA ============ -->
+      <section id="screen-cobranza" class="screen">
+        <div class="detail-header">
+          <h2 id="cob-nombre">—</h2>
+          <p class="muted">Código <span id="cob-codigo">—</span></p>
+        </div>
+
+        <div class="card debt-card">
+          <span class="muted">Deuda pendiente</span>
+          <span class="debt-months" id="cob-meses">—</span>
+          <span class="debt-money" id="cob-deuda">—</span>
+        </div>
+
+        <h3 class="section-title">Selecciona cuántos meses pagará</h3>
+        <div class="stepper">
+          <button id="step-minus" class="step-btn" aria-label="Menos meses">−</button>
+          <div class="step-value">
+            <span id="cob-cantidad">1</span>
+            <span class="muted">meses</span>
+          </div>
+          <button id="step-plus" class="step-btn" aria-label="Más meses">+</button>
+        </div>
+
+        <h3 class="section-title">Se pagarán</h3>
+        <ul id="cob-meses-list" class="meses-list"></ul>
+
+        <div class="card total-card">
+          <div>
+            <span class="muted">Total</span>
+            <span class="stat-value" id="cob-total-meses">1 mes</span>
+          </div>
+          <span class="money" id="cob-total">Bs 0</span>
+        </div>
+
+        <button id="btn-continuar-cobro" class="btn btn-primary btn-lg">Cobrar</button>
+      </section>
+
+      <!-- ============ PANTALLA 7: PAGO REGISTRADO ============ -->
+      <section id="screen-pago" class="screen">
+        <div class="success-wrap">
+          <div class="success-icon">✓</div>
+          <h2>Pago registrado</h2>
+          <p id="pago-nombre" class="muted">—</p>
+        </div>
+        <div class="card pago-resumen">
+          <div><span class="muted">Meses pagados</span><strong id="pago-meses">—</strong></div>
+          <div><span class="muted">Total</span><strong id="pago-total">—</strong></div>
+          <div><span class="muted">Deuda restante</span><strong id="pago-restante">—</strong></div>
+          <div><span class="muted">Estado</span><strong class="pending" id="pago-estado">🕐 Pendiente de sincronización</strong></div>
+        </div>
+        <div class="actions">
+          <button id="btn-ver-comprobante" class="btn btn-primary">Ver comprobante</button>
+          <button id="btn-finalizar" class="btn btn-secondary">Finalizar visita</button>
+        </div>
+      </section>
+
+      <!-- ============ PANTALLA 8: COMPROBANTE ============ -->
+      <section id="screen-comprobante" class="screen">
+        <div class="recibo">
+          <div class="recibo-head">
+            <h2>SEPSA</h2>
+            <p>COMPROBANTE DE PAGO</p>
+          </div>
+          <div class="recibo-body">
+            <div class="recibo-row"><span class="muted">Cliente</span><strong id="rec-cliente">—</strong></div>
+            <div class="recibo-row"><span class="muted">Código</span><strong id="rec-codigo">—</strong></div>
+            <div class="recibo-row"><span class="muted">Meses pagados</span><strong id="rec-meses">—</strong></div>
+            <div class="recibo-row recibo-total"><span class="muted">Total</span><strong id="rec-total">—</strong></div>
+            <div class="recibo-row"><span class="muted">Método</span><strong>Efectivo</strong></div>
+            <div class="recibo-row"><span class="muted">Técnico</span><strong id="rec-tecnico">—</strong></div>
+            <div class="recibo-row"><span class="muted">Fecha</span><strong id="rec-fecha">—</strong></div>
+            <div class="recibo-row"><span class="muted">Estado</span><strong id="rec-estado">—</strong></div>
+          </div>
+          <div class="recibo-id">
+            <span class="muted">Comprobante</span>
+            <strong id="rec-id">—</strong>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btn-compartir" class="btn btn-secondary">Compartir</button>
+          <button id="btn-guardar" class="btn btn-primary">Guardar</button>
+        </div>
+        <p id="rec-msg" class="toast hidden"></p>
+      </section>
+
+      <!-- ============ PANTALLA 9: COBROS (HISTORIAL) ============ -->
+      <section id="screen-cobros" class="screen">
+        <ul id="cobros-list" class="cobros-list"></ul>
+        <p id="cobros-empty" class="empty hidden">Todavía no hay cobros registrados hoy.</p>
+      </section>
+
+      <!-- ============ PANTALLA 10/11: MÁS / OFFLINE / SYNC ============ -->
+      <section id="screen-mas" class="screen">
+        <div class="card">
+          <div class="switch-row">
+            <div>
+              <strong>Simular modo offline</strong>
+              <p class="muted" id="mas-conn-desc">La app seguirá funcionando sin conexión.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="offline-toggle">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card sync-card">
+          <h3>Sincronización</h3>
+          <p class="muted">Última sincronización: <strong id="mas-last-sync">—</strong></p>
+          <button id="btn-sync-manual" class="btn btn-secondary">Sincronizar ahora</button>
+        </div>
+
+        <div class="card">
+          <div class="switch-row">
+            <div>
+              <strong>Información</strong>
+              <p class="muted">Prototipo de validación. Datos simulados.</p>
+            </div>
+          </div>
+          <button id="btn-reiniciar" class="btn btn-danger">Restablecer datos de ejemplo</button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ============ NAVEGACIÓN INFERIOR ============ -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-nav="inicio" aria-label="Inicio">
+        <span class="nav-icon">🏠</span><span>Inicio</span>
+      </button>
+      <button class="nav-item" data-nav="domicilios" aria-label="Domicilios">
+        <span class="nav-icon">📍</span><span>Domicilios</span>
+      </button>
+      <button class="nav-item" data-nav="cobros" aria-label="Cobros">
+        <span class="nav-icon">💵</span><span>Cobros</span>
+      </button>
+      <button class="nav-item" data-nav="mas" aria-label="Más">
+        <span class="nav-icon">☰</span><span>Más</span>
+      </button>
+    </nav>
+
+    <!-- ============ MODAL: REGISTRAR VISITA ============ -->
+    <div id="modal-visita" class="modal hidden">
+      <div class="modal-content">
+        <h3>Registrar visita</h3>
+        <p id="visita-nombre" class="muted">—</p>
+        <p class="muted">Código <span id="visita-codigo">—</span></p>
+        <p class="visita-ok">✓ Visitado</p>
+        <label class="field-label" for="visita-obs">Observación (opcional)</label>
+        <select id="visita-obs" class="select">
+          <option value="">— Sin observación —</option>
+          <option>Usuario no se encontraba</option>
+          <option>Usuario no realizó el pago</option>
+          <option>No fue posible contactar</option>
+          <option>Usuario realizó el pago</option>
+        </select>
+        <div class="modal-actions">
+          <button id="visita-cancelar" class="btn btn-secondary">Cancelar</button>
+          <button id="visita-guardar" class="btn btn-primary">Guardar visita</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ MODAL: CONFIRMAR COBRO ============ -->
+    <div id="modal-confirmar" class="modal hidden">
+      <div class="modal-content">
+        <h3>Confirmar cobro</h3>
+        <div class="confirm-grid">
+          <div><span class="muted">Cliente</span><strong id="conf-cliente">—</strong></div>
+          <div><span class="muted">Meses</span><strong id="conf-meses">—</strong></div>
+          <div><span class="muted">Cantidad</span><strong id="conf-cantidad">—</strong></div>
+          <div><span class="muted">Total</span><strong class="money" id="conf-total">—</strong></div>
+          <div><span class="muted">Método</span><strong>💵 Efectivo</strong></div>
+        </div>
+        <p class="warn">Verifica que recibiste el monto completo antes de confirmar.</p>
+        <div class="modal-actions">
+          <button id="conf-cancelar" class="btn btn-secondary">Cancelar</button>
+          <button id="conf-aceptar" class="btn btn-primary">Confirmar cobro</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ MODAL: SINCRONIZACIÓN ============ -->
+    <div id="modal-sync" class="modal hidden">
+      <div class="modal-content">
+        <h3 id="sync-title">Sincronizando cambios…</h3>
+        <div class="progress"><div id="sync-bar" class="progress-bar"></div></div>
+        <p id="sync-status" class="muted">Preparando…</p>
+        <div class="last-sync">
+          <span class="muted">Última sincronización:</span>
+          <strong id="sync-last">—</strong>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
