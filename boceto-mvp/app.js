@@ -1,682 +1,291 @@
-﻿/**
- * SEPSA - Sistema de Cortes y Reconexiones
- * Prototipo Interactivo en Memoria Volátil (P-01 a P-05)
- */
-
-(function () {
-  'use strict';
-
-  // =========================================================================
-  // 1. ESTADO GLOBAL EN MEMORIA (STORE VOLÁTIL)
-  // =========================================================================
-
-  const store = {
-    usuario: {
-      id: 680,
-      ci: '10577452',
-      nombre: 'JOSUE DANIEL QUINTANILLA TABOADA',
-      email: 'josue.quintanilla@sepsa.com.bo',
-      telefono: '+591 72409703'
-    },
-    temporizadorSegundos: 378, // 6 min 18 seg
-    vistaActiva: 'dashboard',
-    ordenSeleccionadaCUC: 443794,
-
-    // Datos observados en búsqueda P-02 (/orden/create)
-    morososMojotorillo: [
-      {
-        cuenta: 306040,
-        titular: 'MUÑOZ PEDRO',
-        regionalLocalidad: '101 - 002',
-        habilitante: 'R',
-        ruta: '002',
-        orden: 129,
-        circuito: 'D-1182',
-        direccion: 'MOJOTORILLO S/N',
-        estado: 'A',
-        tarifa: 'RS',
-        medidor: '240907792 WASION',
-        facturasVencidas30d: 2,
-        totalPendiente: 66.82
-      },
-      {
-        cuenta: 306043,
-        titular: 'FLORES JUSTO',
-        regionalLocalidad: '101 - 002',
-        habilitante: 'R',
-        ruta: '002',
-        orden: 132,
-        circuito: 'D-1182',
-        direccion: 'MOJOTORILLO S/N',
-        estado: 'A',
-        tarifa: 'RS',
-        medidor: '240907795 WASION',
-        facturasVencidas30d: 2,
-        totalPendiente: 45.20
-      }
-    ],
-
-    // Desglose de planillas mensuales FA_FACTURAS (Tabla T-03)
-    deudasPorCuenta: {
-      306040: [
-        { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: 21.94, estado: 'P', origen: 'FA_FACTURAS', diasMora: 84 },
-        { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: 22.44, estado: 'P', origen: 'FA_FACTURAS', diasMora: 54 },
-        { periodo: 8, anio: 2026, fecha: '2026-08-15', monto: 22.44, estado: 'P', origen: 'FA_FACTURAS', diasMora: 23 }
-      ],
-      306043: [
-        { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: 22.60, estado: 'P', origen: 'FA_FACTURAS', diasMora: 84 },
-        { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: 22.60, estado: 'P', origen: 'FA_FACTURAS', diasMora: 54 }
-      ],
-      1702690: [
-        { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: 44.20, estado: 'C', origen: 'FA_FACTURAS', diasMora: 84 },
-        { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: 44.20, estado: 'C', origen: 'FA_FACTURAS', diasMora: 54 }
-      ]
-    },
-
-    // 46 Órdenes de corte iniciales en Bandeja P-03
-    ordenesCorte: []
-  };
-
-  // Inicializar 46 órdenes fieles al video
-  function initMockOrdenes() {
-    const baseDate = new Date(2026, 7, 27, 12, 33, 0); // 27/08/2026 12:33
-
-    // Orden 1: Cuenta 306040 activa en video (CUC 443794)
-    store.ordenesCorte.push({
-      cuc: 443794,
-      cuenta: 306040,
-      medidor: '240907792',
-      marca: 'WASION',
-      titular: 'MUÑOZ PEDRO',
-      hab: 'R',
-      estado: 'GENERADO',
-      fechaGeneracion: '27/08/2026 12:33:00',
-      timestampGen: baseDate.getTime(),
-      deudaTope: 66.82,
-      tecnico: 'JOSUE DANIEL QUINTANILLA TABOADA',
-      direccion: 'MOJOTORILLO S/N',
-      telefono: '61635733',
-      circuito: 'D-1182',
-      tarifa: 'RS',
-      ejecucion: null,
-      motivoAnulacion: null
-    });
-
-    // Orden 2: Cuenta 1702690 anulada en video (CUC 443797)
-    store.ordenesCorte.push({
-      cuc: 443797,
-      cuenta: 1702690,
-      medidor: '221009296',
-      marca: 'WASION',
-      titular: 'QUISPE CARLOS',
-      hab: 'R',
-      estado: 'ANULADO',
-      fechaGeneracion: '26/08/2026 10:15:00',
-      timestampGen: baseDate.getTime() - 86400000,
-      deudaTope: 88.40,
-      tecnico: 'SIN_ASIGNAR',
-      direccion: 'BETANZOS - C. BOLIVAR 45',
-      telefono: '71829304',
-      circuito: 'D-1182',
-      tarifa: 'RS',
-      ejecucion: null,
-      motivoAnulacion: 'Anulado ya que pago parte o la totalidad de facturas vencidas, Fecha de pago: 02-09-2026 16:20:13'
-    });
-
-    // Generar 44 órdenes adicionales para completar los 46 registros observados
-    for (let i = 3; i <= 46; i++) {
-      const offsetHours = (i * 4.8);
-      const genTime = new Date(baseDate.getTime() - offsetHours * 3600000);
-      const cucNum = 443700 + i;
-      const cuentaNum = 1701600 + i;
-      const medidorNum = '22100' + (1000 + i);
-
-      store.ordenesCorte.push({
-        cuc: cucNum,
-        cuenta: cuentaNum,
-        medidor: medidorNum,
-        marca: (i % 2 === 0 ? 'WASION' : 'ACTARIS'),
-        titular: 'CLIENTE TITULAR ' + i,
-        hab: 'R',
-        estado: 'GENERADO',
-        fechaGeneracion: formatDate(genTime),
-        timestampGen: genTime.getTime(),
-        deudaTope: parseFloat((35.50 + (i * 3.75)).toFixed(2)),
-        tecnico: (i % 3 === 0 ? 'JOSUE DANIEL QUINTANILLA TABOADA' : 'SIN_ASIGNAR'),
-        direccion: 'ZONA CENTRAL - CALLE ' + i,
-        telefono: '7240' + (1000 + i),
-        circuito: 'D-1182',
-        tarifa: 'RS',
-        ejecucion: null,
-        motivoAnulacion: null
-      });
-    }
-  }
-
-  function formatDate(d) {
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-
-  function formatDaysElapsed(timestamp) {
-    // Calculado respecto a la fecha simulada del video (05/09/2026)
-    const simulatedNow = new Date(2026, 8, 5, 17, 35, 0).getTime();
-    const diffMs = simulatedNow - timestamp;
-    const days = diffMs / (1000 * 60 * 60 * 24);
-    return Math.max(0.5, days).toFixed(2) + ' días';
-  }
-
-  // =========================================================================
-  // 2. MOTOR DE NAVEGACIÓN SPA
-  // =========================================================================
-
-  const viewLabels = {
-    dashboard: 'P-01: Dashboard Principal',
-    busqueda: 'P-02: Búsqueda de Morosidad (/orden/create)',
-    bandeja: 'P-03: Bandeja de Cortes (/verCortes)',
-    ficha: 'P-04: Ficha Integral de Corte'
-  };
-
-  function navigateTo(viewId, params) {
-    store.vistaActiva = viewId;
-
-    // Actualizar secciones visibles
-    document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
-    const activeSec = document.getElementById('view-' + viewId);
-    if (activeSec) activeSec.classList.add('active');
-
-    // Actualizar botones del subnav
-    document.querySelectorAll('.subnav-item').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.view === viewId);
-    });
-
-    // Actualizar breadcrumb
-    const indicator = document.getElementById('view-indicator');
-    if (indicator) indicator.textContent = viewLabels[viewId] || 'SEPSA';
-
-    // Renders específicos
-    if (viewId === 'busqueda') {
-      renderBusqueda();
-    } else if (viewId === 'bandeja') {
-      renderBandeja();
-    } else if (viewId === 'ficha') {
-      const cuc = params && params.cuc ? params.cuc : store.ordenSeleccionadaCUC;
-      renderFicha(cuc);
-    }
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  // =========================================================================
-  // 3. TEMPORIZADOR REGRESIVO DE SESIÓN (P-01)
-  // =========================================================================
-
-  function startSessionTimer() {
-    const timerText = document.getElementById('timer-text');
+// Temporizador de Sesión de 6 minutos observado en el video
+    let timeLeft = 377; // 6 min 17 seg
+    const timerDisplay = document.getElementById('timer-display');
     setInterval(() => {
-      if (store.temporizadorSegundos > 0) {
-        store.temporizadorSegundos--;
-      } else {
-        store.temporizadorSegundos = 378; // Reiniciar ciclo
-      }
-      const min = Math.floor(store.temporizadorSegundos / 60);
-      const sec = store.temporizadorSegundos % 60;
-      if (timerText) {
-        timerText.textContent = `${min} min ${String(sec).padStart(2, '0')} seg`;
+      if (timeLeft > 0) {
+        timeLeft--;
+        const mins = Math.floor(timeLeft / 60);
+        const secs = timeLeft % 60;
+        timerDisplay.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
       }
     }, 1000);
-  }
 
-  // =========================================================================
-  // 4. RENDERIZADORES DE PANTALLAS
-  // =========================================================================
+    // Conmutador de Vistas / Pestañas
+    function switchView(viewId) {
+      document.querySelectorAll('.view-panel').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.switcher-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(viewId).classList.add('active');
 
-  // --- P-02: Búsqueda de Morosos ---
-  function renderBusqueda() {
-    const tbody = document.getElementById('tbody-morosos');
-    const countSpan = document.getElementById('count-morosos');
-    const btnCrear = document.getElementById('btn-crear-lote');
-    if (!tbody) return;
-
-    tbody.innerHTML = '';
-    store.morososMojotorillo.forEach(item => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><strong>${item.regionalLocalidad}</strong></td>
-        <td>${item.habilitante}</td>
-        <td><a href="#" class="btn-link-action text-primary" data-cuenta="${item.cuenta}">${item.cuenta}</a></td>
-        <td><strong>${item.titular}</strong></td>
-        <td>${item.ruta}</td>
-        <td>${item.orden}</td>
-        <td>${item.circuito}</td>
-        <td>${item.direccion}</td>
-        <td><span class="badge badge-success">${item.estado}</span></td>
-        <td>${item.tarifa}</td>
-        <td>${item.medidor}</td>
-        <td style="text-align:center;"><strong>${item.facturasVencidas30d}</strong></td>
-        <td><strong style="color:var(--color-danger);">${item.totalPendiente.toFixed(2)} Bs</strong></td>
-        <td>
-          <button class="btn btn-sm btn-outline btn-ver-kardex-row" data-cuenta="${item.cuenta}">Ver Kardex</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    if (countSpan) countSpan.textContent = store.morososMojotorillo.length;
-    if (btnCrear) btnCrear.disabled = false;
-  }
-
-  // --- P-03: Bandeja de Cortes ---
-  function renderBandeja() {
-    const tbody = document.getElementById('tbody-bandeja');
-    const totalCount = document.getElementById('bandeja-total-count');
-    const subnavCount = document.getElementById('subnav-count');
-    if (!tbody) return;
-
-    const searchTerm = (document.getElementById('bandeja-search-cuenta')?.value || '').trim().toLowerCase();
-    const filterTecnico = document.getElementById('bandeja-filter-tecnico')?.value || '';
-
-    // Filtrar lista
-    const filtered = store.ordenesCorte.filter(ord => {
-      const matchSearch = !searchTerm ||
-        String(ord.cuenta).toLowerCase().includes(searchTerm) ||
-        String(ord.medidor).toLowerCase().includes(searchTerm) ||
-        String(ord.titular).toLowerCase().includes(searchTerm) ||
-        String(ord.cuc).toLowerCase().includes(searchTerm);
-
-      const matchTec = !filterTecnico || ord.tecnico === filterTecnico;
-      return matchSearch && matchTec;
-    });
-
-    tbody.innerHTML = '';
-    filtered.forEach(ord => {
-      const badgeClass = ord.estado === 'GENERADO' ? 'badge-danger' : (ord.estado === 'EJECUTADO' ? 'badge-success' : 'badge-warning');
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>
-          <strong>Cta: ${ord.cuenta}</strong><br>
-          <small class="text-muted">Med: ${ord.medidor} (${ord.marca})</small>
-        </td>
-        <td>${ord.hab}</td>
-        <td><span class="badge ${badgeClass}">${ord.estado}</span></td>
-        <td>${ord.fechaGeneracion}</td>
-        <td>${formatDaysElapsed(ord.timestampGen)}</td>
-        <td><strong style="color:var(--color-danger);">${ord.deudaTope.toFixed(2)} Bs</strong></td>
-        <td>${ord.tecnico === 'SIN_ASIGNAR' ? '<span class="text-muted">—</span>' : ord.tecnico}</td>
-        <td>
-          <button class="btn btn-sm btn-primary btn-ver-corte" data-cuc="${ord.cuc}">Ver corte</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    if (totalCount) totalCount.textContent = store.ordenesCorte.length;
-    if (subnavCount) subnavCount.textContent = store.ordenesCorte.length;
-  }
-
-  // --- P-04: Ficha Integral de Corte ---
-  function renderFicha(cuc) {
-    store.ordenSeleccionadaCUC = cuc;
-    const ord = store.ordenesCorte.find(o => o.cuc === cuc) || store.ordenesCorte[0];
-    if (!ord) return;
-
-    // Encabezado
-    document.getElementById('ficha-cuc').textContent = ord.cuc;
-    const badge = document.getElementById('ficha-status-badge');
-    badge.textContent = 'ESTADO: ' + ord.estado;
-    badge.className = 'badge badge-lg ' + (ord.estado === 'GENERADO' ? 'badge-danger' : (ord.estado === 'EJECUTADO' ? 'badge-success' : 'badge-warning'));
-
-    // Motivo Anulación (BR-003)
-    const cancelBox = document.getElementById('box-cancel-reason');
-    const cancelText = document.getElementById('text-cancel-reason');
-    const btnCut = document.getElementById('btn-open-modal-corte');
-    const btnSimPay = document.getElementById('btn-sim-pago-concurrente');
-
-    if (ord.estado === 'ANULADO') {
-      cancelBox.classList.remove('hidden');
-      cancelText.textContent = ord.motivoAnulacion || 'Anulado ya que pago parte o la totalidad de facturas vencidas';
-      btnCut.disabled = true;
-      btnCut.title = 'No se puede cortar un suministro anulado por pago en ventanilla';
-      btnSimPay.disabled = true;
-    } else if (ord.estado === 'EJECUTADO') {
-      cancelBox.classList.add('hidden');
-      btnCut.disabled = true;
-      btnCut.textContent = '✓ Corte ya ejecutado';
-      btnSimPay.disabled = true;
-    } else {
-      cancelBox.classList.add('hidden');
-      btnCut.disabled = false;
-      btnCut.textContent = '✂ Registrar corte efectivo';
-      btnCut.title = '';
-      btnSimPay.disabled = false;
-    }
-
-    // Datos del suministro
-    document.getElementById('ficha-cuenta').textContent = ord.cuenta;
-    document.getElementById('ficha-titular').textContent = ord.titular;
-    document.getElementById('ficha-medidor').textContent = `${ord.medidor} (${ord.marca})`;
-    document.getElementById('ficha-direccion').textContent = ord.direccion;
-    document.getElementById('ficha-telefono').textContent = ord.telefono || 'No registrado';
-    document.getElementById('ficha-circuito').textContent = ord.circuito;
-    document.getElementById('ficha-tarifa').textContent = ord.tarifa;
-
-    // Detalle de Deuda FA_FACTURAS (Tabla T-03)
-    const tbodyDeuda = document.getElementById('tbody-deuda');
-    const deudas = store.deudasPorCuenta[ord.cuenta] || [
-      { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: ord.deudaTope / 2, estado: ord.estado === 'ANULADO' ? 'C' : 'P', origen: 'FA_FACTURAS', diasMora: 63 },
-      { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: ord.deudaTope / 2, estado: ord.estado === 'ANULADO' ? 'C' : 'P', origen: 'FA_FACTURAS', diasMora: 31 }
-    ];
-
-    tbodyDeuda.innerHTML = '';
-    let sum = 0;
-    deudas.forEach(d => {
-      sum += d.monto;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><strong>${d.periodo}</strong></td>
-        <td>${d.anio}</td>
-        <td>${d.fecha}</td>
-        <td><strong>${d.monto.toFixed(2)} Bs</strong></td>
-        <td><span class=\"badge ${d.estado === 'P' ? 'badge-danger' : 'badge-success'}\">${d.estado === 'P' ? 'P (Pendiente)' : 'C (Cancelado)'}</span></td>
-        <td>${d.origen}</td>
-        <td>${d.diasMora} días</td>
-      `;
-      tbodyDeuda.appendChild(tr);
-    });
-
-    document.getElementById('ficha-total-deuda').textContent = `${sum.toFixed(2)} Bs`;
-
-    // Panel de Auditoría
-    const auditDetails = document.getElementById('ficha-audit-execution-details');
-    if (ord.ejecucion) {
-      auditDetails.className = '';
-      auditDetails.innerHTML = `
-        <div style=\"background: var(--bg-surface-alt); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);\">
-          <p><strong>Tipo de Corte Aplicado:</strong> ${ord.ejecucion.tipo}</p>
-          <p><strong>Lectura Final Registrada:</strong> ${ord.ejecucion.lectura} kWh</p>
-          <p><strong>Coordenadas GPS:</strong> ${ord.ejecucion.lat}, ${ord.ejecucion.lng} ${ord.ejecucion.saltarCoords ? '<span class=\"badge badge-warning\">(Bypass GPS activado)</span>' : ''}</p>
-          <p><strong>Fotografías:</strong> ${ord.ejecucion.saltarFotos ? '<span class=\"badge badge-warning\">(Bypass Fotos activado)</span>' : 'Evidencias fotográficas adjuntas'}</p>
-          <p><strong>Técnico Ejecutor:</strong> ${ord.ejecucion.tecnico}</p>
-          <p><strong>Fecha/Hora de Ejecución:</strong> ${ord.ejecucion.fecha}</p>
-        </div>
-      `;
-    } else {
-      auditDetails.className = 'empty-hint';
-      auditDetails.textContent = 'Sin corte ejecutado aún.';
-    }
-  }
-
-  // =========================================================================
-  // 5. MODAL DE CORTE EN CAMPO (P-05) Y ACCIONES OPERATIVAS
-  // =========================================================================
-
-  function openModalCorte() {
-    const ord = store.ordenesCorte.find(o => o.cuc === store.ordenSeleccionadaCUC);
-    if (!ord || ord.estado === 'ANULADO') {
-      showToast('⚠️ No es posible cortar una orden anulada.');
-      return;
-    }
-    document.getElementById('modal-lat').value = '';
-    document.getElementById('modal-lng').value = '';
-    document.getElementById('modal-telefono').value = ord.telefono || '';
-    document.getElementById('modal-saltar-fotos').value = 'NO';
-    document.getElementById('modal-saltar-coords').value = 'NO';
-    document.getElementById('modal-corte-backdrop').classList.remove('hidden');
-  }
-
-  function closeModalCorte() {
-    document.getElementById('modal-corte-backdrop').classList.add('hidden');
-  }
-
-  function submitCorte() {
-    const ord = store.ordenesCorte.find(o => o.cuc === store.ordenSeleccionadaCUC);
-    if (!ord) return;
-
-    const lat = document.getElementById('modal-lat').value.trim();
-    const lng = document.getElementById('modal-lng').value.trim();
-    const tipo = document.getElementById('modal-tipo-corte').value;
-    const lectura = document.getElementById('modal-lectura').value.trim();
-    const saltarFotos = document.getElementById('modal-saltar-fotos').value === 'SI';
-    const saltarCoords = document.getElementById('modal-saltar-coords').value === 'SI';
-    const medidoresCercanos = document.getElementById('modal-medidores-cercanos').value;
-
-    // Validación BR-004: Obligatoriedad de Coordenadas con Excepción
-    if (!saltarCoords && (!lat || !lng)) {
-      alert('Error de Validación (BR-004):\nDebe capturar las coordenadas GPS pulsando "Obtener ubicación" o activar explícitamente "¿Saltar Control de Coordenadas?".');
-      return;
-    }
-
-    // Validación Lectura Numérica
-    if (!lectura || isNaN(lectura)) {
-      alert('Error de Validación:\nDebe registrar la lectura numérica acumulada del medidor en kWh.');
-      return;
-    }
-
-    // Persistir ejecución
-    ord.estado = 'EJECUTADO';
-    ord.ejecucion = {
-      tipo: tipo,
-      lectura: parseFloat(lectura),
-      lat: lat || '-19.589366 (Estimada)',
-      lng: lng || '-65.259119 (Estimada)',
-      saltarFotos: saltarFotos,
-      saltarCoords: saltarCoords,
-      medidoresCercanos: medidoresCercanos,
-      tecnico: store.usuario.nombre,
-      fecha: formatDate(new Date())
-    };
-
-    closeModalCorte();
-    renderFicha(ord.cuc);
-    showToast(`✓ Corte efectivo registrado con éxito (Lectura: ${lectura} kWh). Orden EJECUTADA.`);
-  }
-
-  // Simulación BR-003: Anulación Concurrente por Pago en Caja
-  function simularPagoConcurrente() {
-    const ord = store.ordenesCorte.find(o => o.cuc === store.ordenSeleccionadaCUC);
-    if (!ord) return;
-
-    if (ord.estado === 'EJECUTADO') {
-      alert('Aviso: El corte ya fue ejecutado materialmente en campo. Corresponde iniciar el trámite de Reconexión / Reposición.');
-      return;
-    }
-
-    const timestamp = formatDate(new Date());
-    ord.estado = 'ANULADO';
-    ord.motivoAnulacion = `Anulado ya que pago parte o la totalidad de facturas vencidas, Fecha de pago: ${timestamp}`;
-
-    // Marcar deudas como pagadas (estado C)
-    if (store.deudasPorCuenta[ord.cuenta]) {
-      store.deudasPorCuenta[ord.cuenta].forEach(d => d.estado = 'C');
-    }
-
-    renderFicha(ord.cuc);
-    showToast('⚡ BR-003: Pago recibido en cobranzas. Orden de corte ANULADA automáticamente.');
-  }
-
-  // Emisión Masiva de Lote (P-02 -> P-03)
-  function emitirLoteCorte() {
-    let creadas = 0;
-    store.morososMojotorillo.forEach(moroso => {
-      // Verificar si ya existe orden para esta cuenta
-      const existe = store.ordenesCorte.some(o => o.cuenta === moroso.cuenta && o.estado === 'GENERADO');
-      if (!existe) {
-        const nextCUC = 443800 + store.ordenesCorte.length;
-        store.ordenesCorte.unshift({
-          cuc: nextCUC,
-          cuenta: moroso.cuenta,
-          medidor: moroso.medidor.split(' ')[0],
-          marca: moroso.medidor.split(' ')[1] || 'WASION',
-          titular: moroso.titular,
-          hab: moroso.habilitante,
-          estado: 'GENERADO',
-          fechaGeneracion: formatDate(new Date()),
-          timestampGen: Date.now(),
-          deudaTope: moroso.totalPendiente,
-          tecnico: store.usuario.nombre,
-          direccion: moroso.direccion,
-          telefono: '61635733',
-          circuito: moroso.circuito,
-          tarifa: moroso.tarifa,
-          ejecucion: null,
-          motivoAnulacion: null
-        });
-        creadas++;
+      const btnMap = {
+        'view-dash': 0,
+        'view-crear-orden': 1,
+        'view-ver-cortes': 2,
+        'view-corte-detail': 3,
+        'view-kardex': 5
+      };
+      if (btnMap[viewId] !== undefined) {
+        document.querySelectorAll('.switcher-btn')[btnMap[viewId]].classList.add('active');
       }
-    });
+    }
 
-    showToast(`✓ Se emitieron ${creadas} nuevas órdenes de corte en estado GENERADO.`);
-    navigateTo('bandeja');
-  }
+    // Modal Control
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('active');
+    }
 
-  // Toast Helper
-  let toastTimeout;
-  function showToast(msg) {
-    const toast = document.getElementById('toast-msg');
-    if (!toast) return;
-    toast.textContent = msg;
-    toast.classList.remove('hidden');
-    clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => {
-      toast.classList.add('hidden');
-    }, 4500);
-  }
+    // Filtros en cascada de Búsqueda
+    function updateLocalidades() {
+      const area = document.getElementById('f-area').value;
+      const loc = document.getElementById('f-localidad');
+      loc.innerHTML = area === 'B' 
+        ? '<option value="002">002 - MOJOTORILLO</option>'
+        : '<option value="001">001 - POTOSI CENTRAL</option>';
+      updateRutas();
+    }
+    function updateRutas() {
+      const loc = document.getElementById('f-localidad').value;
+      const ruta = document.getElementById('f-ruta');
+      ruta.innerHTML = loc === '002'
+        ? '<option value="002">002 - MOJOTORILLO</option>'
+        : '<option value="001">001 - RUTA CENTRAL</option>';
+    }
 
-  // =========================================================================
-  // 6. EVENT LISTENERS Y VINCULACIONES
-  // =========================================================================
+    // Ejecutar Búsqueda de Morosos
+    function ejecutarBusquedaMorosos() {
+      const facturas = parseInt(document.getElementById('f-facturas').value);
+      const tbody = document.getElementById('tabla-morosos-body');
+      const count = document.getElementById('count-morosos');
+      const btnCrear = document.getElementById('btn-crear-orden-masiva');
 
-  function bindEvents() {
-    // Subnav tabs
-    document.querySelectorAll('.subnav-item').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const view = e.currentTarget.dataset.view;
-        navigateTo(view);
-      });
-    });
-
-    // Brand click -> Dashboard
-    document.getElementById('nav-brand')?.addEventListener('click', () => navigateTo('dashboard'));
-
-    // Dashboard action cards
-    document.getElementById('card-go-bandeja')?.addEventListener('click', () => navigateTo('bandeja'));
-    document.getElementById('card-go-busqueda')?.addEventListener('click', () => navigateTo('busqueda'));
-    document.getElementById('card-go-nexo')?.addEventListener('click', () => {
-      showToast('ℹ️ Redirigiendo a NEXO Operaciones en Terreno (P-07)...');
-    });
-    document.getElementById('card-go-reposiciones')?.addEventListener('click', () => {
-      showToast('ℹ️ Módulo de Reposiciones y Reconversiones (BR-007).');
-    });
-
-    // Actualizar teléfono
-    document.getElementById('btn-update-phone')?.addEventListener('click', () => {
-      const input = document.getElementById('input-new-phone');
-      if (input && input.value.trim()) {
-        store.usuario.telefono = '+591 ' + input.value.trim();
-        document.getElementById('user-card-tel').textContent = store.usuario.telefono;
-        input.value = '';
-        showToast('✓ Número telefónico actualizado correctamente.');
+      if (facturas >= 3) {
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; padding: 20px; color: var(--text-muted);">0 resultados encontrados para 3 facturas vencidas en esta ruta.</td></tr>';
+        count.textContent = '0';
+        btnCrear.style.opacity = '0.5';
+        btnCrear.disabled = true;
+      } else {
+        tbody.innerHTML = `
+          <tr>
+            <td>101 - 002</td>
+            <td><span class="badge badge-info">R</span></td>
+            <td><strong>306040</strong></td>
+            <td>MUÑOZ PEDRO</td>
+            <td>002</td>
+            <td>129</td>
+            <td>D-1182</td>
+            <td>MOJOTORILLO S/N</td>
+            <td>RS</td>
+            <td>240907792 (WASION)</td>
+            <td><span class="badge badge-danger">2</span></td>
+            <td><strong>94.34</strong></td>
+            <td><button class="btn btn-sm btn-outline" onclick="switchView('view-kardex'); buscarKardexReal();"><i class="fa-solid fa-receipt"></i> Ver Kardex</button></td>
+          </tr>
+          <tr>
+            <td>101 - 002</td>
+            <td><span class="badge badge-info">R</span></td>
+            <td><strong>306043</strong></td>
+            <td>CONDORI CONDORI ALEJANDRO</td>
+            <td>002</td>
+            <td>130</td>
+            <td>D-1182</td>
+            <td>MOJOTORILLO S/N</td>
+            <td>RS</td>
+            <td>240907795 (WASION)</td>
+            <td><span class="badge badge-danger">2</span></td>
+            <td><strong>78.10</strong></td>
+            <td><button class="btn btn-sm btn-outline" onclick="switchView('view-kardex'); buscarKardexReal();"><i class="fa-solid fa-receipt"></i> Ver Kardex</button></td>
+          </tr>
+        `;
+        count.textContent = '2';
+        btnCrear.style.opacity = '1';
+        btnCrear.disabled = false;
       }
-    });
+    }
 
-    // P-02: Búsqueda y creación de lote
-    document.getElementById('btn-search-morosos')?.addEventListener('click', () => {
-      renderBusqueda();
-      showToast('✓ Consulta ejecutada: 2 suministros superan el umbral de 2 facturas > 30 días.');
-    });
-
-    document.getElementById('btn-crear-lote')?.addEventListener('click', emitirLoteCorte);
-
-    // Click en tabla P-02 para ver Kardex
-    document.getElementById('tbody-morosos')?.addEventListener('click', (e) => {
-      if (e.target.classList.contains('btn-ver-kardex-row') || e.target.dataset.cuenta) {
-        e.preventDefault();
-        const cuenta = e.target.dataset.cuenta || '306040';
-        showToast(`🔍 Abriendo Kardex Comercial para la cuenta ${cuenta} (P-06)...`);
+    // Emisión de Órdenes
+    function triggerCrearOrdenLote() {
+      if (confirm("¿Está seguro de generar órdenes de corte para los clientes morosos mostrados?")) {
+        alert("¡Órdenes de corte generadas exitosamente con estado GENERADO!");
+        switchView('view-ver-cortes');
       }
-    });
+    }
 
-    // P-03: Bandeja de cortes
-    document.getElementById('bandeja-search-cuenta')?.addEventListener('input', renderBandeja);
-    document.getElementById('bandeja-filter-tecnico')?.addEventListener('change', renderBandeja);
-    document.getElementById('btn-clear-bandeja-filters')?.addEventListener('click', () => {
-      const search = document.getElementById('bandeja-search-cuenta');
-      const tec = document.getElementById('bandeja-filter-tecnico');
-      if (search) search.value = '';
-      if (tec) tec.value = '';
-      renderBandeja();
-    });
+    // Alternar mapa en Bandeja
+    function toggleMapView() {
+      const map = document.getElementById('map-container');
+      map.style.display = map.style.display === 'none' ? 'block' : 'none';
+    }
 
-    document.getElementById('btn-refresh-bandeja')?.addEventListener('click', () => {
-      renderBandeja();
-      showToast('✓ Bandeja actualizada.');
-    });
+    // Cargar Detalle de Corte Activo vs Anulado
+    function openCorteDetail(cucId) {
+      switchView('view-corte-detail');
+      const titleCuc = document.getElementById('corte-title-cuc');
+      const badgeEstado = document.getElementById('corte-badge-estado');
+      const bannerAnulado = document.getElementById('banner-anulado');
+      const cardAction = document.getElementById('card-action-corte');
+      const valCuenta = document.getElementById('corte-val-cuenta');
+      const valMedidor = document.getElementById('corte-val-medidor');
+      const valNombre = document.getElementById('corte-val-nombre');
+      const valTotalDeuda = document.getElementById('corte-val-total-deuda');
+      const tablaDeuda = document.getElementById('tabla-deuda-corte-body');
 
-    document.getElementById('btn-toggle-map-view')?.addEventListener('click', () => {
-      showToast('🗺 Conmutando a visualización espacial (QField / Capas morosos)...');
-    });
+      titleCuc.textContent = `C.U.C.: ${cucId}`;
 
-    // Click en botón "Ver corte" de la tabla P-03
-    document.getElementById('tbody-bandeja')?.addEventListener('click', (e) => {
-      const btn = e.target.closest('.btn-ver-corte');
-      if (btn) {
-        const cuc = parseInt(btn.dataset.cuc, 10);
-        navigateTo('ficha', { cuc: cuc });
+      if (cucId === 443797) {
+        // Orden Anulada
+        badgeEstado.textContent = 'ESTADO: ANULADO';
+        badgeEstado.className = 'badge badge-warning';
+        badgeEstado.style.background = '#e0e0e0';
+        badgeEstado.style.color = '#424242';
+        bannerAnulado.style.display = 'flex';
+        cardAction.style.display = 'none';
+
+        valCuenta.textContent = '1702690';
+        valMedidor.textContent = '14093812';
+        valNombre.textContent = 'CHOQUE DE BALCAZAR NORA';
+        valTotalDeuda.textContent = 'Total: 73.35 Bs (PAGADO)';
+
+        tablaDeuda.innerHTML = `
+          <tr>
+            <td>2026</td>
+            <td>6</td>
+            <td>27/06/2026 10:14</td>
+            <td>24.10</td>
+            <td><span class="badge badge-success">C</span></td>
+            <td>FA_FACTURAS</td>
+            <td>Pagado</td>
+          </tr>
+          <tr>
+            <td>2026</td>
+            <td>7</td>
+            <td>27/07/2026 11:02</td>
+            <td>24.90</td>
+            <td><span class="badge badge-success">C</span></td>
+            <td>FA_FACTURAS</td>
+            <td>Pagado</td>
+          </tr>
+          <tr>
+            <td>2026</td>
+            <td>8</td>
+            <td>27/08/2026 09:45</td>
+            <td>24.35</td>
+            <td><span class="badge badge-success">C</span></td>
+            <td>FA_FACTURAS</td>
+            <td>Pagado</td>
+          </tr>
+        `;
+      } else {
+        // Orden Activa (443794)
+        badgeEstado.textContent = 'ESTADO: GENERADO';
+        badgeEstado.className = 'badge badge-danger';
+        bannerAnulado.style.display = 'none';
+        cardAction.style.display = 'block';
+
+        valCuenta.textContent = '1701603';
+        valMedidor.textContent = '14093786';
+        valNombre.textContent = 'CHOQUE CONDOR NORMA';
+        valTotalDeuda.textContent = 'Total: 66.82 Bs';
+
+        tablaDeuda.innerHTML = `
+          <tr>
+            <td>2026</td><td>6</td><td>27/06/2026 10:14</td><td>21.94</td>
+            <td><span class="badge badge-danger">P</span></td><td>FA_FACTURAS</td><td>63</td>
+          </tr>
+          <tr>
+            <td>2026</td><td>7</td><td>27/07/2026 11:02</td><td>22.64</td>
+            <td><span class="badge badge-danger">P</span></td><td>FA_FACTURAS</td><td>31</td>
+          </tr>
+          <tr>
+            <td>2026</td><td>8</td><td>27/08/2026 09:45</td><td>22.24</td>
+            <td><span class="badge badge-danger">P</span></td><td>FA_FACTURAS</td><td>2</td>
+          </tr>
+        `;
       }
-    });
+    }
 
-    // P-04: Ficha de corte
-    document.getElementById('btn-back-to-bandeja')?.addEventListener('click', () => navigateTo('bandeja'));
-    document.getElementById('btn-ficha-kardex')?.addEventListener('click', () => {
-      showToast('🔍 Abriendo Kardex de cobros para cuenta ' + document.getElementById('ficha-cuenta').textContent);
-    });
-    document.getElementById('btn-sim-pago-concurrente')?.addEventListener('click', simularPagoConcurrente);
-    document.getElementById('btn-open-modal-corte')?.addEventListener('click', openModalCorte);
+    // Verificación de Permiso GPS en Ficha
+    function verificarGPSPermiso() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => alert(`Ubicación confirmada: Lat ${pos.coords.latitude.toFixed(6)}, Lng ${pos.coords.longitude.toFixed(6)}`),
+          err => alert("Aviso: Permiso denegado o no disponible en navegador. Por favor habilite la ubicación.")
+        );
+      } else {
+        alert("Geolocalización no soportada en este navegador.");
+      }
+    }
 
-    // Auditoría tabs en P-04
-    document.querySelectorAll('.audit-tab-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.audit-tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.audit-tab-content').forEach(c => c.classList.remove('active'));
-        e.currentTarget.classList.add('active');
-        const tabId = e.currentTarget.dataset.tab;
-        const targetContent = document.getElementById('tab-' + tabId);
-        if (targetContent) targetContent.classList.add('active');
-      });
-    });
+    // Modal Corte Efectivo
+    function abrirModalCorteEfectivo() {
+      document.getElementById('modal-corte-efectivo').classList.add('active');
+    }
 
-    // P-05: Modal de corte
-    document.getElementById('btn-close-modal-corte')?.addEventListener('click', closeModalCorte);
-    document.getElementById('btn-cancel-modal-corte')?.addEventListener('click', closeModalCorte);
-    document.getElementById('btn-confirm-modal-corte')?.addEventListener('click', submitCorte);
+    function capturarGPSModal() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            document.getElementById('modal-lat').value = pos.coords.latitude.toFixed(6);
+            document.getElementById('modal-lng').value = pos.coords.longitude.toFixed(6);
+          },
+          err => {
+            // Coordenadas reales de Betanzos/Potosí observadas en el video como fallback
+            document.getElementById('modal-lat').value = "-19.589366";
+            document.getElementById('modal-lng').value = "-65.259119";
+            alert("Ubicación satelital fijada por fallback de estación: -19.589366, -65.259119");
+          }
+        );
+      } else {
+        document.getElementById('modal-lat').value = "-19.589366";
+        document.getElementById('modal-lng').value = "-65.259119";
+      }
+    }
 
-    document.getElementById('btn-get-gps')?.addEventListener('click', () => {
-      // Coordenadas reales de Betanzos/Potosí observadas en catastro
-      document.getElementById('modal-lat').value = '-19.589366';
-      document.getElementById('modal-lng').value = '-65.259119';
-      showToast('📍 Coordenadas GPS capturadas exitosamente: -19.589366, -65.259119');
-    });
+    function guardarCorteEfectivo() {
+      const lat = document.getElementById('modal-lat').value;
+      const lectura = document.getElementById('modal-lectura').value;
+      const tipo = document.getElementById('modal-tipo-corte').value;
+      const bypassCoords = document.getElementById('modal-bypass-coords').value;
 
-    // Botón refresco global y tema
-    document.getElementById('btn-refresh-global')?.addEventListener('click', () => {
-      showToast('🔄 Sesión sincronizada con servidor.');
-    });
+      if (!lectura) {
+        alert("Debe ingresar la lectura del medidor al corte.");
+        return;
+      }
+      if (!lat && bypassCoords === 'NO') {
+        alert("Debe capturar las coordenadas GPS o activar 'Saltar Control de Coordenadas'.");
+        return;
+      }
 
-    document.getElementById('btn-theme-toggle')?.addEventListener('click', () => {
-      showToast('🌙 Modo visual actualizado.');
-    });
-  }
+      alert(`¡Corte Efectivo Registrado con Éxito!\nTipo: ${tipo}\nLectura: ${lectura} kWh\nEstado actualizado a EJECUTADO.`);
+      closeModal('modal-corte-efectivo');
+      document.getElementById('corte-badge-estado').textContent = 'ESTADO: EJECUTADO';
+      document.getElementById('corte-badge-estado').className = 'badge badge-warning';
+    }
 
-  // =========================================================================
-  // 7. ARRANQUE DEL APLICATIVO
-  // =========================================================================
+    // Dropzone Upload
+    function handleFileSelected(input) {
+      if (input.files.length > 0) {
+        const file = input.files[0];
+        document.getElementById('file-upload-list').innerHTML = `
+          <div style="background:#e8f5e9; padding:4px 8px; border-radius:4px; color:var(--success);">
+            <i class="fa-solid fa-file-check"></i> Archivo listo: <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)
+          </div>
+        `;
+      }
+    }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    initMockOrdenes();
-    bindEvents();
-    startSessionTimer();
-    navigateTo('dashboard');
-    console.log('[SEPSA] Prototipo Operativo inicializado en memoria volátil.');
-  });
+    // Búsqueda en Kardex Comercial
+    function buscarKardexReal() {
+      const cuenta = document.getElementById('kardex-cuenta-input').value.trim();
+      const nombre = document.getElementById('kardex-val-nombre');
 
-})();
+      if (cuenta === '306040') {
+        nombre.textContent = 'MUÑOZ PEDRO';
+        // Disparar la alerta urgente de CI faltante que aparece en el video
+        setTimeout(() => {
+          document.getElementById('modal-alerta-kardex').classList.add('active');
+        }, 200);
+      } else if (cuenta === '1701603') {
+        nombre.textContent = 'CHOQUE CONDOR NORMA';
+      } else {
+        nombre.textContent = 'CLIENTE REGISTRADO SEPSA';
+      }
+    }
