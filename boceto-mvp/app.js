@@ -1,741 +1,682 @@
-/* ============================================================
-   SEPSA · Prototipo cobranza — app.js
-   Vanilla JS modular: datos, dominio, store, sync, UI.
-   Diseñado para migrar a React + TypeScript + PWA + IndexedDB.
-   ============================================================ */
+﻿/**
+ * SEPSA - Sistema de Cortes y Reconexiones
+ * Prototipo Interactivo en Memoria Volátil (P-01 a P-05)
+ */
 
-/* ---------- Utilidades ---------- */
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+(function () {
+  'use strict';
 
-const MESES_NOMBRE = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  // =========================================================================
+  // 1. ESTADO GLOBAL EN MEMORIA (STORE VOLÁTIL)
+  // =========================================================================
 
-function fmtBs(centavos) {
-  return "Bs " + (centavos / 100).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+  const store = {
+    usuario: {
+      id: 680,
+      ci: '10577452',
+      nombre: 'JOSUE DANIEL QUINTANILLA TABOADA',
+      email: 'josue.quintanilla@sepsa.com.bo',
+      telefono: '+591 72409703'
+    },
+    temporizadorSegundos: 378, // 6 min 18 seg
+    vistaActiva: 'dashboard',
+    ordenSeleccionadaCUC: 443794,
 
-function mesLabel(m) { return `${MESES_NOMBRE[m.mes - 1]} ${m.anio}`; }
-
-function hoyISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function uid() {
-  return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-}
-
-/* ---------- Datos: semilla ---------- */
-const TECNICO = "Carlos";
-const ZONA = "Villa Esperanza · Ruta 3";
-const MONTO_MENSUAL_CENTAVOS = 4000; // Bs 40
-
-// Genera los N meses más recientes hasta el mes de referencia (orden: más antiguo primero)
-function generarMeses(n, ref = { anio: 2026, mes: 9 }) {
-  const lista = [];
-  let { anio, mes } = ref;
-  for (let i = 0; i < n; i++) {
-    lista.push({ anio, mes, montoCentavos: MONTO_MENSUAL_CENTAVOS });
-    mes--;
-    if (mes === 0) { mes = 12; anio--; }
-  }
-  return lista.reverse();
-}
-
-function seedDomicilios() {
-  return [
-    { id: "d001", codigo: "001283", nombre: "Juan Pérez", direccion: "Calle Principal s/n", localidad: "Villa Esperanza", medidor: "M-2291", visitado: false, meses: generarMeses(21) },
-    { id: "d002", codigo: "001284", nombre: "María López", direccion: "Av. Los Cedros", localidad: "Villa Esperanza", medidor: "M-2317", visitado: true, meses: generarMeses(3) },
-    { id: "d003", codigo: "001285", nombre: "Pedro Flores", direccion: "Camino al Río", localidad: "Villa Esperanza", medidor: "M-2410", visitado: false, meses: [] },
-    { id: "d004", codigo: "001290", nombre: "Ana Gutiérrez", direccion: "Pasaje El Sol", localidad: "Villa Esperanza", medidor: "M-2402", visitado: false, meses: generarMeses(10) },
-    { id: "d005", codigo: "001296", nombre: "Carlos Rojas", direccion: "Calle La Paz", localidad: "Comunidad Los Andes", medidor: "M-2433", visitado: false, meses: generarMeses(2) },
-    { id: "d006", codigo: "001301", nombre: "Rosa Mamani", direccion: "Barrio Central", localidad: "Comunidad Los Andes", medidor: "M-2441", visitado: true, meses: [] },
-    { id: "d007", codigo: "001305", nombre: "Luis Choque", direccion: "Camino Viejo km 2", localidad: "Comunidad Los Andes", medidor: "M-2450", visitado: false, meses: generarMeses(15) },
-    { id: "d008", codigo: "001310", nombre: "Julia Quispe", direccion: "Calle 8 de Marzo", localidad: "San Miguel", medidor: "M-2462", visitado: false, meses: generarMeses(6) },
-    { id: "d009", codigo: "001315", nombre: "René Villca", direccion: "Comunidad Chullpa", localidad: "San Miguel", medidor: "M-2471", visitado: false, meses: [] },
-    { id: "d010", codigo: "001318", nombre: "Sonia Apaza", direccion: "Barrio Nuevo", localidad: "San Miguel", medidor: "M-2478", visitado: true, meses: generarMeses(4) },
-    { id: "d011", codigo: "001322", nombre: "Marcelo Condori", direccion: "Camino a La Hoyada", localidad: "San Miguel", medidor: "M-2485", visitado: false, meses: generarMeses(12) },
-    { id: "d012", codigo: "001328", nombre: "Carmen Huanca", direccion: "Calle 25 de Mayo", localidad: "Villa Esperanza", medidor: "M-2490", visitado: false, meses: [] },
-  ];
-}
-
-/* ---------- Dominio: reglas de cobro (lógica reutilizable, no solo UI) ---------- */
-const Dominio = {
-  // Cantidad entera válida: >= 0, <= meses pendientes
-  cantidadValida(cantidad, meses) {
-    return Number.isInteger(cantidad) && cantidad >= 0 && cantidad <= meses.length;
-  },
-
-  // Los meses a pagar SIEMPRE son los más antiguos primero
-  seleccionarMeses(meses, cantidad) {
-    if (!this.cantidadValida(cantidad, meses)) return null;
-    return meses.slice(0, cantidad);
-  },
-
-  totalCentavos(mesesSeleccionados) {
-    return mesesSeleccionados.reduce((sum, m) => sum + m.montoCentavos, 0);
-  },
-
-  // Deuda actualizada tras pago: quitar meses pagados
-  aplicarPago(domicilio, mesesPagados) {
-    const pagadosKey = new Set(mesesPagados.map(m => `${m.anio}-${m.mes}`));
-    const restantes = domicilio.meses.filter(m => !pagadosKey.has(`${m.anio}-${m.mes}`));
-    return { ...domicilio, meses: restantes };
-  },
-
-  // Estado derivado del domicilio
-  estadoDomicilio(domicilio) {
-    if (domicilio.meses.length === 0) return "al-dia";
-    if (domicilio.visitado) return "visitado";
-    return "pendiente";
-  },
-};
-
-/* ---------- Store: IndexedDB con fallback localStorage ---------- */
-const Store = {
-  DB_NAME: "sepsa-prototype",
-  DB_VER: 1,
-  db: null,
-
-  async init() {
-    try {
-      if (window.indexedDB) {
-        this.db = await new Promise((resolve, reject) => {
-          const req = indexedDB.open(this.DB_NAME, this.DB_VER);
-          req.onupgradeneeded = () => {
-            const db = req.result;
-            if (!db.objectStoreNames.contains("domicilios")) db.createObjectStore("domicilios", { keyPath: "id" });
-            if (!db.objectStoreNames.contains("cobros")) db.createObjectStore("cobros", { keyPath: "id" });
-            if (!db.objectStoreNames.contains("cola")) db.createObjectStore("cola", { keyPath: "id" });
-            if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
-          };
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => reject(req.error);
-        });
-        return;
+    // Datos observados en búsqueda P-02 (/orden/create)
+    morososMojotorillo: [
+      {
+        cuenta: 306040,
+        titular: 'MUÑOZ PEDRO',
+        regionalLocalidad: '101 - 002',
+        habilitante: 'R',
+        ruta: '002',
+        orden: 129,
+        circuito: 'D-1182',
+        direccion: 'MOJOTORILLO S/N',
+        estado: 'A',
+        tarifa: 'RS',
+        medidor: '240907792 WASION',
+        facturasVencidas30d: 2,
+        totalPendiente: 66.82
+      },
+      {
+        cuenta: 306043,
+        titular: 'FLORES JUSTO',
+        regionalLocalidad: '101 - 002',
+        habilitante: 'R',
+        ruta: '002',
+        orden: 132,
+        circuito: 'D-1182',
+        direccion: 'MOJOTORILLO S/N',
+        estado: 'A',
+        tarifa: 'RS',
+        medidor: '240907795 WASION',
+        facturasVencidas30d: 2,
+        totalPendiente: 45.20
       }
-    } catch (e) {
-      console.warn("IndexedDB no disponible, uso localStorage", e);
-    }
-    this.db = null;
-  },
+    ],
 
-  async idbPut(storeName, value) {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(storeName, "readwrite");
-      tx.objectStore(storeName).put(value);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+    // Desglose de planillas mensuales FA_FACTURAS (Tabla T-03)
+    deudasPorCuenta: {
+      306040: [
+        { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: 21.94, estado: 'P', origen: 'FA_FACTURAS', diasMora: 84 },
+        { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: 22.44, estado: 'P', origen: 'FA_FACTURAS', diasMora: 54 },
+        { periodo: 8, anio: 2026, fecha: '2026-08-15', monto: 22.44, estado: 'P', origen: 'FA_FACTURAS', diasMora: 23 }
+      ],
+      306043: [
+        { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: 22.60, estado: 'P', origen: 'FA_FACTURAS', diasMora: 84 },
+        { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: 22.60, estado: 'P', origen: 'FA_FACTURAS', diasMora: 54 }
+      ],
+      1702690: [
+        { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: 44.20, estado: 'C', origen: 'FA_FACTURAS', diasMora: 84 },
+        { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: 44.20, estado: 'C', origen: 'FA_FACTURAS', diasMora: 54 }
+      ]
+    },
+
+    // 46 Órdenes de corte iniciales en Bandeja P-03
+    ordenesCorte: []
+  };
+
+  // Inicializar 46 órdenes fieles al video
+  function initMockOrdenes() {
+    const baseDate = new Date(2026, 7, 27, 12, 33, 0); // 27/08/2026 12:33
+
+    // Orden 1: Cuenta 306040 activa en video (CUC 443794)
+    store.ordenesCorte.push({
+      cuc: 443794,
+      cuenta: 306040,
+      medidor: '240907792',
+      marca: 'WASION',
+      titular: 'MUÑOZ PEDRO',
+      hab: 'R',
+      estado: 'GENERADO',
+      fechaGeneracion: '27/08/2026 12:33:00',
+      timestampGen: baseDate.getTime(),
+      deudaTope: 66.82,
+      tecnico: 'JOSUE DANIEL QUINTANILLA TABOADA',
+      direccion: 'MOJOTORILLO S/N',
+      telefono: '61635733',
+      circuito: 'D-1182',
+      tarifa: 'RS',
+      ejecucion: null,
+      motivoAnulacion: null
     });
-  },
 
-  async idbGetAll(storeName) {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(storeName, "readonly");
-      const req = tx.objectStore(storeName).getAll();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+    // Orden 2: Cuenta 1702690 anulada en video (CUC 443797)
+    store.ordenesCorte.push({
+      cuc: 443797,
+      cuenta: 1702690,
+      medidor: '221009296',
+      marca: 'WASION',
+      titular: 'QUISPE CARLOS',
+      hab: 'R',
+      estado: 'ANULADO',
+      fechaGeneracion: '26/08/2026 10:15:00',
+      timestampGen: baseDate.getTime() - 86400000,
+      deudaTope: 88.40,
+      tecnico: 'SIN_ASIGNAR',
+      direccion: 'BETANZOS - C. BOLIVAR 45',
+      telefono: '71829304',
+      circuito: 'D-1182',
+      tarifa: 'RS',
+      ejecucion: null,
+      motivoAnulacion: 'Anulado ya que pago parte o la totalidad de facturas vencidas, Fecha de pago: 02-09-2026 16:20:13'
     });
-  },
 
-  async save(domicilios, cobros, cola, lastSync) {
-    if (this.db) {
-      await this.idbPut("meta", { key: "lastSync", value: lastSync });
-      await this.idbPut("meta", { key: "tecnicos", value: TECNICO });
-      const cl = await this.idbGetAll("domicilios");
-      for (const d of domicilios) await this.idbPut("domicilios", d);
-      for (const c of cobros) await this.idbPut("cobros", c);
-      for (const q of cola) await this.idbPut("cola", q);
-      // limpiar cola eliminada (operaciones sync completadas fuera de la cola)
-      const oldCola = await this.idbGetAll("cola");
-      for (const oc of oldCola) {
-        if (!cola.some(q => q.id === oc.id)) {
-          await new Promise((resolve, reject) => {
-            const tx = this.db.transaction("cola", "readwrite");
-            tx.objectStore("cola").delete(oc.id);
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-          });
-        }
-      }
-      return;
-    }
-    // localStorage fallback
-    localStorage.setItem("sepsa.domicilios", JSON.stringify(domicilios));
-    localStorage.setItem("sepsa.cobros", JSON.stringify(cobros));
-    localStorage.setItem("sepsa.cola", JSON.stringify(cola));
-    localStorage.setItem("sepsa.lastSync", lastSync);
-  },
+    // Generar 44 órdenes adicionales para completar los 46 registros observados
+    for (let i = 3; i <= 46; i++) {
+      const offsetHours = (i * 4.8);
+      const genTime = new Date(baseDate.getTime() - offsetHours * 3600000);
+      const cucNum = 443700 + i;
+      const cuentaNum = 1701600 + i;
+      const medidorNum = '22100' + (1000 + i);
 
-  async load() {
-    if (this.db) {
-      const domicilios = await this.idbGetAll("domicilios");
-      const cobros = await this.idbGetAll("cobros");
-      const cola = await this.idbGetAll("cola");
-      const metas = await this.idbGetAll("meta");
-      const lastSync = (metas.find(m => m.key === "lastSync") || {}).value || "";
-      return { domicilios, cobros, cola, lastSync };
-    }
-    return {
-      domicilios: JSON.parse(localStorage.getItem("sepsa.domicilios") || "null"),
-      cobros: JSON.parse(localStorage.getItem("sepsa.cobros") || "null"),
-      cola: JSON.parse(localStorage.getItem("sepsa.cola") || "null"),
-      lastSync: localStorage.getItem("sepsa.lastSync") || "",
-    };
-  },
-
-  async reset() {
-    if (this.db) {
-      const stores = ["domicilios", "cobros", "cola", "meta"];
-      for (const s of stores) {
-        await new Promise((resolve, reject) => {
-          const tx = this.db.transaction(s, "readwrite");
-          tx.objectStore(s).clear();
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-      }
-      return;
-    }
-    localStorage.removeItem("sepsa.domicilios");
-    localStorage.removeItem("sepsa.cobros");
-    localStorage.removeItem("sepsa.cola");
-    localStorage.removeItem("sepsa.lastSync");
-  },
-};
-
-/* ---------- Estado global de la app ---------- */
-const App = {
-  tecnico: TECNICO,
-  zona: ZONA,
-  online: true,
-  syncing: false,
-  domicilios: [],
-  cobros: [],
-  cola: [],
-  lastSync: "",
-  screen: "inicio",
-  currentDomicilioId: null,
-  cobranzaCantidad: 1,
-  lastRecibo: null,
-
-  /* ---- Getters de estado ---- */
-  pendientes() { return this.cola.filter(q => q.estado !== "synced").length; },
-  visitadosHoy() { return this.domicilios.filter(d => d.visitado).length; },
-  deudores() { return this.domicilios.filter(d => d.meses.length > 0).length; },
-  montoCobradoHoy() { return this.cobros.reduce((s, c) => s + c.totalCentavos, 0); },
-
-  domicilio(id) { return this.domicilios.find(d => d.id === id); },
-
-  /* ---- Operaciones de dominio aplicadas ---- */
-  registrarVisita(id, observacion) {
-    const d = this.domicilio(id);
-    if (!d) return;
-    d.visitado = true;
-    d.observacionUltima = observacion || "";
-    this.cola.push({
-      id: uid(), tipo: "visita", estado: "pending", intentos: 0,
-      payload: { domicilioId: id, observacion: d.observacionUltima, fecha: hoyISO(), tecnico: this.tecnico },
-    });
-    this.persistir();
-  },
-
-  registrarCobro(id, mesesPagados) {
-    const d = this.domicilio(id);
-    if (!d) return;
-    const total = Dominio.totalCentavos(mesesPagados);
-    const comprobanteId = this.generarComprobanteId();
-    const cobro = {
-      id: uid(), domicilioId: id, tecnico: this.tecnico,
-      mesesPagados, cantidadMeses: mesesPagados.length, totalCentavos: total,
-      metodo: "Efectivo", fecha: hoyISO(), comprobanteId,
-      sync: this.online ? "synced" : "pending",
-    };
-    // Deuda local se actualiza INMEDIATAMENTE
-    const actualizado = Dominio.aplicarPago(d, mesesPagados);
-    const idx = this.domicilios.findIndex(x => x.id === id);
-    this.domicilios[idx] = { ...d, ...actualizado, visitado: true };
-    this.cobros.push(cobro);
-    if (!this.online) {
-      this.cola.push({
-        id: uid(), tipo: "cobro", estado: "pending", intentos: 0, payload: { cobroId: cobro.id },
+      store.ordenesCorte.push({
+        cuc: cucNum,
+        cuenta: cuentaNum,
+        medidor: medidorNum,
+        marca: (i % 2 === 0 ? 'WASION' : 'ACTARIS'),
+        titular: 'CLIENTE TITULAR ' + i,
+        hab: 'R',
+        estado: 'GENERADO',
+        fechaGeneracion: formatDate(genTime),
+        timestampGen: genTime.getTime(),
+        deudaTope: parseFloat((35.50 + (i * 3.75)).toFixed(2)),
+        tecnico: (i % 3 === 0 ? 'JOSUE DANIEL QUINTANILLA TABOADA' : 'SIN_ASIGNAR'),
+        direccion: 'ZONA CENTRAL - CALLE ' + i,
+        telefono: '7240' + (1000 + i),
+        circuito: 'D-1182',
+        tarifa: 'RS',
+        ejecucion: null,
+        motivoAnulacion: null
       });
     }
-    this.lastRecibo = cobro;
-    this.persistir();
-  },
+  }
 
-  generarComprobanteId() {
-    const fecha = hoyISO().replace(/-/g, "");
-    const seq = String(this.cobros.length + 1).padStart(6, "0");
-    return `CP-${fecha}-${seq}`;
-  },
+  function formatDate(d) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
 
-  persistir() {
-    Store.save(this.domicilios, this.cobros, this.cola, this.lastSync);
-    UI.renderAll();
-  },
+  function formatDaysElapsed(timestamp) {
+    // Calculado respecto a la fecha simulada del video (05/09/2026)
+    const simulatedNow = new Date(2026, 8, 5, 17, 35, 0).getTime();
+    const diffMs = simulatedNow - timestamp;
+    const days = diffMs / (1000 * 60 * 60 * 24);
+    return Math.max(0.5, days).toFixed(2) + ' días';
+  }
 
-  async restaurar() {
-    await Store.init();
-    const data = await Store.load();
-    if (data.domicilios) this.domicilios = data.domicilios;
-    if (data.cobros) this.cobros = data.cobros;
-    if (data.cola) this.cola = data.cola;
-    if (data.lastSync) this.lastSync = data.lastSync;
-    if (!this.domicilios.length) {
-      this.domicilios = seedDomicilios();
-      this.lastSync = "Hoy, 08:42";
-      this.persistir();
-    }
-  },
+  // =========================================================================
+  // 2. MOTOR DE NAVEGACIÓN SPA
+  // =========================================================================
 
-  async restablecer() {
-    await Store.reset();
-    this.domicilios = seedDomicilios();
-    this.cobros = [];
-    this.cola = [];
-    this.lastSync = "Hoy, 08:42";
-    this.online = true;
-    $("#offline-toggle").checked = false;
-    this.persistir();
-  },
-};
+  const viewLabels = {
+    dashboard: 'P-01: Dashboard Principal',
+    busqueda: 'P-02: Búsqueda de Morosidad (/orden/create)',
+    bandeja: 'P-03: Bandeja de Cortes (/verCortes)',
+    ficha: 'P-04: Ficha Integral de Corte'
+  };
 
-/* ---------- Sync simulada ---------- */
-const Sync = {
-  showModal() { $("#modal-sync").classList.remove("hidden"); },
+  function navigateTo(viewId, params) {
+    store.vistaActiva = viewId;
 
-  hideModal() {
-    setTimeout(() => $("#modal-sync").classList.add("hidden"), 700);
-  },
+    // Actualizar secciones visibles
+    document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
+    const activeSec = document.getElementById('view-' + viewId);
+    if (activeSec) activeSec.classList.add('active');
 
-  async run() {
-    if (App.syncing) return;
-    App.syncing = true;
-    this.showModal();
-    const pendientes = App.cola.filter(q => q.estado !== "synced");
-    const total = pendientes.length;
-    const title = $("#sync-title");
-    const bar = $("#sync-bar");
-    const status = $("#sync-status");
-
-    if (total === 0) {
-      title.textContent = "Sincronización completada";
-      bar.style.width = "100%";
-      status.textContent = "No hay cambios pendientes.";
-      App.lastSync = "Hoy · " + new Date().toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" });
-      $("#sync-last").textContent = App.lastSync;
-      App.persistir();
-      this.hideModal();
-      App.syncing = false;
-      App.renderAll();
-      return;
-    }
-
-    title.textContent = "Sincronizando cambios…";
-    let done = 0;
-    for (const q of pendientes) {
-      q.estado = "syncing";
-      App.persistir();
-      await new Promise(r => setTimeout(r, 500)); // simular latencia
-      if (q.tipo === "cobro") {
-        const cobro = App.cobros.find(c => c.id === q.payload.cobroId);
-        if (cobro) cobro.sync = "synced";
-      }
-      q.estado = "synced";
-      done++;
-      const pct = Math.round((done / total) * 100);
-      bar.style.width = pct + "%";
-      status.textContent = `${done} de ${total} cambios sincronizados`;
-      App.persistir();
-      await new Promise(r => setTimeout(r, 300));
-    }
-
-    // Retirar operaciones completadas de la cola
-    App.cola = App.cola.filter(q => q.estado !== "synced");
-
-    title.textContent = "✓ Sincronización completada";
-    status.textContent = `${total} cambios sincronizados`;
-    bar.style.width = "100%";
-    App.lastSync = "Hoy · " + new Date().toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" });
-    $("#sync-last").textContent = App.lastSync;
-    App.syncing = false;
-    App.persistir();
-    this.hideModal();
-    App.renderAll();
-  },
-
-  // Falla una operación simulada (para demostrar reintento sin pérdida)
-  simularFallo() {
-    const pend = App.cola.filter(q => q.estado !== "synced");
-    if (!pend.length) return;
-    pend[0].estado = "failed";
-    pend[0].intentos++;
-    App.persistir();
-    App.renderAll();
-  },
-};
-
-/* ---------- Router / UI ---------- */
-const UI = {
-  screens: {
-    inicio: "screen-inicio",
-    domicilios: "screen-domicilios",
-    detalle: "screen-detalle",
-    cobranza: "screen-cobranza",
-    pago: "screen-pago",
-    comprobante: "screen-comprobante",
-    cobros: "screen-cobros",
-    mas: "screen-mas",
-  },
-
-  titles: {
-    inicio: "SEPSA",
-    domicilios: "Domicilios",
-    detalle: "Domicilio",
-    cobranza: "Cobrar",
-    pago: "Pago",
-    comprobante: "Comprobante",
-    cobros: "Cobros",
-    mas: "Más",
-  },
-
-  show(screen) {
-    App.screen = screen;
-    $$(".screen").forEach(s => s.classList.remove("active"));
-    $("#" + this.screens[screen]).classList.add("active");
-    $("#app-title").textContent = this.titles[screen];
-    $("#btn-back").classList.toggle("hidden", !["detalle", "cobranza", "pago", "comprobante"].includes(screen));
-    $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.nav === screen));
-    if (screen === "detalle" && App.currentDomicilioId) this.renderDetalle();
-    if (screen === "cobranza") this.renderCobranza();
-    if (screen === "pago" && App.lastRecibo) this.renderPago();
-    if (screen === "comprobante" && App.lastRecibo) this.renderComprobante();
-  },
-
-  renderAll() {
-    this.renderConn();
-    this.renderInicio();
-    this.renderDomicilios();
-    this.renderCobros();
-    this.renderMas();
-    if (App.currentDomicilioId) {
-      if (App.screen === "detalle") this.renderDetalle();
-      if (App.screen === "cobranza") this.renderCobranza();
-      if (App.screen === "pago") this.renderPago();
-      if (App.screen === "comprobante") this.renderComprobante();
-    }
-  },
-
-  renderConn() {
-    const ok = App.online;
-    $("#conn-dot").className = "dot " + (ok ? "green" : "orange");
-    $("#conn-text").textContent = ok ? "Sincronizado" : "Sin conexión";
-    $("#conn-card-dot").className = "dot " + (ok ? "green" : "orange");
-    $("#conn-card-text").textContent = ok ? "Sincronizado" : "Sin conexión · trabajando localmente";
-    $("#offline-hint").classList.toggle("hidden", ok);
-    $("#offline-banner").classList.toggle("hidden", ok);
-    const pend = App.pendientes();
-    $("#pending-banner").classList.toggle("hidden", ok || pend === 0);
-    $("#pending-count").textContent = pend;
-  },
-
-  renderInicio() {
-    const hora = new Date().getHours();
-    const saludo = hora < 12 ? "Buenos días" : hora < 19 ? "Buenas tardes" : "Buenas noches";
-    $("#greeting").textContent = `${saludo}, ${App.tecnico}`;
-    $("#zone").textContent = App.zona;
-    $("#stat-asignados").textContent = App.domicilios.length;
-    $("#stat-visitados").textContent = App.visitadosHoy();
-    $("#stat-pendientes").textContent = App.deudores();
-    $("#stat-cobros").textContent = App.cobros.length;
-    $("#stat-monto").textContent = fmtBs(App.montoCobradoHoy());
-    $("#last-sync-text").textContent = App.lastSync || "—";
-  },
-
-  renderDomicilios() {
-    const q = ($("#search-input").value || "").trim().toLowerCase();
-    const filtro = (document.querySelector(".filter-chip.active") || {}).dataset?.filter || "todos";
-    const list = $("#domicilio-list");
-    list.innerHTML = "";
-    let count = 0;
-    for (const d of App.domicilios) {
-      const matchQ = !q || d.nombre.toLowerCase().includes(q) || d.codigo.includes(q);
-      const est = Dominio.estadoDomicilio(d);
-      const matchF = filtro === "todos" || est === filtro;
-      if (!matchQ || !matchF) continue;
-      count++;
-      const li = document.createElement("li");
-      li.className = "domicilio-item estado-" + est;
-      li.dataset.id = d.id;
-      li.innerHTML = `
-        <div class="dom-top">
-          <div>
-            <div class="dom-nombre">${d.nombre}</div>
-            <div class="dom-codigo">Código ${d.codigo}</div>
-            <div class="dom-localidad">${d.localidad}</div>
-          </div>
-          <span class="dom-badge badge-${est}">${est === "al-dia" ? "Al día" : est === "visitado" ? "Visitado" : "Pendiente"}</span>
-        </div>
-        <div class="dom-bottom">
-          <span class="dom-meses">${d.meses.length} ${d.meses.length === 1 ? "mes" : "meses"} pendientes</span>
-          <span class="dom-deuda">${fmtBs(Dominio.totalCentavos(d.meses))}</span>
-        </div>`;
-      list.appendChild(li);
-    }
-    $("#empty-state").classList.toggle("hidden", count > 0);
-  },
-
-  renderDetalle() {
-    const d = App.domicilio(App.currentDomicilioId);
-    if (!d) return;
-    const est = Dominio.estadoDomicilio(d);
-    $("#det-nombre").textContent = d.nombre;
-    $("#det-codigo").textContent = d.codigo;
-    $("#det-direccion").textContent = d.direccion;
-    $("#det-localidad").textContent = d.localidad;
-    $("#det-medidor").textContent = d.medidor;
-    $("#det-estado").textContent = est === "al-dia" ? "Al día" : est === "visitado" ? "Visitado" : "Pendiente";
-    $("#det-meses").textContent = d.meses.length === 0 ? "Sin deuda" : `${d.meses.length} meses`;
-    $("#det-deuda").textContent = fmtBs(Dominio.totalCentavos(d.meses));
-
-    const ul = $("#det-meses-list");
-    ul.innerHTML = "";
-    if (d.meses.length === 0) {
-      ul.innerHTML = '<li class="meses-item"><span class="muted">Este domicilio no tiene meses pendientes.</span></li>';
-    } else {
-      for (const m of d.meses) {
-        const li = document.createElement("li");
-        li.className = "meses-item";
-        li.innerHTML = `<span>${mesLabel(m)}</span><strong>${fmtBs(m.montoCentavos)}</strong>`;
-        ul.appendChild(li);
-      }
-    }
-    $("#btn-cobrar").disabled = d.meses.length === 0;
-  },
-
-  renderCobranza() {
-    const d = App.domicilio(App.currentDomicilioId);
-    if (!d) return;
-    $("#cob-nombre").textContent = d.nombre;
-    $("#cob-codigo").textContent = d.codigo;
-    $("#cob-meses").textContent = `${d.meses.length} meses`;
-    $("#cob-deuda").textContent = fmtBs(Dominio.totalCentavos(d.meses));
-
-    const max = d.meses.length;
-    if (App.cobranzaCantidad > max) App.cobranzaCantidad = max;
-    if (App.cobranzaCantidad < 1) App.cobranzaCantidad = 1;
-
-    $("#cob-cantidad").textContent = App.cobranzaCantidad;
-    $("#step-minus").disabled = App.cobranzaCantidad <= 1;
-    $("#step-plus").disabled = App.cobranzaCantidad >= max;
-
-    const seleccion = Dominio.seleccionarMeses(d.meses, App.cobranzaCantidad) || [];
-    const ul = $("#cob-meses-list");
-    ul.innerHTML = "";
-    for (const m of seleccion) {
-      const li = document.createElement("li");
-      li.className = "meses-item";
-      li.innerHTML = `<span>${mesLabel(m)}</span><strong>${fmtBs(m.montoCentavos)}</strong>`;
-      ul.appendChild(li);
-    }
-    const total = Dominio.totalCentavos(seleccion);
-    $("#cob-total-meses").textContent = `${seleccion.length} ${seleccion.length === 1 ? "mes" : "meses"}`;
-    $("#cob-total").textContent = fmtBs(total);
-    $("#btn-continuar-cobro").textContent = `COBRAR ${fmtBs(total)}`;
-  },
-
-  renderPago() {
-    const c = App.lastRecibo;
-    if (!c) return;
-    const d = App.domicilio(c.domicilioId);
-    $("#pago-nombre").textContent = d ? d.nombre : "—";
-    $("#pago-meses").textContent = `${c.cantidadMeses} meses`;
-    $("#pago-total").textContent = fmtBs(c.totalCentavos);
-    const restante = d ? Dominio.totalCentavos(d.meses) : 0;
-    $("#pago-restante").textContent = `${d ? d.meses.length : 0} meses · ${fmtBs(restante)}`;
-    $("#pago-estado").textContent = App.online ? "Sincronizado" : "Pendiente de sincronización";
-  },
-
-  renderComprobante() {
-    const c = App.lastRecibo;
-    if (!c) return;
-    const d = App.domicilio(c.domicilioId);
-    $("#rec-cliente").textContent = d ? d.nombre : "—";
-    $("#rec-codigo").textContent = d ? d.codigo : "—";
-    $("#rec-meses").textContent = c.mesesPagados.map(mesLabel).join(", ");
-    $("#rec-total").textContent = fmtBs(c.totalCentavos);
-    $("#rec-tecnico").textContent = c.tecnico;
-    $("#rec-fecha").textContent = c.fecha.split("-").reverse().join("/");
-    $("#rec-estado").textContent = c.sync === "synced" ? "Registrado" : "Registrado sin conexión";
-    $("#rec-id").textContent = c.comprobanteId;
-  },
-
-  renderCobros() {
-    const list = $("#cobros-list");
-    list.innerHTML = "";
-    if (App.cobros.length === 0) {
-      $("#cobros-empty").classList.remove("hidden");
-      return;
-    }
-    $("#cobros-empty").classList.add("hidden");
-    const byFecha = [...App.cobros].sort((a, b) => b.fecha.localeCompare(a.fecha));
-    for (const c of byFecha) {
-      const d = App.domicilio(c.domicilioId);
-      const li = document.createElement("li");
-      li.className = "cobro-item";
-      const syncOk = c.sync === "synced";
-      li.innerHTML = `
-        <div class="cobro-top">
-          <span class="cobro-nombre">${d ? d.nombre : "—"}</span>
-          <span class="cobro-sync ${syncOk ? "sync-ok" : "sync-pend"}">${syncOk ? "Sincronizado" : "Pendiente"}</span>
-        </div>
-        <div class="cobro-meta">
-          <span>${c.cantidadMeses} ${c.cantidadMeses === 1 ? "mes" : "meses"}</span>
-          <span class="cobro-total">${fmtBs(c.totalCentavos)}</span>
-          <span>${c.comprobanteId}</span>
-        </div>`;
-      list.appendChild(li);
-    }
-  },
-
-  renderMas() {
-    $("#mas-conn-desc").textContent = App.online
-      ? "Actívalo para simular que trabajas sin Internet."
-      : "Modo offline activo. La app sigue funcionando localmente.";
-    $("#mas-last-sync").textContent = App.lastSync || "—";
-  },
-
-  showModal(el) { el.classList.remove("hidden"); },
-  hideModal(el) { el.classList.add("hidden"); },
-
-  toast(msg) {
-    const t = $("#toast");
-    t.textContent = msg;
-    t.classList.remove("hidden");
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => t.classList.add("hidden"), 2600);
-  },
-};
-
-/* ---------- Bindings de eventos ---------- */
-function bindEvents() {
-  // Navegación inferior
-  $$(".nav-item").forEach(btn => {
-    btn.addEventListener("click", () => UI.show(btn.dataset.nav));
-  });
-
-  // Volver
-  $("#btn-back").addEventListener("click", () => UI.show("domicilios"));
-
-  // Búsqueda y filtros
-  $("#search-input").addEventListener("input", () => UI.renderDomicilios());
-  $$(".filter-chip").forEach(chip => {
-    chip.addEventListener("click", () => {
-      $$(".filter-chip").forEach(c => c.classList.remove("active"));
-      chip.classList.add("active");
-      UI.renderDomicilios();
+    // Actualizar botones del subnav
+    document.querySelectorAll('.subnav-item').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === viewId);
     });
-  });
 
-  // Selección de domicilio
-  $("#domicilio-list").addEventListener("click", (e) => {
-    const item = e.target.closest(".domicilio-item");
-    if (!item) return;
-    App.currentDomicilioId = item.dataset.id;
-    UI.show("detalle");
-  });
+    // Actualizar breadcrumb
+    const indicator = document.getElementById('view-indicator');
+    if (indicator) indicator.textContent = viewLabels[viewId] || 'SEPSA';
 
-  // Registrar visita
-  $("#btn-visita").addEventListener("click", () => {
-    const d = App.domicilio(App.currentDomicilioId);
-    if (!d) return;
-    $("#visita-nombre").textContent = d.nombre;
-    $("#visita-codigo").textContent = d.codigo;
-    $("#visita-obs").value = "";
-    UI.showModal($("#modal-visita"));
-  });
-  $("#visita-cancelar").addEventListener("click", () => UI.hideModal($("#modal-visita")));
-  $("#visita-guardar").addEventListener("click", () => {
-    App.registrarVisita(App.currentDomicilioId, $("#visita-obs").value);
-    UI.hideModal($("#modal-visita"));
-    UI.show("detalle");
-    UI.toast("✓ Visita registrada" + (App.online ? "" : " · se guardará offline"));
-  });
+    // Renders específicos
+    if (viewId === 'busqueda') {
+      renderBusqueda();
+    } else if (viewId === 'bandeja') {
+      renderBandeja();
+    } else if (viewId === 'ficha') {
+      const cuc = params && params.cuc ? params.cuc : store.ordenSeleccionadaCUC;
+      renderFicha(cuc);
+    }
 
-  // Cobranza
-  $("#btn-cobrar").addEventListener("click", () => {
-    App.cobranzaCantidad = 1;
-    UI.show("cobranza");
-  });
-  $("#step-minus").addEventListener("click", () => {
-    if (App.cobranzaCantidad > 1) { App.cobranzaCantidad--; UI.renderCobranza(); }
-  });
-  $("#step-plus").addEventListener("click", () => {
-    const d = App.domicilio(App.currentDomicilioId);
-    if (d && App.cobranzaCantidad < d.meses.length) { App.cobranzaCantidad++; UI.renderCobranza(); }
-  });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
-  // Confirmar cobro
-  $("#btn-continuar-cobro").addEventListener("click", () => {
-    const d = App.domicilio(App.currentDomicilioId);
-    if (!d) return;
-    const seleccion = Dominio.seleccionarMeses(d.meses, App.cobranzaCantidad);
-    if (!seleccion) return;
-    $("#conf-cliente").textContent = d.nombre;
-    $("#conf-meses").textContent = seleccion.map(mesLabel).join(", ");
-    $("#conf-cantidad").textContent = seleccion.length === 1 ? "1 mes" : `${seleccion.length} meses`;
-    $("#conf-total").textContent = fmtBs(Dominio.totalCentavos(seleccion));
-    UI.showModal($("#modal-confirmar"));
-  });
-  $("#conf-cancelar").addEventListener("click", () => UI.hideModal($("#modal-confirmar")));
-  $("#conf-aceptar").addEventListener("click", () => {
-    const d = App.domicilio(App.currentDomicilioId);
-    const seleccion = Dominio.seleccionarMeses(d.meses, App.cobranzaCantidad);
-    App.registrarCobro(d.id, seleccion);
-    UI.hideModal($("#modal-confirmar"));
-    UI.show("pago");
-  });
+  // =========================================================================
+  // 3. TEMPORIZADOR REGRESIVO DE SESIÓN (P-01)
+  // =========================================================================
 
-  // Pago registrado
-  $("#btn-finalizar").addEventListener("click", () => {
-    App.currentDomicilioId = null;
-    UI.show("domicilios");
-  });
-  $("#btn-ver-comprobante").addEventListener("click", () => UI.show("comprobante"));
+  function startSessionTimer() {
+    const timerText = document.getElementById('timer-text');
+    setInterval(() => {
+      if (store.temporizadorSegundos > 0) {
+        store.temporizadorSegundos--;
+      } else {
+        store.temporizadorSegundos = 378; // Reiniciar ciclo
+      }
+      const min = Math.floor(store.temporizadorSegundos / 60);
+      const sec = store.temporizadorSegundos % 60;
+      if (timerText) {
+        timerText.textContent = `${min} min ${String(sec).padStart(2, '0')} seg`;
+      }
+    }, 1000);
+  }
 
-  // Comprobante (simulado)
-  $("#btn-compartir").addEventListener("click", () => UI.toast("Compartir (simulado)"));
-  $("#btn-guardar").addEventListener("click", () => UI.toast("Comprobante guardado (simulado)"));
+  // =========================================================================
+  // 4. RENDERIZADORES DE PANTALLAS
+  // =========================================================================
 
-  // Más
-  $("#offline-toggle").addEventListener("change", (e) => {
-    App.online = !e.target.checked;
-    UI.renderAll();
-    if (App.online) {
-      Sync.run();
+  // --- P-02: Búsqueda de Morosos ---
+  function renderBusqueda() {
+    const tbody = document.getElementById('tbody-morosos');
+    const countSpan = document.getElementById('count-morosos');
+    const btnCrear = document.getElementById('btn-crear-lote');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    store.morososMojotorillo.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${item.regionalLocalidad}</strong></td>
+        <td>${item.habilitante}</td>
+        <td><a href="#" class="btn-link-action text-primary" data-cuenta="${item.cuenta}">${item.cuenta}</a></td>
+        <td><strong>${item.titular}</strong></td>
+        <td>${item.ruta}</td>
+        <td>${item.orden}</td>
+        <td>${item.circuito}</td>
+        <td>${item.direccion}</td>
+        <td><span class="badge badge-success">${item.estado}</span></td>
+        <td>${item.tarifa}</td>
+        <td>${item.medidor}</td>
+        <td style="text-align:center;"><strong>${item.facturasVencidas30d}</strong></td>
+        <td><strong style="color:var(--color-danger);">${item.totalPendiente.toFixed(2)} Bs</strong></td>
+        <td>
+          <button class="btn btn-sm btn-outline btn-ver-kardex-row" data-cuenta="${item.cuenta}">Ver Kardex</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    if (countSpan) countSpan.textContent = store.morososMojotorillo.length;
+    if (btnCrear) btnCrear.disabled = false;
+  }
+
+  // --- P-03: Bandeja de Cortes ---
+  function renderBandeja() {
+    const tbody = document.getElementById('tbody-bandeja');
+    const totalCount = document.getElementById('bandeja-total-count');
+    const subnavCount = document.getElementById('subnav-count');
+    if (!tbody) return;
+
+    const searchTerm = (document.getElementById('bandeja-search-cuenta')?.value || '').trim().toLowerCase();
+    const filterTecnico = document.getElementById('bandeja-filter-tecnico')?.value || '';
+
+    // Filtrar lista
+    const filtered = store.ordenesCorte.filter(ord => {
+      const matchSearch = !searchTerm ||
+        String(ord.cuenta).toLowerCase().includes(searchTerm) ||
+        String(ord.medidor).toLowerCase().includes(searchTerm) ||
+        String(ord.titular).toLowerCase().includes(searchTerm) ||
+        String(ord.cuc).toLowerCase().includes(searchTerm);
+
+      const matchTec = !filterTecnico || ord.tecnico === filterTecnico;
+      return matchSearch && matchTec;
+    });
+
+    tbody.innerHTML = '';
+    filtered.forEach(ord => {
+      const badgeClass = ord.estado === 'GENERADO' ? 'badge-danger' : (ord.estado === 'EJECUTADO' ? 'badge-success' : 'badge-warning');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <strong>Cta: ${ord.cuenta}</strong><br>
+          <small class="text-muted">Med: ${ord.medidor} (${ord.marca})</small>
+        </td>
+        <td>${ord.hab}</td>
+        <td><span class="badge ${badgeClass}">${ord.estado}</span></td>
+        <td>${ord.fechaGeneracion}</td>
+        <td>${formatDaysElapsed(ord.timestampGen)}</td>
+        <td><strong style="color:var(--color-danger);">${ord.deudaTope.toFixed(2)} Bs</strong></td>
+        <td>${ord.tecnico === 'SIN_ASIGNAR' ? '<span class="text-muted">—</span>' : ord.tecnico}</td>
+        <td>
+          <button class="btn btn-sm btn-primary btn-ver-corte" data-cuc="${ord.cuc}">Ver corte</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    if (totalCount) totalCount.textContent = store.ordenesCorte.length;
+    if (subnavCount) subnavCount.textContent = store.ordenesCorte.length;
+  }
+
+  // --- P-04: Ficha Integral de Corte ---
+  function renderFicha(cuc) {
+    store.ordenSeleccionadaCUC = cuc;
+    const ord = store.ordenesCorte.find(o => o.cuc === cuc) || store.ordenesCorte[0];
+    if (!ord) return;
+
+    // Encabezado
+    document.getElementById('ficha-cuc').textContent = ord.cuc;
+    const badge = document.getElementById('ficha-status-badge');
+    badge.textContent = 'ESTADO: ' + ord.estado;
+    badge.className = 'badge badge-lg ' + (ord.estado === 'GENERADO' ? 'badge-danger' : (ord.estado === 'EJECUTADO' ? 'badge-success' : 'badge-warning'));
+
+    // Motivo Anulación (BR-003)
+    const cancelBox = document.getElementById('box-cancel-reason');
+    const cancelText = document.getElementById('text-cancel-reason');
+    const btnCut = document.getElementById('btn-open-modal-corte');
+    const btnSimPay = document.getElementById('btn-sim-pago-concurrente');
+
+    if (ord.estado === 'ANULADO') {
+      cancelBox.classList.remove('hidden');
+      cancelText.textContent = ord.motivoAnulacion || 'Anulado ya que pago parte o la totalidad de facturas vencidas';
+      btnCut.disabled = true;
+      btnCut.title = 'No se puede cortar un suministro anulado por pago en ventanilla';
+      btnSimPay.disabled = true;
+    } else if (ord.estado === 'EJECUTADO') {
+      cancelBox.classList.add('hidden');
+      btnCut.disabled = true;
+      btnCut.textContent = '✓ Corte ya ejecutado';
+      btnSimPay.disabled = true;
     } else {
-      UI.toast("Modo offline activado · trabajando localmente");
+      cancelBox.classList.add('hidden');
+      btnCut.disabled = false;
+      btnCut.textContent = '✂ Registrar corte efectivo';
+      btnCut.title = '';
+      btnSimPay.disabled = false;
     }
-  });
-  $("#btn-sync-manual").addEventListener("click", () => Sync.run());
-  $("#btn-reiniciar").addEventListener("click", async () => {
-    if (confirm("¿Restablecer los datos de ejemplo? Se perderán los cambios.")) {
-      await App.restablecer();
-      App.currentDomicilioId = null;
-      UI.show("inicio");
-      UI.toast("Datos de ejemplo restablecidos");
-    }
-  });
-}
 
-/* ---------- Arranque ---------- */
-(async function init() {
-  bindEvents();
-  await App.restaurar();
-  UI.renderAll();
-  UI.show("inicio");
-  window.App = App; // accesible para pruebas en consola
+    // Datos del suministro
+    document.getElementById('ficha-cuenta').textContent = ord.cuenta;
+    document.getElementById('ficha-titular').textContent = ord.titular;
+    document.getElementById('ficha-medidor').textContent = `${ord.medidor} (${ord.marca})`;
+    document.getElementById('ficha-direccion').textContent = ord.direccion;
+    document.getElementById('ficha-telefono').textContent = ord.telefono || 'No registrado';
+    document.getElementById('ficha-circuito').textContent = ord.circuito;
+    document.getElementById('ficha-tarifa').textContent = ord.tarifa;
+
+    // Detalle de Deuda FA_FACTURAS (Tabla T-03)
+    const tbodyDeuda = document.getElementById('tbody-deuda');
+    const deudas = store.deudasPorCuenta[ord.cuenta] || [
+      { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: ord.deudaTope / 2, estado: ord.estado === 'ANULADO' ? 'C' : 'P', origen: 'FA_FACTURAS', diasMora: 63 },
+      { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: ord.deudaTope / 2, estado: ord.estado === 'ANULADO' ? 'C' : 'P', origen: 'FA_FACTURAS', diasMora: 31 }
+    ];
+
+    tbodyDeuda.innerHTML = '';
+    let sum = 0;
+    deudas.forEach(d => {
+      sum += d.monto;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${d.periodo}</strong></td>
+        <td>${d.anio}</td>
+        <td>${d.fecha}</td>
+        <td><strong>${d.monto.toFixed(2)} Bs</strong></td>
+        <td><span class=\"badge ${d.estado === 'P' ? 'badge-danger' : 'badge-success'}\">${d.estado === 'P' ? 'P (Pendiente)' : 'C (Cancelado)'}</span></td>
+        <td>${d.origen}</td>
+        <td>${d.diasMora} días</td>
+      `;
+      tbodyDeuda.appendChild(tr);
+    });
+
+    document.getElementById('ficha-total-deuda').textContent = `${sum.toFixed(2)} Bs`;
+
+    // Panel de Auditoría
+    const auditDetails = document.getElementById('ficha-audit-execution-details');
+    if (ord.ejecucion) {
+      auditDetails.className = '';
+      auditDetails.innerHTML = `
+        <div style=\"background: var(--bg-surface-alt); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);\">
+          <p><strong>Tipo de Corte Aplicado:</strong> ${ord.ejecucion.tipo}</p>
+          <p><strong>Lectura Final Registrada:</strong> ${ord.ejecucion.lectura} kWh</p>
+          <p><strong>Coordenadas GPS:</strong> ${ord.ejecucion.lat}, ${ord.ejecucion.lng} ${ord.ejecucion.saltarCoords ? '<span class=\"badge badge-warning\">(Bypass GPS activado)</span>' : ''}</p>
+          <p><strong>Fotografías:</strong> ${ord.ejecucion.saltarFotos ? '<span class=\"badge badge-warning\">(Bypass Fotos activado)</span>' : 'Evidencias fotográficas adjuntas'}</p>
+          <p><strong>Técnico Ejecutor:</strong> ${ord.ejecucion.tecnico}</p>
+          <p><strong>Fecha/Hora de Ejecución:</strong> ${ord.ejecucion.fecha}</p>
+        </div>
+      `;
+    } else {
+      auditDetails.className = 'empty-hint';
+      auditDetails.textContent = 'Sin corte ejecutado aún.';
+    }
+  }
+
+  // =========================================================================
+  // 5. MODAL DE CORTE EN CAMPO (P-05) Y ACCIONES OPERATIVAS
+  // =========================================================================
+
+  function openModalCorte() {
+    const ord = store.ordenesCorte.find(o => o.cuc === store.ordenSeleccionadaCUC);
+    if (!ord || ord.estado === 'ANULADO') {
+      showToast('⚠️ No es posible cortar una orden anulada.');
+      return;
+    }
+    document.getElementById('modal-lat').value = '';
+    document.getElementById('modal-lng').value = '';
+    document.getElementById('modal-telefono').value = ord.telefono || '';
+    document.getElementById('modal-saltar-fotos').value = 'NO';
+    document.getElementById('modal-saltar-coords').value = 'NO';
+    document.getElementById('modal-corte-backdrop').classList.remove('hidden');
+  }
+
+  function closeModalCorte() {
+    document.getElementById('modal-corte-backdrop').classList.add('hidden');
+  }
+
+  function submitCorte() {
+    const ord = store.ordenesCorte.find(o => o.cuc === store.ordenSeleccionadaCUC);
+    if (!ord) return;
+
+    const lat = document.getElementById('modal-lat').value.trim();
+    const lng = document.getElementById('modal-lng').value.trim();
+    const tipo = document.getElementById('modal-tipo-corte').value;
+    const lectura = document.getElementById('modal-lectura').value.trim();
+    const saltarFotos = document.getElementById('modal-saltar-fotos').value === 'SI';
+    const saltarCoords = document.getElementById('modal-saltar-coords').value === 'SI';
+    const medidoresCercanos = document.getElementById('modal-medidores-cercanos').value;
+
+    // Validación BR-004: Obligatoriedad de Coordenadas con Excepción
+    if (!saltarCoords && (!lat || !lng)) {
+      alert('Error de Validación (BR-004):\nDebe capturar las coordenadas GPS pulsando "Obtener ubicación" o activar explícitamente "¿Saltar Control de Coordenadas?".');
+      return;
+    }
+
+    // Validación Lectura Numérica
+    if (!lectura || isNaN(lectura)) {
+      alert('Error de Validación:\nDebe registrar la lectura numérica acumulada del medidor en kWh.');
+      return;
+    }
+
+    // Persistir ejecución
+    ord.estado = 'EJECUTADO';
+    ord.ejecucion = {
+      tipo: tipo,
+      lectura: parseFloat(lectura),
+      lat: lat || '-19.589366 (Estimada)',
+      lng: lng || '-65.259119 (Estimada)',
+      saltarFotos: saltarFotos,
+      saltarCoords: saltarCoords,
+      medidoresCercanos: medidoresCercanos,
+      tecnico: store.usuario.nombre,
+      fecha: formatDate(new Date())
+    };
+
+    closeModalCorte();
+    renderFicha(ord.cuc);
+    showToast(`✓ Corte efectivo registrado con éxito (Lectura: ${lectura} kWh). Orden EJECUTADA.`);
+  }
+
+  // Simulación BR-003: Anulación Concurrente por Pago en Caja
+  function simularPagoConcurrente() {
+    const ord = store.ordenesCorte.find(o => o.cuc === store.ordenSeleccionadaCUC);
+    if (!ord) return;
+
+    if (ord.estado === 'EJECUTADO') {
+      alert('Aviso: El corte ya fue ejecutado materialmente en campo. Corresponde iniciar el trámite de Reconexión / Reposición.');
+      return;
+    }
+
+    const timestamp = formatDate(new Date());
+    ord.estado = 'ANULADO';
+    ord.motivoAnulacion = `Anulado ya que pago parte o la totalidad de facturas vencidas, Fecha de pago: ${timestamp}`;
+
+    // Marcar deudas como pagadas (estado C)
+    if (store.deudasPorCuenta[ord.cuenta]) {
+      store.deudasPorCuenta[ord.cuenta].forEach(d => d.estado = 'C');
+    }
+
+    renderFicha(ord.cuc);
+    showToast('⚡ BR-003: Pago recibido en cobranzas. Orden de corte ANULADA automáticamente.');
+  }
+
+  // Emisión Masiva de Lote (P-02 -> P-03)
+  function emitirLoteCorte() {
+    let creadas = 0;
+    store.morososMojotorillo.forEach(moroso => {
+      // Verificar si ya existe orden para esta cuenta
+      const existe = store.ordenesCorte.some(o => o.cuenta === moroso.cuenta && o.estado === 'GENERADO');
+      if (!existe) {
+        const nextCUC = 443800 + store.ordenesCorte.length;
+        store.ordenesCorte.unshift({
+          cuc: nextCUC,
+          cuenta: moroso.cuenta,
+          medidor: moroso.medidor.split(' ')[0],
+          marca: moroso.medidor.split(' ')[1] || 'WASION',
+          titular: moroso.titular,
+          hab: moroso.habilitante,
+          estado: 'GENERADO',
+          fechaGeneracion: formatDate(new Date()),
+          timestampGen: Date.now(),
+          deudaTope: moroso.totalPendiente,
+          tecnico: store.usuario.nombre,
+          direccion: moroso.direccion,
+          telefono: '61635733',
+          circuito: moroso.circuito,
+          tarifa: moroso.tarifa,
+          ejecucion: null,
+          motivoAnulacion: null
+        });
+        creadas++;
+      }
+    });
+
+    showToast(`✓ Se emitieron ${creadas} nuevas órdenes de corte en estado GENERADO.`);
+    navigateTo('bandeja');
+  }
+
+  // Toast Helper
+  let toastTimeout;
+  function showToast(msg) {
+    const toast = document.getElementById('toast-msg');
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.classList.remove('hidden');
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+      toast.classList.add('hidden');
+    }, 4500);
+  }
+
+  // =========================================================================
+  // 6. EVENT LISTENERS Y VINCULACIONES
+  // =========================================================================
+
+  function bindEvents() {
+    // Subnav tabs
+    document.querySelectorAll('.subnav-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const view = e.currentTarget.dataset.view;
+        navigateTo(view);
+      });
+    });
+
+    // Brand click -> Dashboard
+    document.getElementById('nav-brand')?.addEventListener('click', () => navigateTo('dashboard'));
+
+    // Dashboard action cards
+    document.getElementById('card-go-bandeja')?.addEventListener('click', () => navigateTo('bandeja'));
+    document.getElementById('card-go-busqueda')?.addEventListener('click', () => navigateTo('busqueda'));
+    document.getElementById('card-go-nexo')?.addEventListener('click', () => {
+      showToast('ℹ️ Redirigiendo a NEXO Operaciones en Terreno (P-07)...');
+    });
+    document.getElementById('card-go-reposiciones')?.addEventListener('click', () => {
+      showToast('ℹ️ Módulo de Reposiciones y Reconversiones (BR-007).');
+    });
+
+    // Actualizar teléfono
+    document.getElementById('btn-update-phone')?.addEventListener('click', () => {
+      const input = document.getElementById('input-new-phone');
+      if (input && input.value.trim()) {
+        store.usuario.telefono = '+591 ' + input.value.trim();
+        document.getElementById('user-card-tel').textContent = store.usuario.telefono;
+        input.value = '';
+        showToast('✓ Número telefónico actualizado correctamente.');
+      }
+    });
+
+    // P-02: Búsqueda y creación de lote
+    document.getElementById('btn-search-morosos')?.addEventListener('click', () => {
+      renderBusqueda();
+      showToast('✓ Consulta ejecutada: 2 suministros superan el umbral de 2 facturas > 30 días.');
+    });
+
+    document.getElementById('btn-crear-lote')?.addEventListener('click', emitirLoteCorte);
+
+    // Click en tabla P-02 para ver Kardex
+    document.getElementById('tbody-morosos')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('btn-ver-kardex-row') || e.target.dataset.cuenta) {
+        e.preventDefault();
+        const cuenta = e.target.dataset.cuenta || '306040';
+        showToast(`🔍 Abriendo Kardex Comercial para la cuenta ${cuenta} (P-06)...`);
+      }
+    });
+
+    // P-03: Bandeja de cortes
+    document.getElementById('bandeja-search-cuenta')?.addEventListener('input', renderBandeja);
+    document.getElementById('bandeja-filter-tecnico')?.addEventListener('change', renderBandeja);
+    document.getElementById('btn-clear-bandeja-filters')?.addEventListener('click', () => {
+      const search = document.getElementById('bandeja-search-cuenta');
+      const tec = document.getElementById('bandeja-filter-tecnico');
+      if (search) search.value = '';
+      if (tec) tec.value = '';
+      renderBandeja();
+    });
+
+    document.getElementById('btn-refresh-bandeja')?.addEventListener('click', () => {
+      renderBandeja();
+      showToast('✓ Bandeja actualizada.');
+    });
+
+    document.getElementById('btn-toggle-map-view')?.addEventListener('click', () => {
+      showToast('🗺 Conmutando a visualización espacial (QField / Capas morosos)...');
+    });
+
+    // Click en botón "Ver corte" de la tabla P-03
+    document.getElementById('tbody-bandeja')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-ver-corte');
+      if (btn) {
+        const cuc = parseInt(btn.dataset.cuc, 10);
+        navigateTo('ficha', { cuc: cuc });
+      }
+    });
+
+    // P-04: Ficha de corte
+    document.getElementById('btn-back-to-bandeja')?.addEventListener('click', () => navigateTo('bandeja'));
+    document.getElementById('btn-ficha-kardex')?.addEventListener('click', () => {
+      showToast('🔍 Abriendo Kardex de cobros para cuenta ' + document.getElementById('ficha-cuenta').textContent);
+    });
+    document.getElementById('btn-sim-pago-concurrente')?.addEventListener('click', simularPagoConcurrente);
+    document.getElementById('btn-open-modal-corte')?.addEventListener('click', openModalCorte);
+
+    // Auditoría tabs en P-04
+    document.querySelectorAll('.audit-tab-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.audit-tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.audit-tab-content').forEach(c => c.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        const tabId = e.currentTarget.dataset.tab;
+        const targetContent = document.getElementById('tab-' + tabId);
+        if (targetContent) targetContent.classList.add('active');
+      });
+    });
+
+    // P-05: Modal de corte
+    document.getElementById('btn-close-modal-corte')?.addEventListener('click', closeModalCorte);
+    document.getElementById('btn-cancel-modal-corte')?.addEventListener('click', closeModalCorte);
+    document.getElementById('btn-confirm-modal-corte')?.addEventListener('click', submitCorte);
+
+    document.getElementById('btn-get-gps')?.addEventListener('click', () => {
+      // Coordenadas reales de Betanzos/Potosí observadas en catastro
+      document.getElementById('modal-lat').value = '-19.589366';
+      document.getElementById('modal-lng').value = '-65.259119';
+      showToast('📍 Coordenadas GPS capturadas exitosamente: -19.589366, -65.259119');
+    });
+
+    // Botón refresco global y tema
+    document.getElementById('btn-refresh-global')?.addEventListener('click', () => {
+      showToast('🔄 Sesión sincronizada con servidor.');
+    });
+
+    document.getElementById('btn-theme-toggle')?.addEventListener('click', () => {
+      showToast('🌙 Modo visual actualizado.');
+    });
+  }
+
+  // =========================================================================
+  // 7. ARRANQUE DEL APLICATIVO
+  // =========================================================================
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initMockOrdenes();
+    bindEvents();
+    startSessionTimer();
+    navigateTo('dashboard');
+    console.log('[SEPSA] Prototipo Operativo inicializado en memoria volátil.');
+  });
+
 })();

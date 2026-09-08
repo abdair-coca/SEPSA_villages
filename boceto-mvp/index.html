@@ -1,327 +1,573 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>SEPSA · Cobranza</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230E6B46'/><path d='M16 6l8 5v10l-8 5-8-5V11z' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linejoin='round'/><text x='16' y='20' font-family='sans-serif' font-size='11' font-weight='700' fill='%23ffffff' text-anchor='middle'>S</text></svg>">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEPSA - Sistema de Cortes y Reconexiones</title>
+  <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="phone-frame">
 
-    <div id="offline-banner" class="offline-banner hidden" role="status">
-      <span class="dot orange"></span>
-      <span>Sin conexión · trabajando localmente</span>
-    </div>
-    <div id="pending-banner" class="pending-banner hidden" role="status">
-      <span id="pending-count">0</span> <span>cambios pendientes</span>
-    </div>
-
-    <header class="app-header">
-      <button id="btn-back" class="icon-btn hidden" aria-label="Volver">‹</button>
-      <h1 id="app-title">SEPSA</h1>
-      <div id="conn-status" class="conn-status">
-        <span class="dot" id="conn-dot"></span>
-        <span id="conn-text">Sincronizado</span>
+  <!-- ================= TOP NAVBAR INSTITUCIONAL ================= -->
+  <header class="navbar">
+    <div class="nav-left">
+      <button class="nav-toggle-btn" id="btn-toggle-menu" title="Menú">☰</button>
+      <div class="brand" id="nav-brand" style="cursor: pointer;">
+        <span class="brand-title">Cortes</span>
+        <span class="brand-icon">✂</span>
       </div>
-    </header>
+      <span class="badge badge-official">BASE DE DATOS OFICIAL</span>
+    </div>
 
-    <main id="main" class="main">
+    <div class="nav-center">
+      <span class="breadcrumb-tag" id="view-indicator">Dashboard Principal</span>
+    </div>
 
-      <!-- ============ PANTALLA 1: INICIO ============ -->
-      <section id="screen-inicio" class="screen active">
-        <div class="welcome">
-          <p class="greeting" id="greeting">Hola</p>
-          <p class="zone" id="zone">Cargando zona…</p>
+    <div class="nav-right">
+      <button class="icon-btn refresh-btn" id="btn-refresh-global" title="Actualizar">🔄</button>
+      <div class="notify-wrapper" title="Notificaciones">
+        <span class="notify-icon">🔔</span>
+        <span class="notify-badge">2</span>
+      </div>
+      <button class="icon-btn theme-btn" id="btn-theme-toggle" title="Modo Oscuro">🌙</button>
+      <div class="user-profile-badge" title="Operador Autenticado">
+        <div class="avatar-circle">J</div>
+        <span class="user-fullname" id="nav-username">JOSUE DANIEL QUINTANILLA TABOADA</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= SUB-NAVBAR CON ACCESOS RÁPIDOS ================= -->
+  <nav class="subnav">
+    <button class="subnav-item active" data-view="dashboard">📊 Dashboard (P-01)</button>
+    <button class="subnav-item" data-view="busqueda">🔍 Búsqueda de Morosidad (P-02)</button>
+    <button class="subnav-item" data-view="bandeja">📋 Bandeja de Cortes (P-03) <span class="badge badge-count" id="subnav-count">46</span></button>
+    <button class="subnav-item" data-view="ficha" id="subnav-ficha-btn">📄 Ficha de Corte (P-04)</button>
+  </nav>
+
+  <!-- ================= CONTENEDOR PRINCIPAL ================= -->
+  <main class="main-container">
+
+    <!-- ========================================================================= -->
+    <!-- P-01: DASHBOARD PRINCIPAL                                                 -->
+    <!-- ========================================================================= -->
+    <section id="view-dashboard" class="view-section active">
+      <div class="view-header">
+        <h1 class="welcome-title">Bienvenido al sistema de cortes y reconexiones <span id="welcome-name">JOSUE DANIEL QUINTANILLA TABOADA</span></h1>
+        <div class="timer-badge" id="session-timer">
+          ⏱ Actualización automática en <span id="timer-text">6 min 18 seg</span>
         </div>
+      </div>
 
-        <div class="card conn-card" id="conn-card">
-          <div class="conn-card-row">
-            <span id="conn-card-dot" class="dot"></span>
-            <span id="conn-card-text">Sincronizado</span>
+      <div class="dashboard-grid">
+        <!-- Columna Izquierda: Datos del Usuario -->
+        <div class="card user-card">
+          <div class="card-header">
+            <span class="card-icon">📁</span>
+            <h2>Usuario</h2>
           </div>
-          <div class="last-sync">
-            <span class="muted">Última sincronización</span>
-            <strong id="last-sync-text">—</strong>
-          </div>
-          <p id="offline-hint" class="offline-hint hidden">
-            Los cambios se guardarán automáticamente y se sincronizarán cuando vuelva la conexión.
-          </p>
-        </div>
+          <div class="card-body">
+            <table class="info-table">
+              <tbody>
+                <tr>
+                  <th>Usuario</th>
+                  <td id="user-card-name">JOSUE DANIEL QUINTANILLA TABOADA</td>
+                </tr>
+                <tr>
+                  <th>Email</th>
+                  <td id="user-card-email">josue.quintanilla@sepsa.com.bo</td>
+                </tr>
+                <tr>
+                  <th>C.I.:</th>
+                  <td id="user-card-ci">10577452</td>
+                </tr>
+                <tr>
+                  <th>Teléfono</th>
+                  <td id="user-card-tel">+591 72409703</td>
+                </tr>
+              </tbody>
+            </table>
 
-        <div class="stats-grid">
-          <div class="stat-card">
-            <span class="stat-value" id="stat-asignados">0</span>
-            <span class="stat-label">Domicilios asignados</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-value" id="stat-visitados">0</span>
-            <span class="stat-label">Visitados</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-value" id="stat-pendientes">0</span>
-            <span class="stat-label">Pendientes</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-value" id="stat-cobros">0</span>
-            <span class="stat-label">Cobros hoy</span>
-          </div>
-        </div>
-
-        <div class="card money-card">
-          <span class="muted">Dinero cobrado hoy</span>
-          <span class="money" id="stat-monto">Bs 0</span>
-        </div>
-      </section>
-
-      <!-- ============ PANTALLA 2: DOMICILIOS ============ -->
-      <section id="screen-domicilios" class="screen">
-        <div class="toolbar">
-          <input id="search-input" class="search" type="search" placeholder="Buscar por nombre o código…">
-          <div class="filters">
-            <button class="filter-chip active" data-filter="todos">Todos</button>
-            <button class="filter-chip" data-filter="pendiente">Pendiente</button>
-            <button class="filter-chip" data-filter="al-dia">Al día</button>
+            <div class="phone-update-box">
+              <label class="form-label">Agregar otro número de teléfono celular</label>
+              <div class="phone-input-group">
+                <input type="text" class="form-control input-country" value="+591" readonly>
+                <input type="tel" class="form-control input-phone" id="input-new-phone" placeholder="Número de teléfono">
+              </div>
+              <button class="btn btn-primary btn-block" id="btn-update-phone">Enviar</button>
+            </div>
           </div>
         </div>
-        <ul id="domicilio-list" class="domicilio-list"></ul>
-        <p id="empty-state" class="empty hidden">No hay domicilios que coincidan.</p>
-      </section>
 
-      <!-- ============ PANTALLA 3: DETALLE DOMICILIO ============ -->
-      <section id="screen-detalle" class="screen">
-        <div class="detail-header">
-          <h2 id="det-nombre">—</h2>
-          <p class="muted">Código <span id="det-codigo">—</span></p>
-        </div>
-
-        <div class="card info-grid">
-          <div><span class="muted">Dirección</span><strong id="det-direccion">—</strong></div>
-          <div><span class="muted">Localidad</span><strong id="det-localidad">—</strong></div>
-          <div><span class="muted">Medidor</span><strong id="det-medidor">—</strong></div>
-          <div><span class="muted">Estado</span><strong id="det-estado">—</strong></div>
-        </div>
-
-        <div class="card debt-card">
-          <span class="muted">Deuda pendiente</span>
-          <span class="debt-months" id="det-meses">—</span>
-          <span class="debt-money" id="det-deuda">—</span>
-        </div>
-
-        <h3 class="section-title">Meses pendientes</h3>
-        <ul id="det-meses-list" class="meses-list"></ul>
-
-        <div class="actions">
-          <button id="btn-visita" class="btn btn-secondary">Registrar visita</button>
-          <button id="btn-cobrar" class="btn btn-primary">Cobrar</button>
-        </div>
-      </section>
-
-      <!-- ============ PANTALLA 5: COBRANZA ============ -->
-      <section id="screen-cobranza" class="screen">
-        <div class="detail-header">
-          <h2 id="cob-nombre">—</h2>
-          <p class="muted">Código <span id="cob-codigo">—</span></p>
-        </div>
-
-        <div class="card debt-card">
-          <span class="muted">Deuda pendiente</span>
-          <span class="debt-months" id="cob-meses">—</span>
-          <span class="debt-money" id="cob-deuda">—</span>
-        </div>
-
-        <h3 class="section-title">Selecciona cuántos meses pagará</h3>
-        <div class="stepper">
-          <button id="step-minus" class="step-btn" aria-label="Menos meses">−</button>
-          <div class="step-value">
-            <span id="cob-cantidad">1</span>
-            <span class="muted">meses</span>
+        <!-- Columna Derecha: Opciones de Corte y Reconexión -->
+        <div class="card options-card">
+          <div class="card-header">
+            <span class="card-icon">📁</span>
+            <h2>Opciones de Corte y reconexión por morosidad</h2>
           </div>
-          <button id="step-plus" class="step-btn" aria-label="Más meses">+</button>
+          <div class="card-body">
+            <div class="options-split">
+              <!-- Subsección Cortes -->
+              <div class="option-col">
+                <h3 class="col-title">Cortes</h3>
+
+                <div class="action-card card-red" id="card-go-bandeja">
+                  <div class="action-card-body">
+                    <div class="action-card-header">
+                      <span class="action-icon">✂</span>
+                      <h4>Ver Registros para Cortar (Con mapa)</h4>
+                    </div>
+                    <button class="btn-link-action">Acceder →</button>
+                  </div>
+                </div>
+
+                <div class="action-card card-red" id="card-go-busqueda">
+                  <div class="action-card-body">
+                    <div class="action-card-header">
+                      <span class="action-icon">🔍</span>
+                      <h4>Búsqueda de Morosidad / Crear orden</h4>
+                    </div>
+                    <button class="btn-link-action">Acceder →</button>
+                  </div>
+                </div>
+
+                <div class="action-card card-red" id="card-go-nexo">
+                  <div class="action-card-body">
+                    <div class="action-card-header">
+                      <span class="action-icon">✂</span>
+                      <h4>Órdenes de corte (Como en NEXO)</h4>
+                    </div>
+                    <button class="btn-link-action">Acceder →</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subsección Reposiciones -->
+              <div class="option-col">
+                <h3 class="col-title">Reposiciones</h3>
+
+                <div class="action-card card-blue" id="card-go-reposiciones">
+                  <div class="action-card-body">
+                    <div class="action-card-header">
+                      <span class="action-icon">🛡</span>
+                      <h4>Reposiciones (Con mapa)</h4>
+                    </div>
+                    <button class="btn-link-action">Acceder →</button>
+                  </div>
+                </div>
+
+                <div class="info-subbox">
+                  <p class="text-muted-sm">Horarios, Controles, Verificar estados por pagos (SQL), Notificaciones.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- P-02: BÚSQUEDA DE MOROSIDAD Y CREACIÓN DE ÓRDENES                         -->
+    <!-- ========================================================================= -->
+    <section id="view-busqueda" class="view-section">
+      <div class="view-header-bar">
+        <h2>Búsqueda de Morosidad y Creación de Órdenes <span class="route-slug">(/orden/create)</span></h2>
+        <div class="btn-group">
+          <button class="btn btn-sm btn-outline" id="btn-export-excel">📥 Descargar Excel de deudores</button>
+          <button class="btn btn-sm btn-outline" id="btn-export-pdf">📄 Descargar PDF de deudores</button>
+        </div>
+      </div>
+
+      <!-- Banner de Regla de Negocio BR-001 y BR-002 -->
+      <div class="alert-banner banner-info">
+        <span class="alert-icon">ℹ️</span>
+        <div class="alert-text">
+          <strong>Criterio de Morosidad (BR-001):</strong> Los resultados mostrarán clientes con <strong>2 facturas vencidas mayor a 30 días</strong>.
+          <br><small>Los montos en los resultados no incluyen cálculos de intereses ya que estos varían día a día (BR-002).</small>
+        </div>
+      </div>
+
+      <!-- Filtros en Cascada -->
+      <div class="card filter-card">
+        <div class="filter-grid">
+          <div class="form-group">
+            <label class="form-label">Área Regional *</label>
+            <select class="form-control" id="filter-area">
+              <option value="">-- Seleccione Área --</option>
+              <option value="B" selected>B - BETANZOS</option>
+              <option value="P">P - POTOSI</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Localidad *</label>
+            <select class="form-control" id="filter-localidad">
+              <option value="002" selected>002 - MOJOTORILLO</option>
+              <option value="001">001 - BETANZOS URBANO</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Ruta *</label>
+            <select class="form-control" id="filter-ruta">
+              <option value="002" selected>002 - MOJOTORILLO</option>
+              <option value="003">003 - RUTA SECUNDARIA</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Facturas pendientes vencidas (>= 30d)</label>
+            <input type="number" class="form-control" id="filter-facturas" value="2" min="1" max="12">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Estado del Cliente</label>
+            <div class="chip-readonly">Activos (A)</div>
+          </div>
         </div>
 
-        <h3 class="section-title">Se pagarán</h3>
-        <ul id="cob-meses-list" class="meses-list"></ul>
+        <div class="filter-actions">
+          <button class="btn btn-primary" id="btn-search-morosos">🔍 Buscar</button>
+          <button class="btn btn-danger" id="btn-crear-lote">✂ Crear orden de corte para resultados</button>
+        </div>
+      </div>
 
-        <div class="card total-card">
+      <!-- Tabla T-01: Clientes Morosos Filtrados -->
+      <div class="card table-card">
+        <div class="table-card-header">
+          <h3>Clientes Morosos Encontrados (<span id="count-morosos">2</span>)</h3>
+          <span class="badge badge-success">Criterio cumplido</span>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="table-morosos">
+            <thead>
+              <tr>
+                <th>REGIONAL LOCALIDAD</th>
+                <th>HAB.</th>
+                <th>CUENTA</th>
+                <th>NOMBRES</th>
+                <th>RUTA</th>
+                <th>ORDEN</th>
+                <th>CIRCUITO</th>
+                <th>DIRECCIÓN</th>
+                <th>ESTADO</th>
+                <th>TARIFA</th>
+                <th>MEDIDOR</th>
+                <th>FACTURAS > 30D</th>
+                <th>TOTAL PENDIENTE</th>
+                <th>ACCIÓN</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-morosos">
+              <!-- Inyectado por JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- P-03: BANDEJA DE REGISTROS PARA CORTAR                                    -->
+    <!-- ========================================================================= -->
+    <section id="view-bandeja" class="view-section">
+      <div class="view-header-bar">
+        <div class="title-with-counter">
+          <h2>Bandeja de Registros para Cortar <span class="route-slug">(/verCortes)</span></h2>
+          <div class="counter-pill">
+            <span class="pill-num" id="bandeja-total-count">46</span>
+            <span class="badge badge-danger">GENERADO</span>
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-sm btn-outline" id="btn-refresh-bandeja">🔄 Refrescar</button>
+          <button class="btn btn-sm btn-primary" id="btn-toggle-map-view">🗺 Pestaña Mapa (QField)</button>
+        </div>
+      </div>
+
+      <!-- Filtros de Bandeja -->
+      <div class="card filter-card-compact">
+        <div class="filter-row">
+          <input type="text" class="form-control" id="bandeja-search-cuenta" placeholder="Buscar No. de cuenta o medidor...">
+          <select class="form-control" id="bandeja-filter-tecnico">
+            <option value="">-- Todos los técnicos --</option>
+            <option value="JOSUE DANIEL QUINTANILLA TABOADA">JOSUE DANIEL QUINTANILLA TABOADA</option>
+            <option value="SIN_ASIGNAR">Sin asignar</option>
+          </select>
+          <button class="btn btn-outline" id="btn-clear-bandeja-filters">Limpiar Filtros</button>
+        </div>
+      </div>
+
+      <!-- Tabla T-02: Bandeja de Registros para Cortar -->
+      <div class="card table-card">
+        <div class="table-responsive">
+          <table class="data-table" id="table-bandeja">
+            <thead>
+              <tr>
+                <th>CUENTA / MEDIDOR</th>
+                <th>TIT/HAB</th>
+                <th>ESTADO</th>
+                <th>FECHA DE GENERACIÓN</th>
+                <th>DÍAS DESDE GENERACIÓN</th>
+                <th>DEUDA (MES TOPE)</th>
+                <th>TÉCNICO ASIGNADO</th>
+                <th>ACCIÓN</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-bandeja">
+              <!-- Inyectado por JS -->
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span class="text-muted">Mostrando registros activos en cola de cuadrillas</span>
+          <div class="pagination-mock">
+            <span class="active-page">1</span>
+            <span>2</span>
+            <span>3</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- P-04: FICHA INTEGRAL DE CORTE                                             -->
+    <!-- ========================================================================= -->
+    <section id="view-ficha" class="view-section">
+      <div class="ficha-toolbar">
+        <button class="btn btn-sm btn-outline" id="btn-back-to-bandeja">← Volver a Bandeja</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-sm btn-outline" id="btn-ficha-kardex">🔍 Ver Kardex (P-06)</button>
+          <button class="btn btn-sm btn-warning" id="btn-sim-pago-concurrente">⚡ Simular Pago Concurrente en Ventanilla (BR-003)</button>
+          <button class="btn btn-sm btn-danger" id="btn-open-modal-corte">✂ Registrar corte efectivo</button>
+        </div>
+      </div>
+
+      <!-- Encabezado de la Orden -->
+      <div class="card ficha-head-card">
+        <div class="ficha-title-row">
           <div>
-            <span class="muted">Total</span>
-            <span class="stat-value" id="cob-total-meses">1 mes</span>
+            <span class="cuc-label">C.U.C. (Código Único de Corte):</span>
+            <h1 class="cuc-number" id="ficha-cuc">443794</h1>
           </div>
-          <span class="money" id="cob-total">Bs 0</span>
-        </div>
-
-        <button id="btn-continuar-cobro" class="btn btn-primary btn-lg">Cobrar</button>
-      </section>
-
-      <!-- ============ PANTALLA 7: PAGO REGISTRADO ============ -->
-      <section id="screen-pago" class="screen">
-        <div class="success-wrap">
-          <div class="success-icon">✓</div>
-          <h2>Pago registrado</h2>
-          <p id="pago-nombre" class="muted">—</p>
-        </div>
-        <div class="card pago-resumen">
-          <div><span class="muted">Meses pagados</span><strong id="pago-meses">—</strong></div>
-          <div><span class="muted">Total</span><strong id="pago-total">—</strong></div>
-          <div><span class="muted">Deuda restante</span><strong id="pago-restante">—</strong></div>
-          <div><span class="muted">Estado</span><strong class="pending" id="pago-estado">🕐 Pendiente de sincronización</strong></div>
-        </div>
-        <div class="actions">
-          <button id="btn-ver-comprobante" class="btn btn-primary">Ver comprobante</button>
-          <button id="btn-finalizar" class="btn btn-secondary">Finalizar visita</button>
-        </div>
-      </section>
-
-      <!-- ============ PANTALLA 8: COMPROBANTE ============ -->
-      <section id="screen-comprobante" class="screen">
-        <div class="recibo">
-          <div class="recibo-head">
-            <h2>SEPSA</h2>
-            <p>COMPROBANTE DE PAGO</p>
-          </div>
-          <div class="recibo-body">
-            <div class="recibo-row"><span class="muted">Cliente</span><strong id="rec-cliente">—</strong></div>
-            <div class="recibo-row"><span class="muted">Código</span><strong id="rec-codigo">—</strong></div>
-            <div class="recibo-row"><span class="muted">Meses pagados</span><strong id="rec-meses">—</strong></div>
-            <div class="recibo-row recibo-total"><span class="muted">Total</span><strong id="rec-total">—</strong></div>
-            <div class="recibo-row"><span class="muted">Método</span><strong>Efectivo</strong></div>
-            <div class="recibo-row"><span class="muted">Técnico</span><strong id="rec-tecnico">—</strong></div>
-            <div class="recibo-row"><span class="muted">Fecha</span><strong id="rec-fecha">—</strong></div>
-            <div class="recibo-row"><span class="muted">Estado</span><strong id="rec-estado">—</strong></div>
-          </div>
-          <div class="recibo-id">
-            <span class="muted">Comprobante</span>
-            <strong id="rec-id">—</strong>
+          <div class="status-container">
+            <span class="badge badge-lg badge-danger" id="ficha-status-badge">ESTADO: GENERADO</span>
           </div>
         </div>
-        <div class="actions">
-          <button id="btn-compartir" class="btn btn-secondary">Compartir</button>
-          <button id="btn-guardar" class="btn btn-primary">Guardar</button>
+        <div class="cancel-reason-box hidden" id="box-cancel-reason">
+          <strong>⚠️ Motivo de Anulación Oficial:</strong>
+          <p id="text-cancel-reason">Anulado ya que pago parte o la totalidad de facturas vencidas, Fecha de pago: 02-09-2026 16:20:13</p>
         </div>
-        <p id="rec-msg" class="toast hidden"></p>
-      </section>
+      </div>
 
-      <!-- ============ PANTALLA 9: COBROS (HISTORIAL) ============ -->
-      <section id="screen-cobros" class="screen">
-        <ul id="cobros-list" class="cobros-list"></ul>
-        <p id="cobros-empty" class="empty hidden">Todavía no hay cobros registrados hoy.</p>
-      </section>
-
-      <!-- ============ PANTALLA 10/11: MÁS / OFFLINE / SYNC ============ -->
-      <section id="screen-mas" class="screen">
+      <div class="ficha-grid">
+        <!-- Datos del Suministro -->
         <div class="card">
-          <div class="switch-row">
-            <div>
-              <strong>Simular modo offline</strong>
-              <p class="muted" id="mas-conn-desc">La app seguirá funcionando sin conexión.</p>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="offline-toggle">
-              <span class="slider"></span>
-            </label>
+          <div class="card-header">
+            <h3>Datos Generales del Suministro</h3>
           </div>
-        </div>
+          <div class="card-body">
+            <table class="info-table">
+              <tbody>
+                <tr>
+                  <th>No. de Cuenta:</th>
+                  <td><strong id="ficha-cuenta">306040</strong></td>
+                </tr>
+                <tr>
+                  <th>Consumidor:</th>
+                  <td id="ficha-titular">MUÑOZ PEDRO</td>
+                </tr>
+                <tr>
+                  <th>Número Medidor:</th>
+                  <td id="ficha-medidor">240907792 (WASION)</td>
+                </tr>
+                <tr>
+                  <th>Dirección:</th>
+                  <td id="ficha-direccion">MOJOTORILLO S/N</td>
+                </tr>
+                <tr>
+                  <th>Teléfono:</th>
+                  <td id="ficha-telefono">61635733</td>
+                </tr>
+                <tr>
+                  <th>Circuito / Tarifa:</th>
+                  <td><span id="ficha-circuito">D-1182</span> / <span id="ficha-tarifa">RS</span></td>
+                </tr>
+              </tbody>
+            </table>
 
-        <div class="card sync-card">
-          <h3>Sincronización</h3>
-          <p class="muted">Última sincronización: <strong id="mas-last-sync">—</strong></p>
-          <button id="btn-sync-manual" class="btn btn-secondary">Sincronizar ahora</button>
-        </div>
-
-        <div class="card">
-          <div class="switch-row">
-            <div>
-              <strong>Información</strong>
-              <p class="muted">Prototipo de validación. Datos simulados.</p>
+            <!-- Salvaguardas Legales BR-008 -->
+            <div class="safeguards-box">
+              <div class="safeguard-item">
+                <span class="safe-label">Tiene Reclamos:</span>
+                <span class="badge badge-safe">NO</span>
+              </div>
+              <div class="safeguard-item">
+                <span class="safe-label">Plan de Pago:</span>
+                <span class="badge badge-safe">NO</span>
+              </div>
             </div>
           </div>
-          <button id="btn-reiniciar" class="btn btn-danger">Restablecer datos de ejemplo</button>
         </div>
-      </section>
 
-    </main>
+        <!-- Detalle de Deuda FA_FACTURAS (Tabla T-03) -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Detalle de Deuda de la Orden <span class="text-muted-sm">(Origen: FA_FACTURAS)</span></h3>
+          </div>
+          <div class="card-body">
+            <table class="data-table table-sm" id="table-deuda">
+              <thead>
+                <tr>
+                  <th>PERIODO</th>
+                  <th>AÑO</th>
+                  <th>FECHA FACTURACIÓN</th>
+                  <th>MONTO</th>
+                  <th>ESTADO</th>
+                  <th>ORIGEN</th>
+                  <th>DÍAS MORA</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-deuda">
+                <!-- Inyectado por JS -->
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th colspan="3">TOTAL DEUDA CONGELADA:</th>
+                  <th colspan="4" id="ficha-total-deuda">66.82 Bs</th>
+                </tr>
+              </tfoot>
+            </table>
 
-    <!-- ============ NAVEGACIÓN INFERIOR ============ -->
-    <nav class="bottom-nav">
-      <button class="nav-item active" data-nav="inicio" aria-label="Inicio">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>
-        <span>Inicio</span>
-      </button>
-      <button class="nav-item" data-nav="domicilios" aria-label="Domicilios">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.3-7-11a7 7 0 1 1 14 0c0 5.7-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
-        <span>Domicilios</span>
-      </button>
-      <button class="nav-item" data-nav="cobros" aria-label="Cobros">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5h.01M18 14.5h.01"/></svg>
-        <span>Cobros</span>
-      </button>
-      <button class="nav-item" data-nav="mas" aria-label="Más">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-        <span>Más</span>
-      </button>
-    </nav>
+            <!-- Dropzone para adjuntos -->
+            <div class="dropzone-box">
+              <span class="drop-icon">📁</span>
+              <p>Arrastre fotografías o actas de corte aquí (Límite 20 MB, .jpg, .png, .pdf)</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
-    <!-- ============ MODAL: REGISTRAR VISITA ============ -->
-    <div id="modal-visita" class="modal hidden">
+      <!-- Pestañas Colapsables Inferiores de Auditoría -->
+      <div class="card tabs-audit-card">
+        <div class="audit-tabs-nav">
+          <button class="audit-tab-btn active" data-tab="audit-corte">Datos de Corte</button>
+          <button class="audit-tab-btn" data-tab="audit-suspension">Datos de Suspensión</button>
+          <button class="audit-tab-btn" data-tab="audit-pago">Datos de Pago</button>
+          <button class="audit-tab-btn" data-tab="audit-reconexion">Datos de Reconexión</button>
+        </div>
+        <div class="audit-tab-content active" id="tab-audit-corte">
+          <p class="text-muted">Intervención material registrada en campo tras la confirmación de la cuadrilla.</p>
+          <div id="ficha-audit-execution-details" class="empty-hint">Sin corte ejecutado aún.</div>
+        </div>
+        <div class="audit-tab-content" id="tab-audit-suspension">
+          <p class="text-muted">Registro de baja administrativa de servicio en el maestro comercial.</p>
+        </div>
+        <div class="audit-tab-content" id="tab-audit-pago">
+          <p class="text-muted">Auditoría de planillas canceladas e historial de ingresos.</p>
+        </div>
+        <div class="audit-tab-content" id="tab-audit-reconexion">
+          <p class="text-muted">Información de reposición técnica una vez liquidados saldos en Otros Ingresos (BR-007).</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- P-05: MODAL REGISTRO DE CORTE EFECTIVO EN TERRENO                         -->
+  <!-- ========================================================================= -->
+  <div class="modal-backdrop hidden" id="modal-corte-backdrop">
+    <div class="modal-dialog">
       <div class="modal-content">
-        <h3>Registrar visita</h3>
-        <p id="visita-nombre" class="muted">—</p>
-        <p class="muted">Código <span id="visita-codigo">—</span></p>
-        <p class="visita-ok">✓ Visitado</p>
-        <label class="field-label" for="visita-obs">Observación (opcional)</label>
-        <select id="visita-obs" class="select">
-          <option value="">— Sin observación —</option>
-          <option>Usuario no se encontraba</option>
-          <option>Usuario no realizó el pago</option>
-          <option>No fue posible contactar</option>
-          <option>Usuario realizó el pago</option>
-        </select>
-        <div class="modal-actions">
-          <button id="visita-cancelar" class="btn btn-secondary">Cancelar</button>
-          <button id="visita-guardar" class="btn btn-primary">Guardar visita</button>
+        <div class="modal-header">
+          <h3>Formulario para el registro de corte efectivo</h3>
+          <button class="modal-close-btn" id="btn-close-modal-corte">×</button>
+        </div>
+        <div class="modal-body">
+          <!-- Georreferenciación -->
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Latitud *</label>
+              <input type="text" class="form-control" id="modal-lat" placeholder="-19.589366">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Longitud *</label>
+              <input type="text" class="form-control" id="modal-lng" placeholder="-65.259119">
+            </div>
+          </div>
+          <button class="btn btn-sm btn-outline mb-3" id="btn-get-gps">📍 Obtener ubicación (GPS)</button>
+
+          <!-- Teléfono y Medidores Cercanos -->
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Teléfono de Contacto</label>
+              <input type="tel" class="form-control" id="modal-telefono" value="61635733">
+            </div>
+            <div class="form-group">
+              <label class="form-label">¿Tiene Medidores Cercanos? *</label>
+              <select class="form-control" id="modal-medidores-cercanos">
+                <option value="NO">NO</option>
+                <option value="SI">SI</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Técnico Autoasignado -->
+          <div class="form-group">
+            <label class="form-label">Técnico para asignar el corte</label>
+            <input type="text" class="form-control" id="modal-tecnico" value="JOSUE DANIEL QUINTANILLA TABOADA" readonly>
+          </div>
+
+          <!-- Tipo de Corte y Lectura -->
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Tipo de Corte *</label>
+              <select class="form-control" id="modal-tipo-corte">
+                <option value="PROTECCION" selected>PROTECCION</option>
+                <option value="RED">RED</option>
+                <option value="MEDIDOR">MEDIDOR</option>
+                <option value="BARRAS">BARRAS</option>
+                <option value="ACOMETIDA">ACOMETIDA</option>
+                <option value="FUSIBLES">FUSIBLES</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Lectura del Corte (kWh) *</label>
+              <input type="number" class="form-control" id="modal-lectura" placeholder="Ej 1234567" value="1234">
+            </div>
+          </div>
+
+          <!-- Bypasses Administrativos BR-004 y BR-005 -->
+          <div class="bypass-box">
+            <div class="form-group">
+              <label class="form-label text-danger-bold">¿Saltar Control de Fotos? (BR-005)</label>
+              <select class="form-control" id="modal-saltar-fotos">
+                <option value="NO" selected>NO</option>
+                <option value="SI">SI</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label text-danger-bold">¿Saltar Control de Coordenadas? (BR-004)</label>
+              <select class="form-control" id="modal-saltar-coords">
+                <option value="NO" selected>NO</option>
+                <option value="SI">SI</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="btn-cancel-modal-corte">Cerrar</button>
+          <button class="btn btn-danger" id="btn-confirm-modal-corte">✂ Registrar corte efectivo</button>
         </div>
       </div>
     </div>
-
-    <!-- ============ MODAL: CONFIRMAR COBRO ============ -->
-    <div id="modal-confirmar" class="modal hidden">
-      <div class="modal-content">
-        <h3>Confirmar cobro</h3>
-        <div class="confirm-grid">
-          <div><span class="muted">Cliente</span><strong id="conf-cliente">—</strong></div>
-          <div><span class="muted">Meses</span><strong id="conf-meses">—</strong></div>
-          <div><span class="muted">Cantidad</span><strong id="conf-cantidad">—</strong></div>
-          <div><span class="muted">Total</span><strong class="money" id="conf-total">—</strong></div>
-          <div><span class="muted">Método</span><strong>💵 Efectivo</strong></div>
-        </div>
-        <p class="warn">Verifica que recibiste el monto completo antes de confirmar.</p>
-        <div class="modal-actions">
-          <button id="conf-cancelar" class="btn btn-secondary">Cancelar</button>
-          <button id="conf-aceptar" class="btn btn-primary">Confirmar cobro</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ============ MODAL: SINCRONIZACIÓN ============ -->
-    <div id="modal-sync" class="modal hidden">
-      <div class="modal-content">
-        <h3 id="sync-title">Sincronizando cambios…</h3>
-        <div class="progress"><div id="sync-bar" class="progress-bar"></div></div>
-        <p id="sync-status" class="muted">Preparando…</p>
-        <div class="last-sync">
-          <span class="muted">Última sincronización:</span>
-          <strong id="sync-last">—</strong>
-        </div>
-      </div>
-    </div>
-
-    <div id="toast" class="toast hidden"></div>
   </div>
+
+  <!-- Toast de Notificación Global -->
+  <div class="toast-notification hidden" id="toast-msg"></div>
 
   <script src="app.js"></script>
 </body>
