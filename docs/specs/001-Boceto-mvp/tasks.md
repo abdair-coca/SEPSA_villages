@@ -1,56 +1,32 @@
-# Tareas: Prototipo UI/UX navegable de cobranza eléctrica rural
+# Tareas: Boceto MVP del Ecosistema SEPSA (Pantallas Operativas Reales)
 
-## Previsión de carga de revisión
+## Fase 1: Limpieza y Estructura Base (boceto-mvp/index.html)
 
-Líneas estimadas: 700–1000. PR encadenados sugeridos (feature-branch-chain, 3 unidades).
+- [ ] 1.1 Limpiar boceto-mvp/ eliminando el prototipo previo de cobranza rural.
+- [ ] 1.2 Construir boceto-mvp/index.html con la barra superior institucional de SEPSA (BASE DE DATOS OFICIAL, notificaciones, temporizador y usuario).
+- [ ] 1.3 Construir la estructura semantica de las 4 vistas web: view-dashboard (P-01), view-busqueda (P-02), view-bandeja (P-03), view-ficha (P-04).
+- [ ] 1.4 Construir el modal de corte efectivo modal-corte (P-05) con inputs tecnicos y switches de bypass.
 
-Decision needed before apply: Yes
-Chained PRs recommended: Yes
-Chain strategy: feature-branch-chain
-400-line budget risk: High
+## Fase 2: Estilos Visuales de Alta Fidelidad (boceto-mvp/styles.css)
 
-### Unidades de trabajo sugeridas
+- [ ] 2.1 Replicar la paleta de colores oficial: verde institucional SEPSA, rojo de accion de corte (#c82333), azul (#0d6efd) y amarillo de temporizador (#ffc107).
+- [ ] 2.2 Disenar la tipografia, tarjetas de acceso rapido rojas/azules y tablas con cabeceras estilizadas identicas a la captura de pantalla.
+- [ ] 2.3 Estilizar el modal emergente centrado P-05 y los badges de estado semaforicos (GENERADO, EJECUTADO, ANULADO).
 
-| Unidad | Meta | PR | Prueba | Runtime | Reversión |
-|--------|------|-----|--------|---------|-----------|
-| 1 | Esqueleto: `index.html` + `styles.css` + navegación | PR 1 | Abrir `index.html`, recorrer 4 secciones | Navegador móvil/desktop | Borrar `boceto-mvp/` |
-| 2 | Dominio + store + datos semilla + flujo de cobro | PR 2 | Funciones puras de dominio; flujo cobro offline | Navegador, toggle offline | Revertir módulos dominio/store de `app.js` |
-| 3 | Sync simulada + historial + persistencia | PR 3 | Recargar página, verificar persistencia; sync 100% | Navegador, modo online | Revertir sync + cola |
+## Fase 3: Estado en Memoria y Logica Operativa (boceto-mvp/app.js)
 
-## Fase 1: Fundación
+- [ ] 3.1 Declarar el store en memoria con los datos empiricos del video: perfil de Josue Daniel Quintanilla, 46 ordenes en bandeja, suministros de Mojotorillo (Pedro Munoz 306040) y detalle de 3 facturas de deuda FA_FACTURAS (66.82 Bs).
+- [ ] 3.2 Implementar el temporizador regresivo de sesion (arrancando en 6 min 18 seg) con actualizacion continua por segundo.
+- [ ] 3.3 Implementar el motor de navegacion SPA navigateTo(viewId, params).
+- [ ] 3.4 Implementar el filtrado en cascada en P-02 (Area Betanzos -> Localidad Mojotorillo -> Ruta 002) y la renderizacion de la tabla T-01.
+- [ ] 3.5 Implementar la accion Crear orden de corte que genera CUCs en estado GENERADO y redirige a P-03 actualizando el contador.
+- [ ] 3.6 Implementar la tabla de bandeja P-03 con calculo dinamico de dias_desde_generacion y navegacion a P-04 (Ver corte).
+- [ ] 3.7 Implementar la Ficha P-04 con despliegue de deuda, Dropzone simulado y disparador de simulacion de pago concurrente (BR-003) a ANULADO.
+- [ ] 3.8 Implementar el modal P-05 con captura simulada de coordenadas GPS, lectura final de medidor, validaciones y bypasses (Saltar Control de Fotos, Saltar Control de Coordenadas).
 
-- [ ] 1.1 Crear `boceto-mvp/index.html` con estructura semántica y bottom nav (Inicio, Domicilios, Cobros, Más).
-- [ ] 1.2 Crear `boceto-mvp/styles.css` con sistema visual claro, tarjetas, botones grandes y frame móvil en desktop.
-- [ ] 1.3 Crear `boceto-mvp/app.js` con router de pantallas y render de las 11 vistas (estáticos).
+## Fase 4: Verificacion y Smoke Test
 
-## Fase 2: Dominio y datos
-
-- [ ] 2.1 Implementar módulo de dominio: validación meses completos y meses más antiguos primero.
-- [ ] 2.2 Implementar cálculo de total en centavos y decremento de deuda tras cobro.
-- [ ] 2.3 Crear datos semilla de 10–20 domicilios cubriendo todos los escenarios del spec.
-- [ ] 2.4 Implementar store con IndexedDB (fallback localStorage) para datos locales y cola.
-
-## Fase 3: Flujo de cobranza
-
-- [ ] 3.1 Pantalla de inicio con conteos y estado de conexión (spec R-Inicio).
-- [ ] 3.2 Lista de domicilios con buscador, filtros y estados (spec R-Domicilios).
-- [ ] 3.3 Detalle del domicilio con deuda destacada y acciones Visita/Cobrar (spec R-Detalle).
-- [ ] 3.4 Registro de visita con observación opcional y confirmación (spec R-Visita).
-- [ ] 3.5 Cobranza: selector entero de meses, lista de meses aplicados, total (spec R-Selección).
-- [ ] 3.6 Confirmación de cobro con método Efectivo y advertencia (spec R-Confirmación).
-- [ ] 3.7 Pantalla de pago registrado con deuda restante y estado de sync (spec R-Pago).
-- [ ] 3.8 Comprobante con ID único `CP-YYYYMMDD-NNNNNN` y acciones simuladas (spec R-Comprobante).
-- [ ] 3.9 Historial de cobros con estados Sincronizado/Pendiente (spec R-Historial).
-
-## Fase 4: Offline y sincronización
-
-- [ ] 4.1 Toggle "Simular modo offline" y contador de cambios pendientes (spec R-Offline).
-- [ ] 4.2 Persistencia: cobro/visita sobreviven recarga de página (spec R-Persistencia).
-- [ ] 4.3 Sync simulada con progreso, estados y reintentos sin pérdida (spec R-Sync).
-
-## Fase 5: Verificación y limpieza
-
-- [ ] 5.1 Probar dominio: 0, 1, varios, todos los meses, fracciones rechazadas (spec R-Selección).
-- [ ] 5.2 Probar flujo completo offline → cobro → comprobante → recarga → sync.
-- [ ] 5.3 Verificar responsive en Android vertical y desktop.
-- [ ] 5.4 Revisar acceso de domicilios: solo los asignados al técnico.
+- [ ] 4.1 Abrir boceto-mvp/index.html con protocolo file:// y confirmar que renderiza sin errores de consola.
+- [ ] 4.2 Probar el recorrido completo: Inicio -> Busqueda -> Crear Orden -> Bandeja -> Ficha -> Ejecutar Corte (P-01 a P-05).
+- [ ] 4.3 Probar la anulacion concurrente (BR-003) en P-04 y verificar la inhabilitacion del boton de corte.
+- [ ] 4.4 Probar los bypasses de GPS y fotos en P-05.

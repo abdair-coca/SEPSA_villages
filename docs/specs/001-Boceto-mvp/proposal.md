@@ -1,72 +1,39 @@
-# Propuesta: Prototipo UI/UX navegable de cobranza eléctrica rural
+# Propuesta: Boceto MVP del Ecosistema SEPSA (Pantallas Operativas Reales)
 
-## Intención
+## Propósito
 
-Validar el flujo del técnico de SEPSA antes del backend o PWA: prototipo navegable HTML/CSS/JS vanilla, con simulación offline-first y persistencia local, probable con técnicos reales sin infraestructura.
+Construir un prototipo interactivo standalone de alta fidelidad visual y funcional para escritorio que replique fielmente las pantallas operativas reales del módulo de cortes de SEPSA (cortes.sepsa.net.bo, pantallas P-01 a P-05), utilizando el conjunto de datos empíricos observado en el video y validando el ciclo transaccional completo en memoria volátil.
+
+## Decisiones Clave Acordadas
+
+1. **Ubicación**: Reemplazo total del contenido previo en oceto-mvp/.
+2. **Ciclo de Vida del Estado**: Volátil en memoria (al recargar la página con F5 se restablece a los datos iniciales).
+3. **Form Factor / Ergonomía**: Aplicación web de escritorio, calcada visualmente de la captura real de cortes.sepsa.net.bo (P-01 Dashboard y vistas asociadas). Versión móvil postergada para una fase posterior.
+4. **Demostración de Anulación Concurrente (BR-003)**: Disparador directo de simulación en la Ficha de Corte (P-04) que transiciona la orden a ANULADO con timestamp y motivo formal.
+5. **Conjunto de Datos (Mock Data)**: Clonación exacta de los datos observados en el video (Área: *B - BETANZOS*, Localidad: *002 - MOJOTORILLO*, Ruta: *002*, Cuenta *306040* de Pedro Muñoz, deuda de *66.82 Bs* en 3 facturas de *FA_FACTURAS*, medidor *WASION 240907792* y bandeja con *46 órdenes* en estado GENERADO).
 
 ## Alcance
 
 ### Incluido
 
-- Prototipo navegable: `index.html`, `styles.css`, `app.js`.
-- 11 pantallas del flujo del técnico.
-- Navegación inferior: Inicio, Domicilios, Cobros, Más.
-- 10–20 domicilios ficticios en escenarios variados (0/3/21 meses, visitado, pagado, pendiente de sync).
-- Persistencia local (IndexedDB, fallback localStorage) y cola de cambios.
-- Sync simulada con progreso y estados (`pending/syncing/synced/failed`).
-- Reglas de dominio: meses completos, antiguos primero, deuda actualizada, comprobante con ID único.
-- Responsive con prioridad móvil (frame móvil en desktop).
+- **P-01: Dashboard Principal**: Barra superior institucional (BASE DE DATOS OFICIAL), perfil de Josué Daniel Quintanilla Taboada (ID 680), temporizador regresivo dinámico, formulario de teléfono y tarjetas de acceso directo rojas y azules.
+- **P-02: Búsqueda de Morosidad y Creación de Órdenes (/orden/create)**: Selectores en cascada (Área -> Localidad -> Ruta), umbral numérico de facturas (default 2), banner explicativo sin intereses, tabla T-01 de morosos y botón rojo 'Crear orden de corte'.
+- **P-03: Bandeja de Registros para Cortar (/verCortes)**: Contador destacado de 46 órdenes, tabla T-02 con cálculo dinámico de días desde generación (dias_desde_generacion), filtros rápidos y botón 'Ver corte'.
+- **P-04: Ficha Integral de Corte (/corte/{id})**: CUC, panel del suministro, tabla T-03 de detalle de deuda mensual (FA_FACTURAS), indicadores de salvaguarda (Sin reclamos, Sin plan de pago), zona Dropzone de 20 MB, paneles de auditoría inferiores, botón 'Registrar corte efectivo' y disparador de prueba para BR-003.
+- **P-05: Modal Formulario de Registro de Corte Efectivo**: Técnico autoasignado, selector de Tipo de Corte (RED, MEDIDOR, BARRAS, PROTECCION, ACOMETIDA, FUSIBLES), input numérico de lectura final (kWh), switches de bypass administrativo (¿Saltar Control de Fotos?, ¿Saltar Control de Coordenadas?) y captura simulada de georreferenciación.
+- **Ciclo Transaccional en Memoria**: Creación de órdenes en P-02 -> incorporación dinámica a P-03 -> ejecución material en P-05 (pasa a EJECUTADO) o anulación concurrente en P-04 (pasa a ANULADO).
 
 ### Excluido
 
-- Backend, API real o contrato definitivo de SEPSA.
-- Lecturas de medidor, pagos digitales, dashboard administrativo, autenticación real.
-- Tratamiento del Excel como base de datos.
-- Frameworks, dependencias externas o build tooling.
+- Versión móvil (postergada para siguiente etapa).
+- Backend, base de datos persistente, localStorage o llamadas a APIs externas reales.
+- Módulos administrativos no observados o facturación activa.
 
-## Capacidades
+## Criterios de Éxito
 
-### Capacidades nuevas
-
-- `boceto-mvp`: prototipo navegable de alta fidelidad que demuestra el flujo offline-first de cobranza del técnico con datos simulados y sincronización simulada.
-
-### Capacidades modificadas
-
-- Ninguna.
-
-## Enfoque
-
-Vanilla HTML/CSS/JS modular y migrable a React + TypeScript + PWA. Separación clara entre dominio (reglas de cobro), UI (pantallas) y capa de almacenamiento simulada (cola de cambios + estado de conexión). Sin build system.
-
-## Áreas afectadas
-
-| Área | Impacto | Descripción |
-|------|---------|-------------|
-| `docs/specs/001-Boceto-mvp/` | Nuevo | Especificaciones del cambio |
-| `boceto-mvp/index.html` | Nuevo | Estructura semántica y navegación |
-| `boceto-mvp/styles.css` | Nuevo | Sistema visual responsive |
-| `boceto-mvp/app.js` | Nuevo | Lógica, datos simulados, dominio y sync simulada |
-
-## Riesgos
-
-| Riesgo | Probabilidad | Mitigación |
-|--------|--------------|------------|
-| Sobreingeniería del prototipo | Media | Limitar a vanilla, sin dependencias; prototipo descartable |
-| Inventar significados de columnas del Excel | Media | Usar solo campos confirmados en constitution; no convertir el Excel en modelo |
-| Simulación confundirse con producto real | Media | Marcar claramente estados "simulado" en UI y doc |
-
-## Plan de reversión
-
-Eliminar la carpeta del prototipo y las especificaciones del cambio. No hay migración ni servicios externos involucrados.
-
-## Dependencias
-
-- Ninguna externa. Fuente normativa: `constitution.md` y `AGENTS.md`.
-
-## Criterios de éxito
-
-- [ ] Abrir `index.html` en Android y desktop y recorrer el flujo completo sin errores.
-- [ ] Registro de visita y cobro funcionan con conexión simulada desconectada.
-- [ ] Deuda se actualiza inmediatamente tras confirmar cobro.
-- [ ] Cambios persisten tras recargar la página.
-- [ ] Simulación de sync marca operaciones pendientes → sincronizadas.
+- [ ] La interfaz calca la estética, paleta de colores y componentes visuales del screenshot real de SEPSA.
+- [ ] Es posible ejecutar el flujo completo P-01 -> P-02 -> P-03 -> P-04 -> P-05 de forma fluida.
+- [ ] La creación masiva de órdenes en P-02 agrega registros reales a la bandeja P-03.
+- [ ] El modal P-05 permite registrar el corte o activar los bypasses de fotos/GPS, pasando la orden a EJECUTADO.
+- [ ] El disparador de BR-003 en P-04 transiciona la orden a ANULADO e inhabilita el botón de corte en campo.
+- [ ] Abre directamente mediante ile:// en cualquier navegador web moderno sin dependencias ni servidor.

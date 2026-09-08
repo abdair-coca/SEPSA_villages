@@ -1,98 +1,91 @@
-# Diseño: Prototipo UI/UX navegable de cobranza eléctrica rural
+# Diseño: Boceto MVP del Ecosistema SEPSA (Pantallas Operativas Reales)
 
-## Enfoque técnico
+## Enfoque Técnico
 
-Prototipo estático de una sola página en HTML/CSS/JS vanilla, sin build system ni dependencias, abriendo `index.html` directo en el navegador. La lógica de dominio vive en módulos JS puros (reglas de cobro), separada de la UI y de la capa de persistencia simulada. Estructura diseñada para migrar después a React + TypeScript + PWA + IndexedDB + API sin rediseñar el dominio.
+Prototipo de alta fidelidad visual desarrollado en HTML5 semántico, CSS3 moderno y JavaScript vanilla modular. Se ejecuta localmente mediante ile:// en oceto-mvp/index.html sin frameworks, sin backend y sin dependencias externas.
 
-## Decisiones de arquitectura
+## Arquitectura Visual y Paleta Institucional
 
-### Decisión: Vanilla JS sin frameworks
+El diseño calca la interfaz gráfica real observada en cortes.sepsa.net.bo:
+- **Barra Superior**: Fondo blanco con borde sutil inferior, logotipo SEPSA, badge verde BASE DE DATOS OFICIAL (#198754), contador de notificaciones con badge rojo circular (#dc3545), icono de modo oscuro y avatar de usuario con inicial 'J' e identidad completa.
+- **Botones y Badges de Corte**:
+  - Botón rojo de acción principal: #c82333 / #dc3545 ('Crear orden de corte', 'Registrar corte efectivo', 'Ver Registros para Cortar').
+  - Botón azul institucional: #0d6efd ('Buscar', 'Ver corte', 'Enviar').
+  - Badge amarillo de sesión: #ffc107 con texto negro ('Actualización automática en 6 min 18 seg').
+  - Badge verde: #198754 ('BASE DE DATOS OFICIAL', facturas canceladas C).
 
-| Opción | Tradeoff | Decisión |
-|--------|----------|----------|
-| Vanilla HTML/CSS/JS | Cero setup, abre directo, migrable | ✅ Elegido |
-| React + Vite | Setup/build, valor real recién en PWA | Descartado para prototipo |
+## Estructura de Pantallas y Navegación Interna
 
-**Racional**: El prompt exige prototipo navegable inmediato sin dependencias; la migración a React+TS+PWA es un cambio posterior planificado.
+Toda la aplicación vive en una Single Page Architecture (SPA) ligera dentro de oceto-mvp/:
+- #view-dashboard: Pantalla P-01 (Dashboard Principal).
+- #view-busqueda: Pantalla P-02 (Búsqueda /orden/create).
+- #view-bandeja: Pantalla P-03 (Bandeja /verCortes).
+- #view-ficha: Pantalla P-04 (Ficha Integral /corte/{id}).
+- #modal-corte: Pantalla P-05 (Modal emergente de corte efectivo).
 
-### Decisión: ÍndexedDB con fallback a localStorage
+La navegación se gestiona mediante la función central 
+avigateTo(viewId, params).
 
-| Opción | Tradeoff | Decisión |
-|--------|----------|----------|
-| IndexedDB | Async, robusto, es el destino PWA | ✅ Primario |
-| localStorage | Síncrono, simple, suficiente para prototipo | Fallback |
+## Modelo de Estado en Memoria (Store Volátil)
 
-**Racional**: Persistencia real tras recarga con API simple; IndexedDB alinea el prototipo con el destino de la PWA.
+`javascript
+const store = {
+  usuario: {
+    id: 680,
+    ci: '10577452',
+    nombre: 'JOSUE DANIEL QUINTANILLA TABOADA',
+    email: 'josue.quintanilla@sepsa.com.bo',
+    telefono: '+591 72409703'
+  },
+  temporizadorSegundos: 378, // 6 min 18 seg
+  morososMojotorillo: [
+    {
+      cuenta: 306040,
+      titular: 'MUÑOZ PEDRO',
+      regionalLocalidad: '101 - 002',
+      habilitante: 'R',
+      ruta: '002',
+      orden: 129,
+      circuito: 'D-1182',
+      direccion: 'MOJOTORILLO S/N',
+      estado: 'A',
+      tarifa: 'RS',
+      medidor: '240907792 WASION',
+      facturasVencidas30d: 2,
+      totalPendiente: 66.82
+    },
+    {
+      cuenta: 306043,
+      titular: 'FLORES JUSTO',
+      regionalLocalidad: '101 - 002',
+      habilitante: 'R',
+      ruta: '002',
+      orden: 132,
+      circuito: 'D-1182',
+      direccion: 'MOJOTORILLO S/N',
+      estado: 'A',
+      tarifa: 'RS',
+      medidor: '240907795 WASION',
+      facturasVencidas30d: 2,
+      totalPendiente: 45.20
+    }
+  ],
+  ordenesCorte: [
+    // 46 registros simulados iniciales con cálculo de dias_desde_generacion
+  ],
+  deudasPorCuenta: {
+    306040: [
+      { periodo: 6, anio: 2026, fecha: '2026-06-15', monto: 21.94, estado: 'P', origen: 'FA_FACTURAS', diasMora: 84 },
+      { periodo: 7, anio: 2026, fecha: '2026-07-15', monto: 22.44, estado: 'P', origen: 'FA_FACTURAS', diasMora: 54 },
+      { periodo: 8, anio: 2026, fecha: '2026-08-15', monto: 22.44, estado: 'P', origen: 'FA_FACTURAS', diasMora: 23 }
+    ]
+  }
+};
+`
 
-### Decisión: Estado de conexión simulado con toggle
+## Manejo de Reglas de Negocio
 
-| Opción | Tradeoff | Decisión |
-|--------|----------|----------|
-| Toggle manual "Simular modo offline" | Controlable, sin red real | ✅ Elegido |
-| Detección `navigator.onLine` | Depende del entorno | Complemento informativo |
-
-**Racional**: El objetivo es demostrar comportamiento offline, no medir conectividad real.
-
-## Flujo de datos
-
-    UI (pantallas)
-        │
-        ▼
-    Controlador (navegación, eventos)
-        │
-        ▼
-    Dominio (meses completos, antiguos primero, totales)
-        │
-        ▼
-    Store (IndexedDB/localStorage)
-        ├── datos locales (domicilios, cobros)
-        └── cola de cambios (pending/syncing/synced/failed)
-        │
-        ▼
-    Sync simulada (procesa cola al volver online)
-
-## Cambios de archivos
-
-| Archivo | Acción | Descripción |
-|---------|--------|-------------|
-| `boceto-mvp/index.html` | Crear | Estructura semántica, bottom nav, 11 pantallas, frame móvil |
-| `boceto-mvp/styles.css` | Crear | Sistema visual: claro, tarjetas, botones grandes, deuda destacada, responsive |
-| `boceto-mvp/app.js` | Crear | Módulos: datos semilla, dominio de cobro, store, sync, router de pantallas |
-
-## Interfaces / contratos
-
-```js
-// Domicilio
-{ id, codigo, nombre, direccion, localidad, medidor,
-  mesesPendientes: [{anio, mes, montoCentavos}], deudaCentavos, estado, visitado }
-
-// Cobro
-{ id, domicilioId, mesesPagados: [], cantidadMeses, totalCentavos,
-  metodo: "Efectivo", tecnico, fechaISO, comprobanteId, sync }
-
-// Cambio pendiente (cola)
-{ id, tipo: "visita"|"cobro", payload, estado: "pending"|"syncing"|"synced"|"failed", intentos }
-```
-
-Montos en unidades enteras mínimas (centavos) para evitar errores de punto flotante.
-
-## Estrategia de prueba
-
-| Capa | Qué probar | Cómo |
-|------|-----------|------|
-| Dominio | meses antiguos primero, rechazo fracciones, cálculo total, decremento de deuda | Funciones puras con casos `0/1/6/todos/más de los permitidos` |
-| Store | persistencia tras recarga, encolado y estados de sync | Ciclo guardar→recargar→verificar |
-| Manual | flujo completo offline → cobro → comprobante → sync | Recorrido guiado en navegador |
-
-## Matriz de amenazas
-
-N/A — no hay routing, shell, subprocesos, automatización VCS/PR, clasificación de ejecutables ni integración de procesos.
-
-## Migración / despliegue
-
-No se requiere migración. El prototipo corre como archivos estáticos.
-
-## Preguntas abiertas
-
-- [ ] Confirmar formato oficial de comprobante con SEPSA (pendiente de constitution).
-- [ ] Confirmar significado de columnas del Excel antes de ampliar datos de simulación.
+- **BR-001 (Umbral)**: El filtro valida >= 2 facturas con antigüedad $> 30$ días.
+- **BR-002 (Intereses)**: Banner visible informando la exclusión de intereses variables en los listados.
+- **BR-003 (Anulación Automática)**: Disparador en P-04 que actualiza la orden a ANULADO con timestamp y texto de auditoría oficial.
+- **BR-004 y BR-005 (Bypass GPS y Fotos)**: Controles de selección en P-05 que permiten guardar la ejecución material omitiendo validaciones de hardware.
