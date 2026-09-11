@@ -164,6 +164,7 @@
       const satelliteLayer = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         {
+          maxNativeZoom: 17,
           maxZoom: 19,
           attribution: 'Tiles &copy; Esri'
         }
@@ -172,6 +173,7 @@
       const labelsLayer = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
         {
+          maxNativeZoom: 17,
           maxZoom: 19,
           opacity: 0.82,
           attribution: 'Labels &copy; Esri'
