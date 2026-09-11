@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SEPSA - Sistema de Cortes y Cobros (Prototipo Funcional)</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -202,7 +204,7 @@
         <div class="card-header">
           <span><i class="fa-solid fa-table-list"></i> Registros para Cortar</span>
           <div>
-            <span class="badge badge-danger" style="font-size: 13px;">46 GENERADO</span>
+            <span class="badge badge-danger" style="font-size: 13px;"><span id="map-generated-count">11</span> GENERADOS</span>
           </div>
         </div>
         <div class="card-body">
@@ -236,24 +238,16 @@
           <div id="map-container" style="display: none; margin-bottom: 14px;">
             <div id="map-location-status" class="map-location-status" aria-live="polite">
               <i class="fa-solid fa-location-dot"></i>
-              <span>Ubicación simulada pendiente de activar.</span>
+              <span>Ubicación del técnico · Lat -19.589366, Lng -65.259119 · Precisión 8 m</span>
             </div>
-            <div class="map-simulator">
-              <div class="map-pin" style="top: 40%; left: 35%;">
-                <i class="fa-solid fa-bolt"></i> C:1701603 (66.82 Bs)
-              </div>
-              <div class="map-pin" style="top: 55%; left: 60%;">
-                <i class="fa-solid fa-bolt"></i> C:306040 (94.34 Bs)
-              </div>
-              <div id="map-user-location" class="map-user-location" aria-label="Ubicación simulada del técnico">
-                <span class="map-user-location-pulse"></span>
-                <i class="fa-solid fa-person"></i>
-                <span>Tu ubicación (simulada)</span>
-              </div>
-              <span style="background: rgba(255,255,255,0.85); padding: 6px 12px; border-radius: 4px; font-weight: bold;">
-                <i class="fa-solid fa-satellite"></i> Visualizador Cartográfico GIS SEPSA (46 puntos detectados)
-              </span>
+            <div class="map-summary-bar">
+              <span><i class="fa-solid fa-satellite"></i> Imagen satelital</span>
+              <span><strong id="map-visible-count">12</strong> domicilios en vista</span>
+              <button class="btn btn-outline btn-sm" onclick="centrarMapaEnTecnico()">
+                <i class="fa-solid fa-location-crosshairs"></i> Centrar en técnico
+              </button>
             </div>
+            <div id="map-simulator" class="map-simulator" aria-label="Mapa satelital de domicilios SEPSA"></div>
           </div>
 
           <div class="table-responsive">
@@ -271,41 +265,7 @@
                   <th>ACCIÓN</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td><strong>1701603</strong><br><small class="text-muted">14093786</small></td>
-                  <td><button class="btn btn-danger btn-sm" onclick="openCorteDetail(443794)"><i class="fa-solid fa-eye"></i> Ver corte</button></td>
-                  <td><span class="badge badge-info">R</span></td>
-                  <td><span class="badge badge-danger">GENERADO</span></td>
-                  <td>27/08/2026 12:33</td>
-                  <td><strong>9.21 días</strong></td>
-                  <td>66.82 Bs</td>
-                  <td>-</td>
-                  <td><button class="btn btn-danger btn-sm" onclick="openCorteDetail(443794)">Ver corte</button></td>
-                </tr>
-                <tr>
-                  <td><strong>1702690</strong><br><small class="text-muted">14093812</small></td>
-                  <td><button class="btn btn-outline btn-sm" onclick="openCorteDetail(443797)"><i class="fa-solid fa-eye"></i> Ver corte</button></td>
-                  <td><span class="badge badge-info">R</span></td>
-                  <td><span class="badge badge-warning" style="background:#e0e0e0; color:#424242;">ANULADO</span></td>
-                  <td>27/08/2026 12:33</td>
-                  <td>9.21 días</td>
-                  <td>73.35 Bs</td>
-                  <td>-</td>
-                  <td><button class="btn btn-outline btn-sm" onclick="openCorteDetail(443797)">Ver corte</button></td>
-                </tr>
-                <tr>
-                  <td><strong>306040</strong><br><small class="text-muted">240907792</small></td>
-                  <td><button class="btn btn-danger btn-sm" onclick="alert('Abriendo ficha técnica de 306040...'); openCorteDetail(443794);"><i class="fa-solid fa-eye"></i> Ver corte</button></td>
-                  <td><span class="badge badge-info">R</span></td>
-                  <td><span class="badge badge-danger">GENERADO</span></td>
-                  <td>28/08/2026 09:15</td>
-                  <td>8.34 días</td>
-                  <td>94.34 Bs</td>
-                  <td>-</td>
-                  <td><button class="btn btn-danger btn-sm" onclick="openCorteDetail(443794)">Ver corte</button></td>
-                </tr>
-              </tbody>
+              <tbody id="map-cortes-body"></tbody>
             </table>
           </div>
         </div>
@@ -339,7 +299,7 @@
           <div class="card">
             <div class="card-header">
               <span><i class="fa-solid fa-user"></i> Datos del Suministro y Ubicación</span>
-              <button class="btn btn-outline btn-sm" onclick="mostrarUbicacionSimuladaEnFicha()"><i class="fa-solid fa-location-crosshairs"></i> Mostrar ubicación simulada</button>
+              <button class="btn btn-outline btn-sm" onclick="mostrarUbicacionEnFicha()"><i class="fa-solid fa-location-crosshairs"></i> Mostrar ubicación</button>
             </div>
             <div class="card-body">
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
@@ -431,14 +391,14 @@
           <div class="card">
             <div class="card-header">
               <span><i class="fa-solid fa-camera"></i> Adjuntar Evidencias</span>
-              <span class="badge badge-info">Máx 20 MB</span>
+              <span class="badge badge-info">Fotos: hasta 5 MP · Máx 20 MB</span>
             </div>
             <div class="card-body">
               <div class="dropzone" onclick="document.getElementById('file-upload-input').click()">
                 <i class="fa-solid fa-cloud-arrow-up" style="font-size: 28px; margin-bottom: 6px;"></i>
                 <p>Arrastre archivos aquí o haga clic para seleccionar.</p>
-                <small>Formatos: PDF, DOC, DOCX, JPG, PNG</small>
-                <input type="file" id="file-upload-input" style="display: none;" onchange="handleFileSelected(this)">
+                <small>Formatos: PDF, DOC, DOCX, JPG, PNG · Fotos optimizadas localmente</small>
+                <input type="file" id="file-upload-input" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,image/jpeg,image/png" style="display: none;" onchange="handleFileSelected(this)">
               </div>
               <div id="file-upload-list" style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">
                 0 archivos adjuntos registrados.
@@ -600,7 +560,7 @@
           <div style="display: flex; gap: 8px;">
             <input type="text" class="form-control" id="modal-lat" placeholder="Latitud" readonly>
             <input type="text" class="form-control" id="modal-lng" placeholder="Longitud" readonly>
-            <button class="btn btn-primary btn-sm" onclick="capturarGPSModal()"><i class="fa-solid fa-crosshairs"></i> Obtener ubicación simulada</button>
+            <button class="btn btn-primary btn-sm" onclick="capturarGPSModal()"><i class="fa-solid fa-crosshairs"></i> Obtener ubicación</button>
           </div>
         </div>
 
@@ -681,6 +641,8 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -17,7 +17,7 @@ Registra los archivos digitales (fotografías del medidor desconectado, actas de
 
 ## Descripción
 
-Gestionado mediante el contenedor Dropzone en la ficha P-04. Cuenta con restricción rígida de 20 MB por archivo y formatos admitidos (.pdf, .doc, .docx, .jpg, .png).
+Gestionado mediante el contenedor Dropzone en la ficha P-04. Cuenta con restricción rígida de 20 MB por archivo y formatos admitidos (.pdf, .doc, .docx, .jpg, .png). Las imágenes se redimensionan hasta un máximo de 5 megapíxeles y se comprimen localmente antes de cargarse.
 
 ## Campos
 

@@ -14,7 +14,9 @@ related:
 
 ## Regla
 
-El protocolo estándar exige adjuntar fotografías del medidor/acometida cortada. Ante impedimentos de hardware, cámara o conectividad, el operador puede omitir el requisito activando **`¿Saltar Control de Fotos? = SI`**.
+El protocolo estándar exige adjuntar fotografías del medidor/acometida cortada. El modal mantiene visible el selector **`¿Saltar Control de Fotos?`** para registrar una excepción ante impedimentos de hardware, cámara o conectividad. Si se selecciona `SI`, el sistema permite omitir el requisito.
+
+Las fotografías se optimizan localmente antes de cargarse: las imágenes se redimensionan hasta un máximo de 5 megapíxeles y se comprimen para reducir el tiempo de transferencia. PDF, DOC y DOCX no se transforman.
 
 ## Entidades Afectadas
 

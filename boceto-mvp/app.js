@@ -109,32 +109,162 @@
       }
     }
 
-    const simulatedUserLocation = {
-      latitude: '-19.589366',
-      longitude: '-65.259119',
-      accuracy: '8 m'
+    const technicianLocation = {
+      latitude: -19.589366,
+      longitude: -65.259119,
+      accuracy: 8
     };
 
-    // Alternar mapa en Bandeja y mostrar ubicación simulada al abrirlo
+    const mapDomicilios = [
+      { account: '1701603', meter: '14093786', owner: 'CHOQUE CONDOR NORMA', route: '002', order: 129, circuit: 'D-1182', address: 'SAN MIGUEL DE KHARI S/N', debt: '66.82', status: 'GENERADO', date: '27/08/2026 12:33', days: '9.21', cuc: 443794, latitude: -19.590104, longitude: -65.260398 },
+      { account: '1702690', meter: '14093812', owner: 'CHOQUE DE BALCAZAR NORA', route: '002', order: 130, circuit: 'D-1182', address: 'SAN MIGUEL DE KHARI S/N', debt: '73.35', status: 'ANULADO', date: '27/08/2026 12:33', days: '9.21', cuc: 443797, latitude: -19.588912, longitude: -65.258647 },
+      { account: '306040', meter: '240907792', owner: 'MUÑOZ PEDRO', route: '002', order: 129, circuit: 'D-1182', address: 'MOJOTORILLO S/N', debt: '94.34', status: 'GENERADO', date: '28/08/2026 09:15', days: '8.34', cuc: 443798, latitude: -19.589118, longitude: -65.258204 },
+      { account: '306043', meter: '240907795', owner: 'CONDORI CONDORI ALEJANDRO', route: '002', order: 130, circuit: 'D-1182', address: 'MOJOTORILLO S/N', debt: '78.10', status: 'GENERADO', date: '28/08/2026 09:19', days: '8.33', cuc: 443799, latitude: -19.588521, longitude: -65.258941 },
+      { account: '306051', meter: '240907804', owner: 'FLORES JUSTO', route: '002', order: 132, circuit: 'D-1182', address: 'CALLEJON CENTRAL S/N', debt: '45.20', status: 'GENERADO', date: '28/08/2026 09:24', days: '8.33', cuc: 443800, latitude: -19.588247, longitude: -65.259563 },
+      { account: '306077', meter: '240907831', owner: 'MAMANI VILCA ROSA', route: '002', order: 134, circuit: 'D-1182', address: 'COMUNIDAD MOJOTORILLO', debt: '112.64', status: 'GENERADO', date: '28/08/2026 09:31', days: '8.32', cuc: 443801, latitude: -19.589742, longitude: -65.259816 },
+      { account: '306084', meter: '240907846', owner: 'QUISPE CHOQUE JUAN', route: '002', order: 136, circuit: 'D-1182', address: 'CAMINO A LA ESCUELA S/N', debt: '58.76', status: 'GENERADO', date: '28/08/2026 09:37', days: '8.31', cuc: 443802, latitude: -19.590106, longitude: -65.259294 },
+      { account: '306102', meter: '240907862', owner: 'VILLEGAS LLANQUE MARIA', route: '002', order: 138, circuit: 'D-1182', address: 'SECTOR LA PLAZA S/N', debt: '86.48', status: 'GENERADO', date: '28/08/2026 09:44', days: '8.31', cuc: 443803, latitude: -19.590321, longitude: -65.258581 },
+      { account: '306119', meter: '240907879', owner: 'TICONA MENDOZA LUIS', route: '002', order: 140, circuit: 'D-1182', address: 'BARRIO NUEVO S/N', debt: '39.92', status: 'GENERADO', date: '28/08/2026 09:52', days: '8.30', cuc: 443804, latitude: -19.589937, longitude: -65.257944 },
+      { account: '306141', meter: '240907901', owner: 'MOLLO MAMANI ELENA', route: '002', order: 142, circuit: 'D-1182', address: 'RUTA VECINAL 4 S/N', debt: '127.18', status: 'GENERADO', date: '28/08/2026 10:04', days: '8.29', cuc: 443805, latitude: -19.589291, longitude: -65.257626 },
+      { account: '306158', meter: '240907918', owner: 'HUANCA CONDORI JULIO', route: '002', order: 144, circuit: 'D-1182', address: 'MOJOTORILLO S/N', debt: '52.36', status: 'GENERADO', date: '28/08/2026 10:11', days: '8.28', cuc: 443806, latitude: -19.588688, longitude: -65.257795 },
+      { account: '306174', meter: '240907934', owner: 'PAREDES TORREZ GLORIA', route: '002', order: 146, circuit: 'D-1182', address: 'SECTOR CANCHA S/N', debt: '69.74', status: 'GENERADO', date: '28/08/2026 10:18', days: '8.28', cuc: 443807, latitude: -19.588183, longitude: -65.258356 }
+    ];
+
+    let fieldMap;
+    let technicianMarker;
+
+    // Alternar mapa en Bandeja y cargar cartografía satelital al abrirlo
     function toggleMapView() {
-      const map = document.getElementById('map-container');
-      const isOpening = map.style.display === 'none';
-      map.style.display = isOpening ? 'block' : 'none';
+      const mapContainer = document.getElementById('map-container');
+      const isOpening = mapContainer.style.display === 'none';
+      mapContainer.style.display = isOpening ? 'block' : 'none';
 
       if (isOpening) {
-        mostrarUbicacionSimuladaEnMapa();
+        requestAnimationFrame(initializeFieldMap);
       }
     }
 
-    function mostrarUbicacionSimuladaEnMapa() {
-      const marker = document.getElementById('map-user-location');
-      const status = document.getElementById('map-location-status');
+    function initializeFieldMap() {
+      if (!window.L) {
+        updateMapStatus('No se pudo cargar la imagen satelital. Revise la conexión.');
+        return;
+      }
 
-      marker.classList.add('active');
-      status.innerHTML = `
-        <i class="fa-solid fa-location-dot"></i>
-        <span><strong>GPS simulado activo</strong> · Lat ${simulatedUserLocation.latitude}, Lng ${simulatedUserLocation.longitude} · Precisión simulada: ${simulatedUserLocation.accuracy}</span>
-      `;
+      if (fieldMap) {
+        fieldMap.invalidateSize();
+        return;
+      }
+
+      fieldMap = L.map('map-simulator', {
+        zoomControl: true,
+        minZoom: 13,
+        maxZoom: 19
+      }).setView([technicianLocation.latitude, technicianLocation.longitude], 16);
+
+      const satelliteLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Tiles &copy; Esri'
+        }
+      ).addTo(fieldMap);
+
+      const labelsLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          opacity: 0.82,
+          attribution: 'Labels &copy; Esri'
+        }
+      ).addTo(fieldMap);
+
+      satelliteLayer.on('tileerror', () => updateMapStatus('No se pudo cargar la imagen satelital. Revise la conexión.'));
+      L.control.layers({ 'Imagen satelital': satelliteLayer }, { 'Límites y lugares': labelsLayer }).addTo(fieldMap);
+
+      technicianMarker = L.marker(
+        [technicianLocation.latitude, technicianLocation.longitude],
+        {
+          icon: L.divIcon({
+            className: 'field-user-marker-wrap',
+            html: '<span class="field-user-marker"><i class="fa-solid fa-person"></i></span>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          }),
+          title: 'Ubicación del técnico'
+        }
+      ).addTo(fieldMap).bindPopup(
+        `<strong>Ubicación del técnico</strong><br>Lat ${technicianLocation.latitude.toFixed(6)}<br>Lng ${technicianLocation.longitude.toFixed(6)}<br>Precisión: ${technicianLocation.accuracy} m`
+      );
+
+      const bounds = L.latLngBounds([[technicianLocation.latitude, technicianLocation.longitude]]);
+      mapDomicilios.forEach(domicilio => {
+        const markerColor = domicilio.status === 'ANULADO' ? '#6b7280' : '#c62828';
+        const marker = L.circleMarker([domicilio.latitude, domicilio.longitude], {
+          radius: 7,
+          color: '#ffffff',
+          weight: 2,
+          fillColor: markerColor,
+          fillOpacity: 0.95
+        }).addTo(fieldMap);
+
+        marker.bindPopup(`
+          <div class="map-popup">
+            <strong>Cuenta ${domicilio.account}</strong>
+            <span>${domicilio.owner}</span>
+            <span>Medidor ${domicilio.meter}</span>
+            <span>Deuda: ${domicilio.debt} Bs · ${domicilio.status}</span>
+            <button class="btn btn-primary btn-sm" onclick="openCorteDetail(${domicilio.cuc})">Ver ficha</button>
+          </div>
+        `);
+        bounds.extend([domicilio.latitude, domicilio.longitude]);
+      });
+
+      fieldMap.fitBounds(bounds.pad(0.16), { maxZoom: 16 });
+      updateMapStatus(`Ubicación del técnico · Lat ${technicianLocation.latitude.toFixed(6)}, Lng ${technicianLocation.longitude.toFixed(6)} · Precisión ${technicianLocation.accuracy} m`);
+      setTimeout(() => fieldMap.invalidateSize(), 0);
+    }
+
+    function updateMapStatus(message) {
+      const status = document.getElementById('map-location-status');
+      status.innerHTML = `<i class="fa-solid fa-location-dot"></i><span>${message}</span>`;
+    }
+
+    function centrarMapaEnTecnico() {
+      if (fieldMap && technicianMarker) {
+        fieldMap.setView([technicianLocation.latitude, technicianLocation.longitude], 17, { animate: true });
+        technicianMarker.openPopup();
+      }
+    }
+
+    function renderCortesMapTable() {
+      const tbody = document.getElementById('map-cortes-body');
+      const generated = document.getElementById('map-generated-count');
+      const visible = document.getElementById('map-visible-count');
+
+      tbody.innerHTML = mapDomicilios.map(domicilio => {
+        const isCancelled = domicilio.status === 'ANULADO';
+        const badge = isCancelled
+          ? '<span class="badge badge-warning map-status-cancelled">ANULADO</span>'
+          : '<span class="badge badge-danger">GENERADO</span>';
+        const actionClass = isCancelled ? 'btn-outline' : 'btn-danger';
+
+        return `
+          <tr>
+            <td><strong>${domicilio.account}</strong><br><small class="text-muted">${domicilio.meter}</small></td>
+            <td><button class="btn ${actionClass} btn-sm" onclick="openCorteDetail(${domicilio.cuc})"><i class="fa-solid fa-eye"></i> Ver corte</button></td>
+            <td><span class="badge badge-info">R</span></td>
+            <td>${badge}</td>
+            <td>${domicilio.date}</td>
+            <td><strong>${domicilio.days} días</strong></td>
+            <td>${domicilio.debt} Bs</td>
+            <td>-</td>
+            <td><button class="btn ${actionClass} btn-sm" onclick="openCorteDetail(${domicilio.cuc})">Ver corte</button></td>
+          </tr>
+        `;
+      }).join('');
+
+      generated.textContent = mapDomicilios.filter(domicilio => domicilio.status === 'GENERADO').length;
+      visible.textContent = mapDomicilios.length;
     }
 
     // Cargar Detalle de Corte Activo vs Anulado
@@ -224,9 +354,9 @@
       }
     }
 
-    // Mostrar ubicación simulada en la ficha, sin pedir permisos del dispositivo
-    function mostrarUbicacionSimuladaEnFicha() {
-      alert(`GPS simulado activo: Lat ${simulatedUserLocation.latitude}, Lng ${simulatedUserLocation.longitude}`);
+    // Mostrar ubicación fija del prototipo, sin pedir permisos del dispositivo
+    function mostrarUbicacionEnFicha() {
+      alert(`Ubicación del técnico: Lat ${technicianLocation.latitude.toFixed(6)}, Lng ${technicianLocation.longitude.toFixed(6)}`);
     }
 
     // Modal Corte Efectivo
@@ -235,8 +365,8 @@
     }
 
     function capturarGPSModal() {
-      document.getElementById('modal-lat').value = simulatedUserLocation.latitude;
-      document.getElementById('modal-lng').value = simulatedUserLocation.longitude;
+      document.getElementById('modal-lat').value = technicianLocation.latitude.toFixed(6);
+      document.getElementById('modal-lng').value = technicianLocation.longitude.toFixed(6);
     }
 
     function guardarCorteEfectivo() {
@@ -261,12 +391,109 @@
     }
 
     // Dropzone Upload
-    function handleFileSelected(input) {
-      if (input.files.length > 0) {
-        const file = input.files[0];
-        document.getElementById('file-upload-list').innerHTML = `
+    const MAX_PHOTO_MEGAPIXELS = 5;
+    const PHOTO_JPEG_QUALITY = 0.78;
+    let processedAttachment = null;
+
+    function formatFileSize(bytes) {
+      return bytes >= 1024 * 1024
+        ? `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+        : `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>"']/g, character => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      }[character]));
+    }
+
+    function getScaledPhotoSize(width, height) {
+      const maxPixels = MAX_PHOTO_MEGAPIXELS * 1000000;
+      const scale = Math.min(1, Math.sqrt(maxPixels / (width * height)));
+
+      return {
+        width: Math.max(1, Math.round(width * scale)),
+        height: Math.max(1, Math.round(height * scale))
+      };
+    }
+
+    function optimizePhoto(file) {
+      return new Promise((resolve, reject) => {
+        const imageUrl = URL.createObjectURL(file);
+        const image = new Image();
+
+        image.onload = () => {
+          URL.revokeObjectURL(imageUrl);
+          const size = getScaledPhotoSize(image.naturalWidth, image.naturalHeight);
+          const canvas = document.createElement('canvas');
+          canvas.width = size.width;
+          canvas.height = size.height;
+          const context = canvas.getContext('2d');
+          if (!context) {
+            reject(new Error('No se pudo preparar la fotografía.'));
+            return;
+          }
+          context.drawImage(image, 0, 0, size.width, size.height);
+
+          canvas.toBlob(blob => {
+            if (!blob) {
+              reject(new Error('No se pudo optimizar la fotografía.'));
+              return;
+            }
+
+            resolve({
+              file: new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }),
+              original: file,
+              width: size.width,
+              height: size.height
+            });
+          }, 'image/jpeg', PHOTO_JPEG_QUALITY);
+        };
+
+        image.onerror = () => {
+          URL.revokeObjectURL(imageUrl);
+          reject(new Error('No se pudo leer la fotografía.'));
+        };
+
+        image.src = imageUrl;
+      });
+    }
+
+    async function handleFileSelected(input) {
+      if (!input.files.length) return;
+
+      const file = input.files[0];
+      const uploadList = document.getElementById('file-upload-list');
+      uploadList.textContent = 'Optimizando fotografía...';
+
+      if (!file.type.startsWith('image/')) {
+        processedAttachment = file;
+        uploadList.innerHTML = `
           <div style="background:#e8f5e9; padding:4px 8px; border-radius:4px; color:var(--success);">
-            <i class="fa-solid fa-file-check"></i> Archivo listo: <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)
+            <i class="fa-solid fa-file-check"></i> Archivo listo: <strong>${escapeHtml(file.name)}</strong> (${formatFileSize(file.size)})
+          </div>
+        `;
+        return;
+      }
+
+      try {
+        const optimized = await optimizePhoto(file);
+        processedAttachment = optimized.file;
+        uploadList.innerHTML = `
+          <div style="background:#e8f5e9; padding:4px 8px; border-radius:4px; color:var(--success);">
+            <i class="fa-solid fa-file-check"></i> Foto optimizada: <strong>${escapeHtml(optimized.file.name)}</strong><br>
+            <small>${optimized.width} × ${optimized.height} px · ${formatFileSize(file.size)} → ${formatFileSize(optimized.file.size)}</small>
+          </div>
+        `;
+      } catch (error) {
+        processedAttachment = file;
+        uploadList.innerHTML = `
+          <div style="background:#fff8e1; padding:4px 8px; border-radius:4px; color:#8a6d1d;">
+            <i class="fa-solid fa-triangle-exclamation"></i> Se conservará la foto original: ${error.message}
           </div>
         `;
       }
@@ -289,3 +516,5 @@
         nombre.textContent = 'CLIENTE REGISTRADO SEPSA';
       }
     }
+
+    renderCortesMapTable();
