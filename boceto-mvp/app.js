@@ -109,10 +109,32 @@
       }
     }
 
-    // Alternar mapa en Bandeja
+    const simulatedUserLocation = {
+      latitude: '-19.589366',
+      longitude: '-65.259119',
+      accuracy: '8 m'
+    };
+
+    // Alternar mapa en Bandeja y mostrar ubicación simulada al abrirlo
     function toggleMapView() {
       const map = document.getElementById('map-container');
-      map.style.display = map.style.display === 'none' ? 'block' : 'none';
+      const isOpening = map.style.display === 'none';
+      map.style.display = isOpening ? 'block' : 'none';
+
+      if (isOpening) {
+        mostrarUbicacionSimuladaEnMapa();
+      }
+    }
+
+    function mostrarUbicacionSimuladaEnMapa() {
+      const marker = document.getElementById('map-user-location');
+      const status = document.getElementById('map-location-status');
+
+      marker.classList.add('active');
+      status.innerHTML = `
+        <i class="fa-solid fa-location-dot"></i>
+        <span><strong>GPS simulado activo</strong> · Lat ${simulatedUserLocation.latitude}, Lng ${simulatedUserLocation.longitude} · Precisión simulada: ${simulatedUserLocation.accuracy}</span>
+      `;
     }
 
     // Cargar Detalle de Corte Activo vs Anulado
@@ -202,16 +224,9 @@
       }
     }
 
-    // Verificación de Permiso GPS en Ficha
-    function verificarGPSPermiso() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          pos => alert(`Ubicación confirmada: Lat ${pos.coords.latitude.toFixed(6)}, Lng ${pos.coords.longitude.toFixed(6)}`),
-          err => alert("Aviso: Permiso denegado o no disponible en navegador. Por favor habilite la ubicación.")
-        );
-      } else {
-        alert("Geolocalización no soportada en este navegador.");
-      }
+    // Mostrar ubicación simulada en la ficha, sin pedir permisos del dispositivo
+    function mostrarUbicacionSimuladaEnFicha() {
+      alert(`GPS simulado activo: Lat ${simulatedUserLocation.latitude}, Lng ${simulatedUserLocation.longitude}`);
     }
 
     // Modal Corte Efectivo
@@ -220,23 +235,8 @@
     }
 
     function capturarGPSModal() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          pos => {
-            document.getElementById('modal-lat').value = pos.coords.latitude.toFixed(6);
-            document.getElementById('modal-lng').value = pos.coords.longitude.toFixed(6);
-          },
-          err => {
-            // Coordenadas reales de Betanzos/Potosí observadas en el video como fallback
-            document.getElementById('modal-lat').value = "-19.589366";
-            document.getElementById('modal-lng').value = "-65.259119";
-            alert("Ubicación satelital fijada por fallback de estación: -19.589366, -65.259119");
-          }
-        );
-      } else {
-        document.getElementById('modal-lat').value = "-19.589366";
-        document.getElementById('modal-lng').value = "-65.259119";
-      }
+      document.getElementById('modal-lat').value = simulatedUserLocation.latitude;
+      document.getElementById('modal-lng').value = simulatedUserLocation.longitude;
     }
 
     function guardarCorteEfectivo() {

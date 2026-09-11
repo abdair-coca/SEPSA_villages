@@ -234,12 +234,21 @@
           </div>
 
           <div id="map-container" style="display: none; margin-bottom: 14px;">
+            <div id="map-location-status" class="map-location-status" aria-live="polite">
+              <i class="fa-solid fa-location-dot"></i>
+              <span>Ubicación simulada pendiente de activar.</span>
+            </div>
             <div class="map-simulator">
               <div class="map-pin" style="top: 40%; left: 35%;">
                 <i class="fa-solid fa-bolt"></i> C:1701603 (66.82 Bs)
               </div>
               <div class="map-pin" style="top: 55%; left: 60%;">
                 <i class="fa-solid fa-bolt"></i> C:306040 (94.34 Bs)
+              </div>
+              <div id="map-user-location" class="map-user-location" aria-label="Ubicación simulada del técnico">
+                <span class="map-user-location-pulse"></span>
+                <i class="fa-solid fa-person"></i>
+                <span>Tu ubicación (simulada)</span>
               </div>
               <span style="background: rgba(255,255,255,0.85); padding: 6px 12px; border-radius: 4px; font-weight: bold;">
                 <i class="fa-solid fa-satellite"></i> Visualizador Cartográfico GIS SEPSA (46 puntos detectados)
@@ -330,7 +339,7 @@
           <div class="card">
             <div class="card-header">
               <span><i class="fa-solid fa-user"></i> Datos del Suministro y Ubicación</span>
-              <button class="btn btn-outline btn-sm" onclick="verificarGPSPermiso()"><i class="fa-solid fa-location-crosshairs"></i> Verificar permiso de coordenadas</button>
+              <button class="btn btn-outline btn-sm" onclick="mostrarUbicacionSimuladaEnFicha()"><i class="fa-solid fa-location-crosshairs"></i> Mostrar ubicación simulada</button>
             </div>
             <div class="card-body">
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
@@ -591,7 +600,7 @@
           <div style="display: flex; gap: 8px;">
             <input type="text" class="form-control" id="modal-lat" placeholder="Latitud" readonly>
             <input type="text" class="form-control" id="modal-lng" placeholder="Longitud" readonly>
-            <button class="btn btn-primary btn-sm" onclick="capturarGPSModal()"><i class="fa-solid fa-crosshairs"></i> Obtener ubicación</button>
+            <button class="btn btn-primary btn-sm" onclick="capturarGPSModal()"><i class="fa-solid fa-crosshairs"></i> Obtener ubicación simulada</button>
           </div>
         </div>
 

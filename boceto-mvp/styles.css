@@ -234,6 +234,45 @@
       background-image: radial-gradient(#90a4ae 1px, transparent 1px);
       background-size: 20px 20px;
     }
+    .map-location-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      border: 1px solid #b3e5fc;
+      border-radius: 4px;
+      background: #e1f5fe;
+      color: #0d47a1;
+      font-size: 12px;
+    }
+    .map-location-status i { color: var(--secondary); }
+    .map-user-location {
+      position: absolute;
+      top: 72%;
+      left: 48%;
+      display: none;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 8px;
+      border: 2px solid #0d47a1;
+      border-radius: 12px;
+      background: #1976d2;
+      color: white;
+      font-size: 11px;
+      font-weight: bold;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+      transform: translate(-50%, -50%);
+      z-index: 2;
+    }
+    .map-user-location.active { display: flex; }
+    .map-user-location-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ffd600;
+      box-shadow: 0 0 0 4px rgba(255,214,0,0.28);
+    }
     .map-pin {
       position: absolute;
       background: var(--danger);
