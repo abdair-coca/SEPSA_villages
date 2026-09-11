@@ -364,23 +364,12 @@
       document.getElementById('modal-corte-efectivo').classList.add('active');
     }
 
-    function capturarGPSModal() {
-      document.getElementById('modal-lat').value = technicianLocation.latitude.toFixed(6);
-      document.getElementById('modal-lng').value = technicianLocation.longitude.toFixed(6);
-    }
-
     function guardarCorteEfectivo() {
-      const lat = document.getElementById('modal-lat').value;
       const lectura = document.getElementById('modal-lectura').value;
       const tipo = document.getElementById('modal-tipo-corte').value;
-      const bypassCoords = document.getElementById('modal-bypass-coords').value;
 
       if (!lectura) {
         alert("Debe ingresar la lectura del medidor al corte.");
-        return;
-      }
-      if (!lat && bypassCoords === 'NO') {
-        alert("Debe capturar las coordenadas GPS o activar 'Saltar Control de Coordenadas'.");
         return;
       }
 
