@@ -555,29 +555,6 @@
         <button class="btn btn-sm btn-outline" onclick="closeModal('modal-corte-efectivo')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>Coordenadas GPS de la Intervención</label>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" class="form-control" id="modal-lat" placeholder="Latitud" readonly>
-            <input type="text" class="form-control" id="modal-lng" placeholder="Longitud" readonly>
-            <button class="btn btn-primary btn-sm" onclick="capturarGPSModal()"><i class="fa-solid fa-crosshairs"></i> Obtener ubicación</button>
-          </div>
-        </div>
-
-        <div class="filter-grid" style="margin-bottom: 10px;">
-          <div class="form-group">
-            <label>Teléfono de Contacto</label>
-            <input type="text" class="form-control" id="modal-telefono" value="61635733" placeholder="Celular del cliente">
-          </div>
-          <div class="form-group">
-            <label>¿Tiene Medidores Cercanos?</label>
-            <select class="form-control" id="modal-cercanos">
-              <option value="SI">SI</option>
-              <option value="NO">NO</option>
-            </select>
-          </div>
-        </div>
-
         <div class="form-group" style="margin-bottom: 10px;">
           <label>Técnico para asignar el corte</label>
           <input type="text" class="form-control" value="JOSUE DANIEL QUINTANILLA TABOADA" disabled style="background: #eceff1;">
@@ -610,11 +587,8 @@
             </select>
           </div>
           <div class="form-group">
-            <label>¿Saltar Control de Coordenadas?</label>
-            <select class="form-control" id="modal-bypass-coords">
-              <option value="NO">NO</option>
-              <option value="SI">SI</option>
-            </select>
+            <label>Justificación</label>
+            <input type="text" class="form-control" id="modal-justificacion" placeholder="Motivo de la intervención">
           </div>
         </div>
       </div>
