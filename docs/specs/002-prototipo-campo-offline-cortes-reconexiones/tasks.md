@@ -26,13 +26,13 @@ Chain strategy: stacked-to-main
 
 ## Fase 1: Scaffold y dominio
 
-- [ ] 1.1 Crear configuración React 19, TypeScript, Vite 7 y Vitest en `field-app/`.
-- [ ] 1.2 RED: timeout o `unknown` bloquea acción y registra visita `pending`.
-- [ ] 1.3 RED: autorización consumida rechaza segunda ejecución.
-- [ ] 1.4 RED: respuesta perdida marca `PHYSICAL_UNKNOWN` y exige `lookup(operation_id)`.
-- [ ] 1.5 RED: mismo `operation_id` no produce duplicado.
-- [ ] 1.6 Implementar dominio: asignación, estados, evidencia, visitas e inmutabilidad; excluir pagos, lecturas y GPS.
-- [ ] 1.7 Definir puertos de autorización, repositorio, sincronización y conectividad; probar políticas.
+- [x] 1.1 Crear configuración React 19, TypeScript, Vite 7 y Vitest en `field-app/`.
+- [x] 1.2 RED: timeout o `unknown` bloquea acción y registra visita `pending`.
+- [x] 1.3 RED: autorización consumida rechaza segunda ejecución.
+- [x] 1.4 RED: respuesta perdida marca `PHYSICAL_UNKNOWN` y exige `lookup(operation_id)`.
+- [x] 1.5 RED: mismo `operation_id` no produce duplicado.
+- [x] 1.6 Implementar dominio: asignación, estados, evidencia, visitas e inmutabilidad; excluir pagos, lecturas y GPS.
+- [x] 1.7 Definir puertos de autorización, repositorio, sincronización y conectividad; probar políticas.
 
 ## Fase 2: Persistencia e integración
 
