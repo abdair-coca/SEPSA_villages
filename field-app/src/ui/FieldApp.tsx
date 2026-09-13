@@ -1,13 +1,17 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import type { ActivityEntry, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
 import { selectVisibleOrders } from "../app/index";
-import type { ConnectivityMode, WorkOrder } from "../domain";
+import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
 
 export interface FieldAppProps {
   store: AppStore;
+  technicianId?: string;
+  deviceId?: string;
+  enableReconnection?: boolean;
+  environment?: "SIMULATED" | "PILOT_PROVISIONAL";
 }
 
-export function FieldApp({ store }: FieldAppProps) {
+export function FieldApp({ store, technicianId = "tech-camila", deviceId = "device-rugged-01", enableReconnection = true, environment = "SIMULATED" }: FieldAppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
   useEffect(() => {
     void store.init();
@@ -15,22 +19,22 @@ export function FieldApp({ store }: FieldAppProps) {
 
   return (
     <div className="field-app">
-      <Header state={state} onModeChange={store.setMode} />
+      <Header state={state} onModeChange={store.setMode} technicianId={technicianId} deviceId={deviceId} environment={environment} />
       {state.message ? <div className={`message message--${state.message.tone}`} role="status">{state.message.text}</div> : null}
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "error" ? <ErrorState text={state.error ?? "No pudimos cargar el paquete local."} onRetry={store.init} /> : null}
-      {state.status === "ready" ? <Workbench state={state} store={store} /> : null}
+      {state.status === "ready" ? <Workbench state={state} store={store} enableReconnection={enableReconnection} /> : null}
     </div>
   );
 }
 
-function Header({ state, onModeChange }: { state: AppState; onModeChange: (mode: ConnectivityMode) => void }) {
+function Header({ state, onModeChange, technicianId, deviceId, environment }: { state: AppState; onModeChange: (mode: ConnectivityMode) => void; technicianId: string; deviceId: string; environment: "SIMULATED" | "PILOT_PROVISIONAL" }) {
   return (
     <header className="app-header">
       <div className="identity-block">
         <div className="eyebrow">SEPSA · CAMPO</div>
         <h1>Jornada de campo</h1>
-        <p className="identity">Técnico <strong>tech-camila</strong> · dispositivo <strong>device-rugged-01</strong></p>
+        <p className="identity">Técnico <strong>{technicianId}</strong> · dispositivo <strong>{deviceId}</strong></p>
       </div>
       <div className="header-meta">
         <div className="network-control">
@@ -44,12 +48,12 @@ function Header({ state, onModeChange }: { state: AppState; onModeChange: (mode:
         </div>
         <p className="last-update">Última actualización<br /><strong>{formatDate(state.package?.downloadedAt ?? state.lastRefreshAt)}</strong></p>
       </div>
-      <div className="simulation-banner">{"Simulación, sin conexión a SEPSA"}</div>
+      <div className="simulation-banner">{environment === "SIMULATED" ? "Simulación, sin conexión a SEPSA" : "PILOT_PROVISIONAL · backend provisional"}</div>
     </header>
   );
 }
 
-function Workbench({ state, store }: { state: AppState; store: AppStore }) {
+function Workbench({ state, store, enableReconnection }: { state: AppState; store: AppStore; enableReconnection: boolean }) {
   const visibleOrders = selectVisibleOrders(state);
   const selectedOrder = state.orders.find((order) => order.orderId === state.selectedOrderId);
   return (
@@ -61,7 +65,7 @@ function Workbench({ state, store }: { state: AppState; store: AppStore }) {
       {state.tab === "orders" ? (
         <section className="orders-layout" aria-label="Órdenes asignadas">
           <OrdersPanel state={state} orders={visibleOrders} store={store} />
-          {selectedOrder ? <OrderDetail order={selectedOrder} state={state} store={store} /> : <EmptyDetail />}
+          {selectedOrder ? <OrderDetail order={selectedOrder} state={state} store={store} enableReconnection={enableReconnection} /> : <EmptyDetail />}
         </section>
       ) : <QueuePanel state={state} store={store} />}
     </main>
@@ -101,7 +105,7 @@ function OrderListItem({ order, selected, onSelect }: { order: WorkOrder; select
   );
 }
 
-function OrderDetail({ order, state, store }: { order: WorkOrder; state: AppState; store: AppStore }) {
+function OrderDetail({ order, state, store, enableReconnection }: { order: WorkOrder; state: AppState; store: AppStore; enableReconnection: boolean }) {
   const [draft, setDraft] = useState<ActionKind | null>(null);
   return (
     <section className="detail-panel panel" aria-label={`Detalle de ${order.orderId}`}>
@@ -109,15 +113,20 @@ function OrderDetail({ order, state, store }: { order: WorkOrder; state: AppStat
       <div className="detail-heading"><div><h2>{order.orderId}</h2><p>Orden asignada a tu dispositivo</p></div><span className={`large-status large-status--${orderStatusTone(order)}`}>{orderStatusLabel(order.status)}</span></div>
       <div className="physical-card"><span className="physical-card__label">Estado físico</span><strong>{physicalStatusLabel(order.physicalStatus)}</strong>{order.physicalStatus === "PHYSICAL_UNKNOWN" ? <p>Revisión humana requerida. No repetir acción.</p> : <p>Estado local verificable sin conexión.</p>}</div>
       {order.physicalStatus === "PHYSICAL_UNKNOWN" ? <div className="review-callout" role="alert"><strong>Resultado incierto</strong><span>Espere conciliación operativa. No hay acción de repetición disponible.</span></div> : null}
+      {order.context ? <OperationalContext context={order.context} /> : <div className="context-missing">Contexto operativo no disponible en este paquete.</div>}
       <ActivityPanel entries={state.activity.filter((entry) => entry.record.orderId === order.orderId)} />
       <div className="action-stack">
         <button className="primary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>Registrar visita <span>→</span></button>
         {order.status === "GENERADO" && order.physicalStatus === "NONE" ? <button className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("CUT")}>Preparar corte <span>→</span></button> : null}
-        {order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED" ? <button className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("RECONNECTION")}>Preparar reconexión <span>→</span></button> : null}
+        {enableReconnection && order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED" ? <button className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("RECONNECTION")}>Preparar reconexión <span>→</span></button> : null}
       </div>
       {draft ? <ActionForm kind={draft} order={order} busy={state.busyAction === draft} onCancel={() => setDraft(null)} onSubmit={async (input) => { if (draft === "VISIT") await store.registerVisit(order.orderId, input); else if (draft === "CUT") await store.executeCut(order.orderId, input); else await store.executeReconnection(order.orderId, input); setDraft(null); }} /> : null}
     </section>
   );
+}
+
+function OperationalContext({ context }: { context: NonNullable<WorkOrder["context"]> }) {
+  return <section className="context-panel" aria-label="Contexto operativo"><div className="eyebrow">CONTEXTO OPERATIVO</div><div className="context-grid"><div><span>Cliente</span><strong>{context.customerName || "Dato no disponible"}</strong></div><div><span>Cuenta / suministro</span><strong>{context.accountId || "Dato no disponible"} · {context.supplyId || "Dato no disponible"}</strong></div><div><span>Dirección</span><strong>{context.address || "Dato no disponible"}</strong></div><div><span>Referencias</span><strong>{context.references || "Dato no disponible"}</strong></div><div><span>Medidor</span><strong>{context.meterId || "Dato no disponible"}</strong></div><div><span>Deuda de referencia</span><strong>Bs {(context.debtCents / 100).toFixed(2)} · {context.monthsPending} meses</strong></div></div><div className="context-source">Datos {context.source} · actualizados {formatDate(context.updatedAt)}</div><div className="kardex-panel"><strong>Kardex y deuda</strong>{context.kardex.length ? context.kardex.map((entry) => <div className="kardex-row" key={entry.entryId}><span>{entry.period}</span><span>Bs {(entry.amountCents / 100).toFixed(2)}</span><span>{entry.status === "PENDING" ? "Pendiente" : "Pagado"}</span></div>) : <p>Historial no disponible en paquete local.</p>}</div><div className="map-fallback"><strong>Localización</strong><span>Mapa no disponible. Use dirección y referencias descargadas.</span></div></section>;
 }
 
 function ActivityPanel({ entries }: { entries: ActivityEntry[] }) {
@@ -132,20 +141,52 @@ function ActionForm({ kind, order, busy, onCancel, onSubmit }: { kind: ActionKin
   const [useException, setUseException] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [formError, setFormError] = useState("");
+  const [reading, setReading] = useState("");
+  const [cutType, setCutType] = useState<CutType>("RED");
+  const [nearbyMeters, setNearbyMeters] = useState(false);
+  const [location, setLocation] = useState<FieldCapture["location"]>();
+  const [skipLocation, setSkipLocation] = useState(false);
+  const [locationReason, setLocationReason] = useState("");
+  const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const requiresExternal = kind !== "VISIT";
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (kind !== "VISIT" && !file && !useException) return setFormError("Adjunte un archivo JPEG/PNG o marque excepción.");
     if (useException && !exceptionReason.trim()) return setFormError("Escriba una justificación para la excepción.");
+    if (kind === "CUT") {
+      const parsedReading = Number(reading);
+      if (!Number.isFinite(parsedReading) || parsedReading < 0) return setFormError("Ingrese lectura final válida del medidor.");
+      if (!location && !skipLocation) return setFormError("Capture GPS o registre excepción de coordenadas.");
+      if (skipLocation && !locationReason.trim()) return setFormError("Justifique excepción de coordenadas.");
+    }
     setFormError("");
     setSubmitting(true);
-    try { await onSubmit({ file, exceptionReason: useException ? exceptionReason : undefined, reason: requiresExternal ? `Intento de ${actionLabel(kind).toLocaleLowerCase()}` : "Visita de campo sin ejecución" }); } catch { /* Store exposes actionable status. */ } finally { setSubmitting(false); }
+    try {
+      const fieldCapture = kind === "CUT" ? {
+        reading: { value: Number(reading), unit: "kWh" as const, meterId: order.context?.meterId ?? "", recordedAt: new Date().toISOString(), status: "CAPTURED" as const },
+        location: location ?? { recordedAt: new Date().toISOString(), status: "BYPASSED" as const, exceptionReason: "saltar_control_coordenadas: " + locationReason },
+        cutType,
+        nearbyMeters,
+      } : undefined;
+      await onSubmit({ file, exceptionReason: useException ? "saltar_control_fotos: " + exceptionReason : undefined, gpsExceptionReason: skipLocation ? "saltar_control_coordenadas: " + locationReason : undefined, fieldCapture, reason: requiresExternal ? `Intento de ${actionLabel(kind).toLocaleLowerCase()}` : "Visita de campo sin ejecución" });
+    } catch { /* Store exposes actionable status. */ } finally { setSubmitting(false); }
+  }
+  function captureLocation() {
+    if (!navigator.geolocation) return setFormError("Este dispositivo no ofrece GPS; registre excepción controlada.");
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition((position) => {
+      setLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, recordedAt: new Date().toISOString(), status: "CAPTURED" });
+      setSkipLocation(false);
+      setLocating(false);
+      setFormError("");
+    }, () => { setLocating(false); setFormError("No pudimos capturar GPS. Reintente o registre excepción controlada."); });
   }
   return (
     <form className="action-form" onSubmit={submit}>
       <div className="form-heading"><div><span className="eyebrow">{actionLabel(kind)}</span><h3>Confirmar datos</h3></div><button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar formulario">×</button></div>
       <p className="form-hint">Orden {order.orderId}. La evidencia queda guardada localmente; esta simulación no afirma envío remoto.</p>
+      {kind === "CUT" ? <fieldset className="capture-fieldset"><legend>Datos obligatorios de campo</legend><label className="text-field"><span>Lectura final del medidor (kWh)</span><input type="number" min="0" step="0.01" value={reading} onChange={(event) => setReading(event.target.value)} required /></label><label className="text-field"><span>Tipo de corte</span><select value={cutType} onChange={(event) => setCutType(event.target.value as CutType)}><option value="RED">Red</option><option value="MEDIDOR">Medidor</option><option value="BARRAS">Barras</option><option value="PROTECCION">Protección</option><option value="ACOMETIDA">Acometida</option><option value="FUSIBLES">Fusibles</option></select></label><label className="checkbox-field"><input type="checkbox" checked={nearbyMeters} onChange={(event) => setNearbyMeters(event.target.checked)} /><span>Verifiqué medidores cercanos</span></label><div className="location-box"><strong>Coordenadas GPS</strong>{location ? <span>{location.latitude?.toFixed(6)}, {location.longitude?.toFixed(6)} · precisión {Math.round(location.accuracyMeters ?? 0)} m</span> : <span>No capturadas</span>}<button type="button" className="secondary-action" onClick={captureLocation} disabled={locating || skipLocation}>{locating ? "Capturando…" : "Capturar GPS"}</button></div><label className="checkbox-field"><input type="checkbox" checked={skipLocation} onChange={(event) => { setSkipLocation(event.target.checked); if (event.target.checked) setLocation(undefined); }} /><span>No puedo capturar coordenadas</span></label>{skipLocation ? <label className="text-field"><span>Justificación de coordenadas</span><textarea value={locationReason} onChange={(event) => setLocationReason(event.target.value)} rows={2} /></label> : null}</fieldset> : null}
       <label className="file-field"><span>Archivo de evidencia</span><input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" onChange={(event) => setFile(event.target.files?.[0])} /><small>{file ? file.name : "JPEG o PNG preparado"}</small></label>
       <label className="checkbox-field"><input type="checkbox" checked={useException} onChange={(event) => setUseException(event.target.checked)} /><span>No puedo adjuntar evidencia</span></label>
       {useException ? <label className="text-field"><span>Justificación obligatoria</span><textarea value={exceptionReason} onChange={(event) => setExceptionReason(event.target.value)} rows={3} placeholder="Describa el motivo" /></label> : null}

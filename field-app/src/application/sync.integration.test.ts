@@ -35,7 +35,7 @@ async function persistUncertain(repository: IndexedDbLocalRepository, operationI
   authorization.requestResponse = { status: "authorized", grant: authGrant(operationId) };
   authorization.consumeError = new ResponseLostError();
   authorization.lookupResponse = { status: "unknown", operationId };
-   const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: `evidence-${operationId}`, orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true } });
+   const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: `evidence-${operationId}`, orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
   expect(result.outcome).toBe("physical_unknown");
   await expect(repository.getEvidence(`evidence-${operationId}`)).resolves.toMatchObject({ operationId, orderId: "order-sync" });
 }
@@ -71,7 +71,7 @@ describe("durable sync engine", () => {
     const repository = await setup("sync-conflict");
     const authorization = new MockAuthorizationAdapter();
     authorization.requestResponse = { status: "authorized", grant: authGrant("operation-conflict-00000000-0000-4000-8000-000000000019") };
-    const result = await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-conflict", orderId: "order-sync", operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true } });
+     const result = await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-conflict", orderId: "order-sync", operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture("operation-conflict-00000000-0000-4000-8000-000000000019") });
     expect(result.outcome).toBe("executed");
     const transport = new MockSyncTransport();
     transport.response = { status: "conflict", operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", remote: { status: "already_processed" }, reason: "REMOTE_ORDER_CHANGED" };
@@ -84,7 +84,7 @@ describe("durable sync engine", () => {
   it("does not work while offline and keeps pending queue", async () => {
     const repository = await setup("sync-offline");
     const authorization = new MockAuthorizationAdapter({ mode: "offline" });
-    const result = await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-offline-00000000-0000-4000-8000-00000000001a", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-offline", orderId: "order-sync", operationId: "operation-offline-00000000-0000-4000-8000-00000000001a", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true } });
+     const result = await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-offline-00000000-0000-4000-8000-00000000001a", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-offline", orderId: "order-sync", operationId: "operation-offline-00000000-0000-4000-8000-00000000001a", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture("operation-offline-00000000-0000-4000-8000-00000000001a") });
     expect(result.outcome).toBe("visit_recorded");
     expect((await repository.listSyncItems())[0].status).toBe("pending");
     const transport = new MockSyncTransport({ mode: "offline" });
@@ -96,7 +96,7 @@ describe("durable sync engine", () => {
   it("serializes blocked visits as VISIT with attempted action separated", async () => {
     const repository = await setup("sync-visit-payload");
     const authorization = new MockAuthorizationAdapter({ mode: "offline" });
-    const result = await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-visit", orderId: "order-sync", operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true } });
+     const result = await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-visit", orderId: "order-sync", operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture("operation-visit-payload-00000000-0000-4000-8000-00000000001b") });
     expect(result.outcome).toBe("visit_recorded");
     const transport = new MockSyncTransport();
     transport.response = { status: "acknowledged", operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b" };
@@ -104,11 +104,43 @@ describe("durable sync engine", () => {
     expect(transport.sent[0]).toMatchObject({ action: "VISIT", attemptedAction: "CUT", operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b" });
   });
 
+  it("sends deferred authorization data and confirms local state after server acknowledgement", async () => {
+    const repository = await setup("sync-deferred-cut");
+    const operationId = "operation-deferred-cut-00000000-0000-4000-8000-00000000001e";
+    const authorization = new MockAuthorizationAdapter();
+    authorization.requestResponse = {
+      status: "authorized",
+      grant: {
+        authorizationId: "auth-deferred-cut",
+        token: "opaque-deferred-token",
+        orderId: "order-sync",
+        technicianId: "tech-1",
+        deviceId: "device-1",
+        operationId,
+        version: 1,
+        issuedAt: "2026-09-12T09:00:00.000Z",
+        expiresAt: "2026-09-12T09:05:00.000Z",
+        consumption: "deferred",
+      },
+    };
+    const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-deferred-cut", orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
+    expect(result.outcome).toBe("pending_sync");
+
+    const transport = new MockSyncTransport();
+    transport.response = { status: "acknowledged", operationId };
+    const report = await new SyncEngine(repository, new MockConnectivity("online"), transport).syncOnce();
+
+    expect(report.synced).toBe(1);
+    expect(transport.sent[0]).toMatchObject({ orderVersion: 1, authorizationId: "auth-deferred-cut", authorizationToken: "opaque-deferred-token" });
+    await expect(repository.getRecord(operationId)).resolves.toMatchObject({ status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: "synced" });
+    await expect(repository.getOrder("order-sync")).resolves.toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED", version: 2 });
+  });
+
   it("keeps ack id mismatch uncertain and never retries manual-review conflict", async () => {
     const repository = await setup("sync-id-mismatch");
     const authorization = new MockAuthorizationAdapter();
     authorization.requestResponse = { status: "authorized", grant: authGrant("operation-id-mismatch-00000000-0000-4000-8000-00000000001c") };
-    await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-id-mismatch-00000000-0000-4000-8000-00000000001c", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-mismatch", orderId: "order-sync", operationId: "operation-id-mismatch-00000000-0000-4000-8000-00000000001c", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true } });
+     await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-id-mismatch-00000000-0000-4000-8000-00000000001c", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-mismatch", orderId: "order-sync", operationId: "operation-id-mismatch-00000000-0000-4000-8000-00000000001c", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture("operation-id-mismatch-00000000-0000-4000-8000-00000000001c") });
     const mismatchTransport = new MockSyncTransport();
     mismatchTransport.response = { status: "acknowledged", operationId: "wrong-operation" };
     const engine = new SyncEngine(repository, new MockConnectivity("online"), mismatchTransport, { owner: "mismatch-owner" });
@@ -118,7 +150,7 @@ describe("durable sync engine", () => {
     const conflictRepository = await setup("sync-manual-review");
     const conflictAuthorization = new MockAuthorizationAdapter();
     conflictAuthorization.requestResponse = { status: "authorized", grant: authGrant("operation-manual-00000000-0000-4000-8000-00000000001d") };
-    await executeCut({ repository: conflictRepository, authorization: conflictAuthorization, order: cutOrder, operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-manual", orderId: "order-sync", operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true } });
+     await executeCut({ repository: conflictRepository, authorization: conflictAuthorization, order: cutOrder, operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-manual", orderId: "order-sync", operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture("operation-manual-00000000-0000-4000-8000-00000000001d") });
     const conflictTransport = new MockSyncTransport();
     conflictTransport.response = { status: "conflict", operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", remote: { state: "different" }, reason: "STATE_CONFLICT" };
     const conflictEngine = new SyncEngine(conflictRepository, new MockConnectivity("online"), conflictTransport, { owner: "manual-owner" });
@@ -146,7 +178,7 @@ describe("durable sync engine", () => {
       attempts: 0,
       evidenceRefs: [],
     };
-    await repository.claimCut({ operation, order: { ...cutOrder, physicalStatus: "CLAIMED", version: 2 }, syncItem: { operationId, action: "CUT", orderId: "order-sync", technicianId: "tech-1", deviceId: "device-1", status: "pending", attempts: 0 } }, 1);
+     await repository.claimCut({ operation, order: { ...cutOrder, physicalStatus: "CLAIMED", version: 2 }, syncItem: { operationId, action: "CUT", orderId: "order-sync", technicianId: "tech-1", deviceId: "device-1", status: "pending", attempts: 0 } }, 1);
     const authorization = new MockAuthorizationAdapter();
     authorization.lookupResponse = { status: "unknown", operationId };
     await expect(executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:02:00.000Z" })).resolves.toMatchObject({ outcome: "physical_unknown" });
@@ -190,3 +222,13 @@ describe("durable sync engine", () => {
     await expect(repository.getOrder("order-sync")).resolves.toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN", version: 3 });
   });
 });
+
+function validFieldCapture(operationId: string) {
+  return {
+    reading: { value: 123.45, unit: "kWh" as const, meterId: "MED-1", recordedAt: "2026-09-12T09:01:00.000Z", status: "CAPTURED" as const },
+    location: { latitude: -17.39, longitude: -66.16, accuracyMeters: 8, recordedAt: "2026-09-12T09:01:00.000Z", status: "CAPTURED" as const },
+    cutType: "RED" as const,
+    nearbyMeters: false,
+    operationId,
+  };
+}

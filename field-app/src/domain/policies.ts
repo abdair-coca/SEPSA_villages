@@ -1,11 +1,37 @@
 import { DomainError } from "./errors";
 import type {
   EvidenceReference,
+  FieldCapture,
   OperationRecord,
   PhysicalStatus,
+  AuthorizedAction,
+  Role,
+  Session,
   VisitRecord,
   WorkOrder,
 } from "./types";
+
+const ROLE_PERMISSIONS: Record<Role, AuthorizedAction[]> = {
+  ADMIN: ["FIND_DEBTORS", "CREATE_ORDER", "ASSIGN_ORDER", "VIEW_ORDERS", "VIEW_AUDIT"],
+  TECHNICIAN: ["DOWNLOAD_ASSIGNED", "SYNC_OPERATION"],
+};
+
+export function permissionsForRole(role: Role): AuthorizedAction[] {
+  return [...ROLE_PERMISSIONS[role]];
+}
+
+export function assertRecognizedRole(role: string): asserts role is Role {
+  if (role !== "ADMIN" && role !== "TECHNICIAN") {
+    throw new DomainError("User role is not recognized.", "ROLE_NOT_RECOGNIZED");
+  }
+}
+
+export function assertCan(session: Session, action: AuthorizedAction): void {
+  assertRecognizedRole(session.role);
+  if (!ROLE_PERMISSIONS[session.role].includes(action) || !session.permissions.includes(action)) {
+    throw new DomainError("This role cannot perform the requested action.", "FORBIDDEN");
+  }
+}
 
 export function assertAssignedOrder(order: WorkOrder, technicianId: string): void {
   if (order.assignedTechnicianId !== technicianId) {
@@ -20,6 +46,49 @@ export function assertCutEligible(order: WorkOrder, technicianId: string): void 
   }
   if (order.physicalStatus !== "NONE") {
     throw new DomainError("Order already has a physical cut claim.", "CUT_ALREADY_CLAIMED");
+  }
+}
+
+export function validateFieldCapture(capture: FieldCapture | undefined, expectedMeterId?: string): void {
+  if (!capture) {
+    throw new DomainError("La captura de campo es obligatoria para confirmar el corte.", "FIELD_CAPTURE_REQUIRED");
+  }
+
+  if (!capture.reading) {
+    throw new DomainError("La lectura final del medidor es obligatoria.", "METER_READING_REQUIRED");
+  }
+  if (capture.reading.status !== "CAPTURED" || !Number.isFinite(capture.reading.value) || (capture.reading.value ?? 0) < 0) {
+    throw new DomainError("La lectura final del medidor es obligatoria.", "METER_READING_REQUIRED");
+  }
+  if (!capture.reading.meterId.trim() || capture.reading.unit !== "kWh") {
+    throw new DomainError("La lectura debe estar asociada a un medidor en kWh.", "METER_READING_INVALID");
+  }
+  if (expectedMeterId !== undefined && capture.reading.meterId !== expectedMeterId) {
+    throw new DomainError("La lectura corresponde a un medidor diferente.", "METER_READING_MISMATCH");
+  }
+
+  if (capture.location.status === "CAPTURED") {
+    if (!Number.isFinite(capture.location.latitude) || !Number.isFinite(capture.location.longitude)) {
+      throw new DomainError("Las coordenadas GPS no son válidas.", "GPS_COORDINATES_INVALID");
+    }
+    if ((capture.location.latitude ?? 0) < -90 || (capture.location.latitude ?? 0) > 90 || (capture.location.longitude ?? 0) < -180 || (capture.location.longitude ?? 0) > 180) {
+      throw new DomainError("Las coordenadas GPS están fuera de rango.", "GPS_COORDINATES_INVALID");
+    }
+    const accuracyMeters = capture.location.accuracyMeters;
+    if (!Number.isFinite(accuracyMeters) || (accuracyMeters ?? 0) < 0) {
+      throw new DomainError("La precisión GPS no es válida.", "GPS_ACCURACY_INVALID");
+    }
+  } else if (capture.location.status === "BYPASSED" && capture.location.exceptionReason?.trim()) {
+    // GPS bypass is explicit and auditable; precision thresholds remain pending validation with SEPSA.
+  } else {
+    throw new DomainError("Capture GPS o registre una excepción justificada.", "GPS_REQUIRED");
+  }
+
+  if (!["RED", "MEDIDOR", "BARRAS", "PROTECCION", "ACOMETIDA", "FUSIBLES"].includes(capture.cutType)) {
+    throw new DomainError("El tipo de corte no pertenece al catálogo confirmado.", "CUT_TYPE_INVALID");
+  }
+  if (typeof capture.nearbyMeters !== "boolean") {
+    throw new DomainError("Debe indicar si existen medidores cercanos.", "NEARBY_METERS_REQUIRED");
   }
 }
 
@@ -139,6 +208,7 @@ export function createVisit(input: {
   attempts?: number;
   errorCode?: string;
   exceptionReason?: string;
+  fieldCapture?: FieldCapture;
 }): VisitRecord {
   if (!input.operationId.trim()) {
     throw new DomainError("Operation identifier is required.", "OPERATION_ID_REQUIRED");
@@ -159,6 +229,7 @@ export function createVisit(input: {
     attempts: input.attempts ?? 1,
     errorCode: input.errorCode,
     syncStatus: "pending",
+    fieldCapture: input.fieldCapture,
   };
 }
 

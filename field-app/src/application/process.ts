@@ -5,9 +5,11 @@ import {
   copyOrderWithPhysicalStatus,
   createVisit,
   DomainError,
+  validateFieldCapture,
   validateEvidence,
   type CancellationDetails,
   type EvidenceReference,
+  type FieldCapture,
   type OperationRecord,
   type VisitRecord,
   type WorkOrder,
@@ -36,6 +38,7 @@ export interface CutProcessInput {
   now: string;
   evidence?: EvidenceReference;
   exceptionReason?: string;
+  fieldCapture?: FieldCapture;
 }
 
 export type CutBlockReason =
@@ -46,11 +49,13 @@ export type CutBlockReason =
   | "AUTHORIZATION_ALREADY_CONSUMED"
   | "AUTHORIZATION_CONSUMPTION_UNKNOWN"
   | "AUTHORIZATION_EXPIRED"
-  | "ORDER_CLAIM_CONFLICT";
+  | "ORDER_CLAIM_CONFLICT"
+  | "FIELD_CAPTURE_INCOMPLETE";
 
 export type CutProcessResult =
   | { outcome: "visit_recorded"; visit: VisitRecord; order?: WorkOrder }
   | { outcome: "executed"; operation: OperationRecord }
+  | { outcome: "pending_sync"; operation: OperationRecord }
   | { outcome: "physical_unknown"; operation: OperationRecord; lookupStatus: string }
   | { outcome: "recovery_required"; operation: OperationRecord; lookupStatus: string }
   | { outcome: "blocked"; reason: CutBlockReason; operation?: OperationRecord }
@@ -89,6 +94,7 @@ function operationChange(
       deviceId: operation.deviceId,
       errorCode: operation.errorCode,
       uncertain: operation.physicalStatus === "PHYSICAL_UNKNOWN",
+      fieldCapture: operation.fieldCapture,
     },
     evidence,
   };
@@ -131,8 +137,12 @@ function createIntent(
     updatedAt: input.now,
     attempts: 0,
     authorizationId: grant.authorizationId,
+    authorizationToken: grant.token,
+    authorizationVersion: grant.version,
+    authorizationConsumption: grant.consumption ?? "immediate",
     exceptionReason: input.exceptionReason,
     evidenceRefs,
+    fieldCapture: input.fieldCapture,
   };
 }
 
@@ -140,6 +150,7 @@ function createVisitFor(
   input: CutProcessInput,
   reason: CutBlockReason,
   errorCode?: string,
+  fieldCapture: FieldCapture | undefined = input.fieldCapture,
 ): VisitRecord {
   return createVisit({
     operationId: input.operationId,
@@ -151,6 +162,7 @@ function createVisitFor(
     evidenceRefs: input.evidence ? [input.evidence.evidenceId] : [],
     exceptionReason: input.exceptionReason,
     errorCode,
+    fieldCapture,
   });
 }
 
@@ -375,6 +387,12 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     technicianId: input.technicianId,
     deviceId: input.deviceId,
   });
+  try {
+    validateFieldCapture(input.fieldCapture, input.order.context?.meterId);
+  } catch (error) {
+    if (!(error instanceof DomainError)) throw error;
+    return recordVisit(input, createVisitFor(input, "FIELD_CAPTURE_INCOMPLETE", error.code, input.fieldCapture));
+  }
   assertCutEligible(input.order, input.technicianId);
   const expectedOrderVersion = requireOrderVersion(input.order);
 
@@ -441,6 +459,9 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
   }
 
   const claimedOrder = claimState.order;
+  if (authorizationResponse.grant.consumption === "deferred") {
+    return { outcome: "pending_sync", operation: intent };
+  }
   let consumeResponse: ConsumeResponse;
   try {
     consumeResponse = await input.authorization.consumeCut({

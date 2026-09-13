@@ -1,4 +1,4 @@
-import { assertAssignedOrder, assertOperationId, createVisit, DomainError, validateEvidence, type EvidenceReference, type VisitRecord, type WorkOrder } from "../domain";
+import { assertAssignedOrder, assertOperationId, createVisit, DomainError, validateEvidence, type EvidenceReference, type FieldCapture, type VisitRecord, type WorkOrder } from "../domain";
 import type { AtomicOperationChange, LocalRepository, StoredRecord } from "../ports/repository";
 
 export interface OfflineVisitInput {
@@ -12,6 +12,7 @@ export interface OfflineVisitInput {
   exceptionReason?: string;
   evidence?: EvidenceReference;
   now: string;
+  fieldCapture?: FieldCapture;
 }
 
 export type OfflineVisitResult = { outcome: "visit_recorded"; visit: VisitRecord } | { outcome: "duplicate"; visit: VisitRecord };
@@ -48,6 +49,7 @@ export async function executeOfflineVisit(input: OfflineVisitInput): Promise<Off
     exceptionReason: input.exceptionReason,
     recordedAt: input.now,
     evidenceRefs: input.evidence ? [input.evidence.evidenceId] : [],
+    fieldCapture: input.fieldCapture,
   });
   const change: AtomicOperationChange = {
     visit,
@@ -59,6 +61,7 @@ export async function executeOfflineVisit(input: OfflineVisitInput): Promise<Off
       deviceId: visit.deviceId,
       status: "pending",
       attempts: visit.attempts,
+      fieldCapture: visit.fieldCapture,
     },
     evidence: input.evidence,
   };

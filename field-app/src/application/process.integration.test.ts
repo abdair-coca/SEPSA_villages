@@ -214,6 +214,17 @@ function input(repository: MemoryRepository, authorization: StubAuthorization, o
       height: 1000,
       optimized: true,
     },
+    fieldCapture: validFieldCapture(operationId),
+  };
+}
+
+function validFieldCapture(operationId: string) {
+  return {
+    reading: { value: 123.45, unit: "kWh" as const, meterId: "MED-1", recordedAt: "2026-09-11T10:01:00.000Z", status: "CAPTURED" as const },
+    location: { latitude: -17.39, longitude: -66.16, accuracyMeters: 8, recordedAt: "2026-09-11T10:01:00.000Z", status: "CAPTURED" as const },
+    cutType: "RED" as const,
+    nearbyMeters: false,
+    operationId,
   };
 }
 
@@ -308,6 +319,19 @@ describe("cut process integration boundaries", () => {
       operationId: "operation-00000000-0000-4000-8000-000000000001",
       orderVersion: 1,
     });
+  });
+
+  it("persists deferred authorization without consuming before synchronization", async () => {
+    const repository = new MemoryRepository();
+    const authorization = new StubAuthorization();
+    const operationId = "operation-deferred-00000000-0000-4000-8000-000000000099";
+    authorization.requestResponse = { status: "authorized", grant: { ...grant(operationId), consumption: "deferred" } };
+
+    const result = await executeCut(input(repository, authorization, operationId));
+
+    expect(result.outcome).toBe("pending_sync");
+    expect(authorization.consumeCalls).toHaveLength(0);
+    expect(result).toMatchObject({ operation: { status: "INTENT_PERSISTED", physicalStatus: "CLAIMED", authorizationToken: "opaque-token", authorizationVersion: 1 } });
   });
 
   it("treats an already-consumed authorization as physical uncertainty", async () => {

@@ -42,7 +42,7 @@ export interface LocalRepository {
   updateSyncState(
     operationId: string,
     status: SyncItem["status"],
-    options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean },
+    options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean; remoteConfirmed?: boolean },
   ): Promise<void>;
   recoverInFlight?(now?: string): Promise<void>;
   recordConflict?(conflict: ConflictRecord): Promise<void>;

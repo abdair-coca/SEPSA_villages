@@ -6,7 +6,7 @@ import {
   type CutProcessResult,
   type ReconnectionResult,
 } from "../application";
-import { DomainError, generateOperationId, type EvidenceReference, type ConnectivityMode, type WorkOrder, type WorkPackage } from "../domain";
+import { DomainError, generateOperationId, type EvidenceReference, type ConnectivityMode, type FieldCapture, type WorkOrder, type WorkPackage } from "../domain";
 import type { AuthorizationAdapter, EnablementAdapter } from "../ports/authorization";
 import type { ConnectivityPort, LocalRepository, StoredRecord } from "../ports";
 import type { SyncItem } from "../ports/sync";
@@ -28,6 +28,8 @@ export interface ActionInput {
   file?: File;
   exceptionReason?: string;
   reason?: string;
+  fieldCapture?: FieldCapture;
+  gpsExceptionReason?: string;
 }
 
 export interface AppMessage {
@@ -66,6 +68,8 @@ export interface AppStoreDependencies {
   seedPackage?: WorkPackage;
   prepareExternalValidation?: PrepareExternalValidation;
   now?: () => string;
+  technicianId?: string;
+  deviceId?: string;
 }
 
 export type PrepareExternalValidation = (action: Exclude<ActionKind, "VISIT">, order: WorkOrder, operationId: string, now: string) => void;
@@ -92,6 +96,8 @@ interface SeedableRepository extends LocalRepository {
 
 export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   const now = dependencies.now ?? (() => new Date().toISOString());
+  const technicianId = dependencies.technicianId ?? DEMO_TECHNICIAN_ID;
+  const deviceId = dependencies.deviceId ?? DEMO_DEVICE_ID;
   const listeners = new Set<() => void>();
   let snapshot: AppState = {
     status: "loading",
@@ -199,17 +205,18 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       await runWithBusy("VISIT", async () => {
         const operationId = generateOperationId("visit");
         const timestamp = now();
-        const evidence = await prepareEvidence(input, order, operationId, DEMO_TECHNICIAN_ID, DEMO_DEVICE_ID);
+        const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
         const result = await executeOfflineVisit({
           repository: dependencies.repository,
           order,
           operationId,
-          technicianId: DEMO_TECHNICIAN_ID,
-          deviceId: DEMO_DEVICE_ID,
+          technicianId,
+          deviceId,
           attemptedAction: order.status === "EJECUTADO" ? "RECONNECTION" : "CUT",
           reason: input.reason ?? "Visita de campo sin ejecución",
           exceptionReason: input.exceptionReason,
           evidence,
+          fieldCapture: input.fieldCapture,
           now: timestamp,
         });
         await refresh();
@@ -222,18 +229,19 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       return runWithBusy("CUT", async () => {
         const operationId = generateOperationId("cut");
         const timestamp = now();
-        const evidence = await prepareEvidence(input, order, operationId, DEMO_TECHNICIAN_ID, DEMO_DEVICE_ID);
+        const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
         dependencies.prepareExternalValidation?.("CUT", order, operationId, timestamp);
         const result = await runCut({
           repository: dependencies.repository,
           authorization: dependencies.authorization,
           order,
           operationId,
-          technicianId: DEMO_TECHNICIAN_ID,
-          deviceId: DEMO_DEVICE_ID,
+          technicianId,
+          deviceId,
           now: timestamp,
           evidence,
           exceptionReason: input.exceptionReason,
+          fieldCapture: input.fieldCapture,
         });
         await refresh();
         update({ message: messageForCut(result, snapshot.mode) });
@@ -245,15 +253,15 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       return runWithBusy("RECONNECTION", async () => {
         const operationId = generateOperationId("reconnection");
         const timestamp = now();
-        const evidence = await prepareEvidence(input, order, operationId, DEMO_TECHNICIAN_ID, DEMO_DEVICE_ID);
+        const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
         dependencies.prepareExternalValidation?.("RECONNECTION", order, operationId, timestamp);
         const result = await runReconnection({
           repository: dependencies.repository,
           enablement: dependencies.enablement,
           order,
           operationId,
-          technicianId: DEMO_TECHNICIAN_ID,
-          deviceId: DEMO_DEVICE_ID,
+          technicianId,
+          deviceId,
           now: timestamp,
           evidence,
           exceptionReason: input.exceptionReason,
@@ -274,7 +282,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
 
   function getAssignedOrder(orderId: string): WorkOrder {
     const order = snapshot.orders.find((candidate) => candidate.orderId === orderId);
-    if (!order || order.assignedTechnicianId !== DEMO_TECHNICIAN_ID) throw new DomainError("Order is not assigned to this technician.", "ORDER_NOT_ASSIGNED");
+    if (!order || order.assignedTechnicianId !== technicianId) throw new DomainError("Order is not assigned to this technician.", "ORDER_NOT_ASSIGNED");
     return order;
   }
 
@@ -347,9 +355,9 @@ export function selectVisibleOrders(state: AppState): WorkOrder[] {
 }
 
 function assertPackageScope(workPackage: WorkPackage, dependencies: AppStoreDependencies): void {
-  if (workPackage.technicianId !== DEMO_TECHNICIAN_ID || workPackage.deviceId !== DEMO_DEVICE_ID) throw new Error("El paquete local pertenece a otra identidad.");
+  if (workPackage.technicianId !== (dependencies.technicianId ?? DEMO_TECHNICIAN_ID) || workPackage.deviceId !== (dependencies.deviceId ?? DEMO_DEVICE_ID)) throw new Error("El paquete local pertenece a otra identidad.");
   if (!Number.isFinite(workPackage.version) || workPackage.version < 1) throw new Error("El paquete local no tiene una versión válida.");
-  if (workPackage.orders.some((order) => order.assignedTechnicianId !== DEMO_TECHNICIAN_ID)) throw new Error("El paquete contiene órdenes fuera de asignación.");
+  if (workPackage.orders.some((order) => order.assignedTechnicianId !== (dependencies.technicianId ?? DEMO_TECHNICIAN_ID))) throw new Error("El paquete contiene órdenes fuera de asignación.");
 }
 
 function setAdapterMode(adapter: unknown, mode: ConnectivityMode): void {
@@ -367,6 +375,14 @@ function readableError(error: unknown): string {
       EVIDENCE_FORMAT_INVALID: "La evidencia debe ser JPEG o PNG.",
       EVIDENCE_NOT_OPTIMIZED: "La evidencia debe quedar preparada en cinco megapíxeles o menos.",
       VISIT_REASON_REQUIRED: "Escriba un motivo para registrar la visita.",
+      FIELD_CAPTURE_REQUIRED: "Complete lectura, tipo de corte, GPS y verificación de medidores.",
+      METER_READING_REQUIRED: "Ingrese lectura final válida del medidor.",
+      METER_READING_INVALID: "La lectura debe estar asociada al medidor descargado.",
+      GPS_REQUIRED: "Capture GPS o registre una excepción controlada.",
+      GPS_COORDINATES_INVALID: "Las coordenadas GPS no son válidas.",
+      GPS_ACCURACY_INVALID: "La precisión GPS no es válida.",
+      CUT_TYPE_INVALID: "Seleccione tipo de corte válido.",
+      NEARBY_METERS_REQUIRED: "Indique si verificó medidores cercanos.",
     };
     return messages[error.code] ?? "La operación no pudo continuar. Revise datos locales.";
   }
@@ -374,6 +390,7 @@ function readableError(error: unknown): string {
 }
 
 function messageForCut(result: CutProcessResult, mode: ConnectivityMode): AppMessage {
+  if (result.outcome === "pending_sync") return { tone: "info", text: "Corte guardado localmente; el servidor debe confirmarlo al sincronizar." };
   if (result.outcome === "executed") return { tone: "success", text: mode === "offline" ? "Corte guardado localmente." : "Corte registrado localmente y pendiente de sincronización." };
   if (result.outcome === "visit_recorded") return { tone: "info", text: "Visita guardada; corte bloqueado por validación externa." };
   if (result.outcome === "physical_unknown" || result.outcome === "recovery_required") return { tone: "warning", text: "Resultado incierto. Revisión humana requerida; no repetir esta acción." };

@@ -84,6 +84,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     const syncStore = transaction.objectStore("sync");
     const currentEnvelope = fromStoredEnvelope(await requestResult(packageStore.get(this.packageKey(envelope.package.packageId))) as StoredPackageEnvelope | undefined);
     const currentOrders = await Promise.all(envelope.package.orders.map((order) => requestResult(orderStore.get(this.orderKey(order.orderId))))).then((orders) => orders.map(fromStoredOrder)) as Array<WorkOrder | undefined>;
+    const localOrders = (await requestResult(orderStore.getAll()) as StoredOrderOrder[]).map(fromStoredOrder).filter((order): order is WorkOrder => Boolean(order));
     for (let index = 0; index < currentOrders.length; index += 1) {
       const current = currentOrders[index];
       const incoming = envelope.package.orders[index];
@@ -95,7 +96,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     const syncItems = await requestResult(syncStore.getAll()) as SyncItem[];
     const protectedOrderIds = new Set(
       syncItems
-        .filter((item) => this.identityMatches(item) && item.status !== "synced")
+        .filter((item) => this.identityMatches(item) && (item.status !== "synced" || item.manualReview))
         .map((item) => item.orderId)
         .filter((orderId): orderId is string => Boolean(orderId)),
     );
@@ -106,11 +107,19 @@ export class IndexedDbLocalRepository implements LocalRepository {
       return current && (protectedByVersion || protectedByPhysicalState || protectedOrderIds.has(current.orderId)) ? current : incoming;
     });
     const incomingEnvelope = { ...envelope, packageId: envelope.package.packageId };
+    const strictlyNewerPackage = Boolean(currentEnvelope && currentEnvelope.package.version < incomingEnvelope.package.version);
+    const incomingOrderIds = new Set(incomingEnvelope.package.orders.map((order) => order.orderId));
     try {
       if (!currentEnvelope || currentEnvelope.package.version <= incomingEnvelope.package.version) {
         packageStore.put(toStoredEnvelope(incomingEnvelope, this.packageKey(incomingEnvelope.package.packageId)));
       }
       for (const order of mergedOrders) orderStore.put(toStoredOrder(order, this.orderKey(order.orderId)));
+      if (strictlyNewerPackage) {
+        for (const order of localOrders) {
+          if (incomingOrderIds.has(order.orderId) || order.physicalStatus !== "NONE" || protectedOrderIds.has(order.orderId)) continue;
+          orderStore.delete(this.orderKey(order.orderId));
+        }
+      }
     } catch (error) {
       transaction.abort();
       throw error;
@@ -365,10 +374,10 @@ export class IndexedDbLocalRepository implements LocalRepository {
   async updateSyncState(
     operationId: string,
     status: SyncItem["status"],
-    options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean },
+    options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean; remoteConfirmed?: boolean },
   ): Promise<void> {
     const db = await this.dbPromise;
-    const transaction = db.transaction(["operations", "visits", "sync"], "readwrite");
+    const transaction = db.transaction(["operations", "visits", "orders", "sync"], "readwrite");
     const syncStore = transaction.objectStore("sync");
     const current = (await requestResult(syncStore.get(operationId))) as SyncItem | undefined;
     if (!current || !this.identityMatches(current)) {
@@ -400,7 +409,18 @@ export class IndexedDbLocalRepository implements LocalRepository {
         transaction.abort();
         throw new Error("Operation is outside this technician and device scope.");
       }
-      this.putRecord(transaction, { ...record, syncStatus: status, errorCode: options.errorCode } as StoredRecord);
+      const confirmedRecord = options.remoteConfirmed && record.kind !== "VISIT"
+        ? { ...record, status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: status, errorCode: undefined } as OperationRecord
+        : { ...record, syncStatus: status, errorCode: options.errorCode } as StoredRecord;
+      this.putRecord(transaction, confirmedRecord);
+      if (options.remoteConfirmed && record.kind !== "VISIT") {
+        const order = fromStoredOrder(await requestResult(transaction.objectStore("orders").get(this.orderKey(record.orderId))) as StoredOrderOrder | undefined);
+        if (!order) {
+          transaction.abort();
+          throw new Error("Confirmed operation order is missing from local repository.");
+        }
+        transaction.objectStore("orders").put(toStoredOrder({ ...order, status: record.action === "CUT" ? "EJECUTADO" : "RECONEXIÓN", physicalStatus: "CONFIRMED" }, this.orderKey(order.orderId)));
+      }
     }
     await transactionComplete(transaction);
   }

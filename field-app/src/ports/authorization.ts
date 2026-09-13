@@ -25,6 +25,8 @@ export interface AuthorizationGrant {
   version: number;
   issuedAt: string;
   expiresAt: string;
+  /** HTTP pilot consumes grant during operation synchronization. */
+  consumption?: "immediate" | "deferred";
 }
 
 export interface PaymentDetection {

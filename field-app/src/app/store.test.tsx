@@ -112,7 +112,7 @@ describe("field app store", () => {
     const { store } = setup("store-offline-cut");
     await store.init();
     store.setMode("offline");
-    await store.executeCut("ORD-24017", { exceptionReason: "Señal insuficiente para validación externa." });
+    await store.executeCut("ORD-24017", { exceptionReason: "Señal insuficiente para validación externa.", fieldCapture: validFieldCapture() });
     expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")).toMatchObject({ status: "GENERADO", physicalStatus: "NONE" });
     expect(store.getSnapshot().syncItems).toMatchObject([{ action: "VISIT", status: "pending" }]);
     expect(store.getSnapshot().message?.text).toMatch(/bloqueado por validación externa/i);
@@ -121,7 +121,7 @@ describe("field app store", () => {
   it("configures five-minute demo grant before an online cut use case", async () => {
     const { store } = setup("store-online-cut", true);
     await store.init();
-    await store.executeCut("ORD-24017", { exceptionReason: "Referencia de demostración." });
+    await store.executeCut("ORD-24017", { exceptionReason: "Referencia de demostración.", fieldCapture: validFieldCapture() });
     expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")).toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED" });
   });
 
@@ -131,7 +131,7 @@ describe("field app store", () => {
     const content = new Blob(["durable evidence"], { type: "image/jpeg" });
     const digest = await crypto.subtle.digest("SHA-256", await content.arrayBuffer());
     const contentHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-    await first.store.executeCut("ORD-24017", { evidence: { evidenceId: "evidence-store-restart", mimeType: "image/jpeg", width: 100, height: 100, optimized: true, content, contentHash } });
+    await first.store.executeCut("ORD-24017", { evidence: { evidenceId: "evidence-store-restart", mimeType: "image/jpeg", width: 100, height: 100, optimized: true, content, contentHash }, fieldCapture: validFieldCapture() });
     const item = first.store.getSnapshot().syncItems.find((candidate) => candidate.action === "CUT");
     if (!item) throw new Error("Expected persisted cut queue item.");
     const record = await first.repository.getRecord(item.operationId);
@@ -157,7 +157,7 @@ describe("field app store", () => {
     await store.init();
     vi.stubGlobal("createImageBitmap", async () => ({ width: 100, height: 100, close: () => undefined }));
     try {
-      await store.executeCut("ORD-24017", { file: new File(["file evidence"], "field.jpg", { type: "image/jpeg" }) });
+      await store.executeCut("ORD-24017", { file: new File(["file evidence"], "field.jpg", { type: "image/jpeg" }), fieldCapture: validFieldCapture() });
     } finally {
       vi.unstubAllGlobals();
     }
@@ -190,3 +190,12 @@ describe("field app store", () => {
     expect(markup).toContain("indexeddb no está disponible");
   });
 });
+
+function validFieldCapture() {
+  return {
+    reading: { value: 123.45, unit: "kWh" as const, meterId: "MED-1001", recordedAt: "2026-09-12T10:00:00.000Z", status: "CAPTURED" as const },
+    location: { latitude: -17.39, longitude: -66.16, accuracyMeters: 8, recordedAt: "2026-09-12T10:00:00.000Z", status: "CAPTURED" as const },
+    cutType: "RED" as const,
+    nearbyMeters: false,
+  };
+}

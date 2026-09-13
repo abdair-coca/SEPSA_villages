@@ -80,7 +80,7 @@ export class SyncEngine {
       return "failed";
     }
 
-    if (isPendingPhysicalOperation(record)) {
+    if (isPendingPhysicalOperation(record) && !hasDeferredAuthorization(record)) {
       await this.repository.recoverPhysicalUnknown(item.operationId, this.now(), {
         owner: this.owner,
         leaseToken: leaseToken(item),
@@ -97,7 +97,7 @@ export class SyncEngine {
         return "failed";
       }
       if (lookup.status === "confirmed") {
-        await this.finish(item, "synced", { uncertain: false });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true });
         return "synced";
       }
       await this.fail(item, lookup.status === "unknown" ? lookup.errorCode ?? "LOOKUP_UNKNOWN" : "LOOKUP_NOT_FOUND", true);
@@ -117,7 +117,7 @@ export class SyncEngine {
         return "failed";
       }
       if (lookup.status === "confirmed") {
-        await this.finish(item, "synced", { uncertain: false });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true });
         return "synced";
       }
       if (lookup.status === "unknown") {
@@ -134,7 +134,7 @@ export class SyncEngine {
         return "failed";
       }
       if (response.status === "acknowledged") {
-        await this.finish(item, "synced", { uncertain: false });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: record.kind !== "VISIT" });
         return "synced";
       }
       if (response.status === "conflict") {
@@ -159,7 +159,7 @@ export class SyncEngine {
     }
   }
 
-  private async finish(item: SyncItem, status: SyncItem["status"], options: { uncertain?: boolean; errorCode?: string } = {}): Promise<void> {
+  private async finish(item: SyncItem, status: SyncItem["status"], options: { uncertain?: boolean; errorCode?: string; remoteConfirmed?: boolean } = {}): Promise<void> {
     await this.repository.updateSyncState(item.operationId, status, { ...options, owner: this.owner, leaseToken: leaseToken(item), now: this.now() });
   }
 
@@ -179,6 +179,12 @@ function toPayload(record: OperationRecord | VisitRecord): SyncPayload {
     deviceId: record.deviceId,
     recordedAt: record.recordedAt,
     evidenceRefs: [...record.evidenceRefs],
+    orderVersion: record.kind === "VISIT" ? undefined : record.authorizationVersion,
+    authorizationId: record.kind === "VISIT" ? undefined : record.authorizationId,
+    authorizationToken: record.kind === "VISIT" ? undefined : record.authorizationToken,
+    reason: visit ? record.reason : undefined,
+    exceptionReason: record.exceptionReason,
+    fieldCapture: record.fieldCapture,
   };
 }
 
@@ -188,6 +194,10 @@ function isVisitRecord(record: OperationRecord | VisitRecord): record is VisitRe
 
 function isPendingPhysicalOperation(record: StoredRecord): record is OperationRecord {
   return record.kind !== "VISIT" && (record.status === "INTENT_PERSISTED" || record.physicalStatus === "CLAIMED");
+}
+
+function hasDeferredAuthorization(record: StoredRecord): record is OperationRecord {
+  return record.kind !== "VISIT" && record.authorizationConsumption === "deferred";
 }
 
 function errorCode(error: unknown, fallback: string): string {

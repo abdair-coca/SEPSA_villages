@@ -1,4 +1,4 @@
-import type { SyncStatus } from "../domain";
+import type { FieldCapture, SyncStatus } from "../domain";
 
 export interface SyncItem {
   operationId: string;
@@ -15,6 +15,7 @@ export interface SyncItem {
   leaseExpiresAt?: string;
   leaseToken?: string;
   manualReview?: boolean;
+  fieldCapture?: FieldCapture;
 }
 
 export interface SynchronizationPort {
@@ -32,6 +33,12 @@ export interface SyncPayload {
   recordedAt: string;
   evidenceRefs: string[];
   attemptedAction?: "CUT" | "RECONNECTION";
+  orderVersion?: number;
+  authorizationId?: string;
+  authorizationToken?: string;
+  reason?: string;
+  exceptionReason?: string;
+  fieldCapture?: FieldCapture;
 }
 
 export type SyncTransportResponse =

@@ -2,6 +2,140 @@ export type WorkOrderStatus = "GENERADO" | "EJECUTADO" | "RECONEXIÓN" | "ANULAD
 export type PhysicalStatus = "NONE" | "CLAIMED" | "CONFIRMED" | "PHYSICAL_UNKNOWN";
 export type SyncStatus = "pending" | "syncing" | "synced" | "failed";
 export type ConnectivityMode = "online" | "weak" | "offline";
+export type Role = "ADMIN" | "TECHNICIAN";
+export type AuthorizedAction =
+  | "FIND_DEBTORS"
+  | "CREATE_ORDER"
+  | "ASSIGN_ORDER"
+  | "DOWNLOAD_ASSIGNED"
+  | "VIEW_AUDIT"
+  | "SYNC_OPERATION"
+  | "VIEW_ORDERS";
+
+export interface DemoCredentials {
+  username: string;
+  password: string;
+}
+
+export interface Session {
+  sessionId: string;
+  userId: string;
+  username: string;
+  role: Role;
+  permissions: AuthorizedAction[];
+  issuedAt: string;
+  authenticity: "SIMULATED" | "PILOT_PROVISIONAL";
+  /** Provisional HTTP session token; kept in memory by the remote adapter. */
+  sessionToken?: string;
+  expiresAt?: string;
+}
+
+export interface SimulatedUser {
+  userId: string;
+  username: string;
+  displayName: string;
+  role: Role;
+  enabled: boolean;
+  source: "SIMULATED";
+}
+
+export type OrderPurpose = "CUT";
+
+export interface KardexEntry {
+  entryId: string;
+  period: string;
+  amountCents: number;
+  status: "PENDING" | "PAID";
+}
+
+export interface OperationalContext {
+  debtorId: string;
+  accountId: string;
+  supplyId: string;
+  customerName: string;
+  address: string;
+  references: string;
+  meterId: string;
+  area: string;
+  locality: string;
+  route: string;
+  debtCents: number;
+  monthsPending: number;
+  updatedAt: string;
+  source: "SIMULATED";
+  kardex: KardexEntry[];
+}
+
+export interface LocationCapture {
+  latitude?: number;
+  longitude?: number;
+  accuracyMeters?: number;
+  recordedAt: string;
+  status: "CAPTURED" | "UNAVAILABLE" | "BYPASSED";
+  exceptionReason?: string;
+}
+
+export interface MeterReading {
+  value?: number;
+  unit: "kWh";
+  meterId: string;
+  recordedAt: string;
+  status: "CAPTURED" | "UNAVAILABLE";
+  exceptionReason?: string;
+}
+
+export type CutType = "RED" | "MEDIDOR" | "BARRAS" | "PROTECCION" | "ACOMETIDA" | "FUSIBLES";
+
+export interface FieldCapture {
+  reading: MeterReading;
+  location: LocationCapture;
+  cutType: CutType;
+  nearbyMeters: boolean;
+}
+
+export interface DebtorRecord extends OperationalContext {}
+
+export interface DebtorQuery {
+  query?: string;
+  area?: string;
+  locality?: string;
+  route?: string;
+  session?: Session;
+}
+
+export interface CreateOrderCommand {
+  operationId: string;
+  debtorId: string;
+  purpose: OrderPurpose;
+  session?: Session;
+}
+
+export interface AssignOrderCommand {
+  operationId: string;
+  orderId: string;
+  technicianId: string;
+  expectedOrderVersion: number;
+  session?: Session;
+}
+
+export interface AuditEvent {
+  auditId: string;
+  actorId: string;
+  actorRole?: Role;
+  action: string;
+  entityId?: string;
+  orderId?: string;
+  operationId?: string;
+  result: "accepted" | "rejected";
+  reason?: string;
+  transition?: {
+    before: { assignedTechnicianId: string; version: number };
+    after: { assignedTechnicianId: string; version: number };
+  };
+  deviceId?: string;
+  occurredAt: string;
+  source: "SIMULATED";
+}
 
 export interface WorkOrder {
   orderId: string;
@@ -9,6 +143,15 @@ export interface WorkOrder {
   status: WorkOrderStatus;
   physicalStatus: PhysicalStatus;
   version?: number;
+  purpose?: OrderPurpose;
+  debtorId?: string;
+  accountId?: string;
+  supplyId?: string;
+  referenceBalanceCents?: number;
+  createdBy?: string;
+  createdAt?: string;
+  origin?: "SIMULATED";
+  context?: OperationalContext;
   cancellation?: CancellationDetails;
 }
 
@@ -55,6 +198,7 @@ export interface VisitRecord {
   attempts: number;
   errorCode?: string;
   syncStatus: SyncStatus;
+  fieldCapture?: FieldCapture;
 }
 
 export interface EvidenceReference {
@@ -85,10 +229,14 @@ export interface OperationRecord {
   updatedAt: string;
   attempts: number;
   authorizationId?: string;
+  authorizationToken?: string;
+  authorizationVersion?: number;
+  authorizationConsumption?: "immediate" | "deferred";
   exceptionReason?: string;
   cancellation?: CancellationDetails;
   evidenceRefs: string[];
   errorCode?: string;
+  fieldCapture?: FieldCapture;
 }
 
 export function generateOperationId(prefix = "operation"): string {
