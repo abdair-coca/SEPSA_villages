@@ -41,12 +41,25 @@ try {
   await cdp.send("Runtime.enable");
   await cdp.send("Network.enable");
   await cdp.send("Page.navigate", { url: appUrl });
-  await waitForExpression(cdp, `document.body.innerText.includes("ORD-24017")`);
+  await login(cdp, "admin.simulated", "SIMULATED-admin-003");
+  await waitForExpression(cdp, `document.body.innerText.includes("Centro de control")`);
+  await waitForExpression(cdp, `document.querySelector(".operations-search .admin-record") !== null`);
+  await evaluate(cdp, `document.querySelector(".operations-search .admin-record")?.click()`);
+  await waitForExpression(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("Crear orden"))?.disabled === false`);
+  await evaluate(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("Crear orden"))?.click()`);
+  await waitForExpression(cdp, `document.body.innerText.includes("Orden creada")`);
+  await waitForExpression(cdp, `[...document.querySelectorAll(".operations-orders button")].some((button) => button.textContent.includes("order-"))`);
+  await evaluate(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("order-"))?.click()`);
+  await waitForExpression(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("Asignar"))?.disabled === false`);
+  await evaluate(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("Asignar"))?.click()`);
+  await waitForExpression(cdp, `document.body.innerText.includes("Orden asignada")`);
+  await evaluate(cdp, `[...document.querySelectorAll("button")].find((button) => button.textContent.includes("Cerrar sesión"))?.click()`);
+  await login(cdp, "camila.simulated", "SIMULATED-camila-003");
+  await waitForExpression(cdp, `document.body.innerText.includes("Mis órdenes")`);
+  await waitForExpression(cdp, `document.querySelector(".order-item") !== null`);
 
   await evaluate(cdp, `
-    [...document.querySelectorAll("button")]
-      .find((button) => button.textContent.includes("ORD-24017"))
-      ?.click()
+    document.querySelector(".order-item")?.click()
   `);
   await waitForExpression(cdp, `document.body.innerText.includes("Registrar visita")`);
   await evaluate(cdp, `
@@ -55,6 +68,7 @@ try {
       ?.click()
   `);
   await waitForExpression(cdp, `document.body.innerText.includes("Confirmar datos")`);
+  await waitForExpression(cdp, `[...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Confirmar")`);
   await evaluate(cdp, `
     [...document.querySelectorAll("button")]
       .find((button) => button.textContent.trim() === "Confirmar")
@@ -81,13 +95,6 @@ try {
   `, true);
   console.log(JSON.stringify({ serviceWorker }, null, 2));
 
-  await evaluate(cdp, `
-    [...document.querySelectorAll("button")]
-      .find((button) => button.textContent.includes("Cola"))
-      ?.click()
-  `);
-  await waitForExpression(cdp, `document.body.innerText.includes("Pendiente")`);
-
   stopProcessTree(preview.pid);
   preview = undefined;
   await delay(500);
@@ -96,7 +103,9 @@ try {
   await evaluate(cdp, `document.documentElement.dataset.pwaSmokeDocument = ${JSON.stringify(documentToken)}`);
   await cdp.send("Page.navigate", { url: appUrl });
   await waitForExpression(cdp, `document.documentElement.dataset.pwaSmokeDocument !== ${JSON.stringify(documentToken)}`);
-  await waitForExpression(cdp, `document.body.innerText.includes("ORD-24017")`);
+  await login(cdp, "camila.simulated", "SIMULATED-camila-003");
+  await waitForExpression(cdp, `document.body.innerText.includes("Mis órdenes")`);
+  await waitForExpression(cdp, `document.querySelector(".order-item") !== null`);
   await evaluate(cdp, `
     [...document.querySelectorAll("button")]
       .find((button) => button.textContent.includes("Cola"))
@@ -106,7 +115,7 @@ try {
 
   const offlineState = await evaluate(cdp, `({
     shell: document.body.innerText.includes("Jornada de campo"),
-    orders: document.body.innerText.includes("ORD-24017"),
+    orders: document.body.innerText.includes("Cola de trabajo"),
     pendingVisit: document.body.innerText.includes("Pendiente"),
     networkError: document.body.innerText.includes("ERR_CONNECTION_REFUSED"),
   })`);
@@ -224,6 +233,17 @@ async function waitForExpression(cdp, expression) {
     .filter((event) => event.method === "Runtime.exceptionThrown" || event.method === "Network.loadingFailed")
     .slice(-10);
   throw new Error(`Timed out waiting for expression: ${expression}\n${JSON.stringify({ state, failures })}`);
+}
+
+async function login(cdp, username, password) {
+  await waitForExpression(cdp, `document.querySelector(".login-form") !== null`);
+  await evaluate(cdp, `(() => {
+    const inputs = [...document.querySelectorAll(".login-form input")];
+    const set = (input, value) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set; setter.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
+    set(inputs[0], ${JSON.stringify(username)});
+    set(inputs[1], ${JSON.stringify(password)});
+    document.querySelector(".login-form")?.requestSubmit();
+  })()`);
 }
 
 function stopProcessTree(pid) {
