@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pilot_provisional
+      POSTGRES_USER: pilot_provisional
+      POSTGRES_PASSWORD: pilot_provisional
+    ports:
+      - "15432:5432"
+    volumes:
+      - pilot-provisional-db:/var/lib/postgresql/data
+      - ./sql/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - ./sql/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pilot_provisional -d pilot_provisional"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://pilot_provisional:pilot_provisional@db:5432/pilot_provisional
+      PORT: 8080
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pilot-provisional-db:
