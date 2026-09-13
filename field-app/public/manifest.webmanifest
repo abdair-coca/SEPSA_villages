@@ -1,0 +1,15 @@
+{
+  "name": "SEPSA · Jornada de campo",
+  "short_name": "SEPSA Campo",
+  "description": "Herramienta offline de campo para órdenes asignadas.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3efe7",
+  "theme_color": "#c45b19",
+  "lang": "es",
+  "icons": [
+    { "src": "/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

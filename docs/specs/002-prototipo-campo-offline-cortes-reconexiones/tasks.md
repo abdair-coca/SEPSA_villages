@@ -44,8 +44,8 @@ Chain strategy: stacked-to-main
 
 ## Fase 3: UI, PWA y runtime
 
-- [ ] 3.1 Crear store y UI móvil: órdenes, búsqueda, detalle, visita, corte y reconexión.
-- [ ] 3.2 Mostrar evidencia, excepción justificada, estados y mensajes accionables; no solicitar GPS.
-- [ ] 3.3 Crear manifest, Service Worker y registro manual; cachear shell sin CDN.
-- [ ] 3.4 Probar UI offline, bloqueos, persistencia visual, cola y ausencia de pagos.
-- [ ] 3.5 Ejecutar build y prueba manual: instalación, reinicio, red intermitente, duplicado y conciliación.
+- [x] 3.1 Crear store y UI móvil: órdenes, búsqueda, detalle, visita, corte y reconexión.
+- [x] 3.2 Mostrar evidencia, excepción justificada, estados y mensajes accionables; no solicitar GPS.
+- [x] 3.3 Crear manifest, Service Worker y registro manual; cachear shell sin CDN.
+- [x] 3.4 Probar UI offline, bloqueos, persistencia visual, cola y ausencia de pagos.
+- [ ] 3.5 Ejecutar build y prueba Android real: instalación, reinicio, red intermitente, duplicado y conciliación.

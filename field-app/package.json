@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "smoke:pwa": "node scripts/pwa-smoke.mjs",
     "test": "vitest"
   },
   "dependencies": {
