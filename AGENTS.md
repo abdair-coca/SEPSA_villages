@@ -2,11 +2,11 @@
 
 ## 1. Propósito
 
-Este archivo define las reglas que deben seguir los agentes de IA y asistentes de código que trabajen en el proyecto de cobranza eléctrica rural de SEPSA.
+Este archivo define las reglas que deben seguir los agentes de IA y asistentes de código que trabajen en el sistema de operaciones eléctricas rurales de SEPSA.
 
-La prioridad es construir un sistema **confiable, Offline-First, simple para el técnico y seguro para las operaciones financieras**.
+La prioridad es construir un sistema **confiable, multirol, Offline-First para campo y seguro para órdenes que afectan un servicio esencial**.
 
-Antes de implementar cualquier funcionalidad, el agente debe consultar `constitucion.md` y tratarlo como la fuente principal de requisitos del producto.
+Antes de implementar cualquier funcionalidad, el agente debe consultar `docs/constitution.md` y tratarlo como la fuente principal de requisitos del producto.
 
 ---
 
@@ -30,7 +30,7 @@ Si una decisión no está definida:
 
 Orden de prioridad:
 
-1. `constitucion.md`
+1. `docs/constitution.md`
 2. Requisitos explícitos proporcionados por el equipo/SEPSA.
 3. Decisiones técnicas documentadas.
 4. Código existente.
@@ -88,7 +88,7 @@ No mostrar "éxito" si los datos locales no fueron persistidos correctamente.
 
 ### 4.3 No perder operaciones
 
-Una operación financiera confirmada no puede desaparecer por:
+Una operación administrativa, física o financiera confirmada no puede desaparecer por:
 
 - pérdida de conexión;
 - cierre de la aplicación;
@@ -101,17 +101,17 @@ Una operación financiera confirmada no puede desaparecer por:
 
 Las operaciones sincronizadas deben poder reintentarse sin producir duplicados.
 
-Los pagos y otras operaciones importantes deben tener identificadores únicos generados de forma segura.
+Las órdenes, lotes y operaciones físicas o financieras deben tener identificadores únicos generados de forma segura.
 
 ### 4.5 Trazabilidad
 
-Los cobros deben conservar información suficiente para saber:
+Las órdenes y ejecuciones deben conservar información suficiente para saber:
 
-- quién realizó el cobro;
-- cuándo;
-- a qué domicilio;
-- qué meses se pagaron;
-- cuánto se cobró;
+- quién creó y asignó la orden;
+- qué técnico la recibió y ejecutó;
+- cuándo ocurrió cada acción;
+- a qué cuenta, suministro y medidor corresponde;
+- qué autorización y evidencia respaldan el resultado;
 - identificador de operación;
 - estado de sincronización.
 
@@ -119,37 +119,31 @@ Los cobros deben conservar información suficiente para saber:
 
 ## 5. Reglas de negocio que el agente debe respetar
 
-### Cobro
+### Roles
 
-- El cobro es opcional durante una visita.
-- El único método de pago del MVP es efectivo.
-- Los pagos se realizan por meses completos.
-- Nunca permitir fracciones de mes.
-- Los meses más antiguos deben pagarse primero.
-- El técnico no puede seleccionar arbitrariamente meses posteriores dejando meses anteriores pendientes.
-- Después de confirmar un pago, la deuda local debe actualizarse inmediatamente.
+- El administrador puede consultar toda información operativa y ejecutar las funciones administrativas incluidas en el piloto.
+- Acceso administrativo total no incluye contraseñas, secretos ni credenciales técnicas.
+- El técnico solamente puede consultar y operar órdenes asignadas a su identidad.
+- Permisos deben validarse en la capa autoritativa; ocultar controles no es seguridad.
 
-Ejemplo:
+### Órdenes de corte
 
-```text
-21 meses pendientes
-        ↓
-Pago de 6 meses
-        ↓
-15 meses pendientes
-```
+- El primer incremento debe completar una orden individual de extremo a extremo antes de implementar creación masiva.
+- Ningún corte puede ejecutarse sin autorización online concluyente, vigente y de un solo uso.
+- Un pago confirmado antes del consumo de autorización prevalece y bloquea el corte.
+- Reasignaciones, anulaciones y conflictos deben conservar historial.
 
-### Lecturas
+### Lectura, GPS y evidencia
 
-La lectura del medidor **no forma parte del MVP actual**.
+- Lectura final del medidor forma parte del registro normal de corte.
+- GPS es obligatorio con excepción controlada `saltar_control_coordenadas`.
+- Evidencia fotográfica es obligatoria con excepción controlada `saltar_control_fotos`.
+- No inventar lectura, coordenadas, precisión ni evidencia.
+- Umbrales y políticas no confirmadas deben marcarse `TODO: VALIDAR CON SEPSA`.
 
-No implementar campos, flujos o persistencia de lecturas salvo solicitud explícita.
+### Cobranza
 
-### Domicilios
-
-El técnico solamente debe trabajar con sus domicilios asignados.
-
-No asumir que puede acceder a domicilios de otros técnicos.
+El técnico no recibe ni registra pagos dentro del flujo de corte. Continuidad de cobranza presencial como capacidad del producto permanece pendiente.
 
 ---
 
@@ -269,9 +263,9 @@ El agente debe conservar la distinción entre:
 
 ## 10. UX/UI
 
-La aplicación está destinada a técnicos trabajando en campo.
+El sistema tiene una experiencia administrativa y otra técnica de campo.
 
-Toda interfaz debe priorizar:
+La experiencia técnica debe priorizar:
 
 1. claridad;
 2. velocidad;
@@ -282,14 +276,14 @@ Toda interfaz debe priorizar:
 7. funcionamiento offline;
 8. información financiera claramente visible.
 
-Antes de agregar una pantalla, preguntar:
+La experiencia administrativa debe priorizar asignaciones, bloqueos, conflictos y trazabilidad. Antes de agregar una pantalla, preguntar:
 
-> ¿Esta pantalla ayuda directamente al técnico a completar su trabajo?
+> ¿Esta pantalla ayuda directamente al administrador o al técnico a completar su responsabilidad?
 
 Evitar:
 
-- dashboards innecesarios;
-- tablas administrativas;
+- dashboards decorativos sin utilidad operacional;
+- tablas administrativas sin una tarea operacional clara;
 - formularios largos;
 - configuraciones complejas;
 - animaciones que dificulten el uso;
@@ -327,34 +321,28 @@ No implementar toda la arquitectura futura de una sola vez.
 Orden recomendado:
 
 ### Paso 1
-Prototipo UX.
+Actualizar constitución, propuesta y especificaciones.
 
 ### Paso 2
-Modelo de dominio.
+Identidad y permisos para Administrador y Técnico.
 
 ### Paso 3
-Persistencia local.
+Búsqueda administrativa, creación y asignación de una orden individual.
 
 ### Paso 4
-Flujo de visitas.
+Descarga técnica y consulta offline de contexto completo.
 
 ### Paso 5
-Flujo de cobranza.
+Lectura, GPS, evidencia, autorización y ejecución del corte.
 
 ### Paso 6
-Comprobantes.
+Sincronización, resultado administrativo y auditoría de extremo a extremo.
 
 ### Paso 7
-Sync Queue.
+Creación y asignación masiva segura.
 
 ### Paso 8
-Sync Engine.
-
-### Paso 9
-Backend/API.
-
-### Paso 10
-Integración con SEPSA.
+Integración con SEPSA y validación Android en campo.
 
 Cada etapa debe poder probarse antes de avanzar.
 
@@ -364,21 +352,21 @@ Cada etapa debe poder probarse antes de avanzar.
 
 No construir funcionalidades solamente porque podrían ser útiles en el futuro.
 
-Ejemplos fuera del MVP:
+Ejemplos fuera del primer corte vertical:
 
 - IA;
 - IoT;
 - pagos digitales;
-- lectura automática;
+- medición automática o IoT;
 - rutas inteligentes;
 - analítica avanzada;
-- dashboard administrativo.
+- creación masiva, aunque está confirmada para el incremento siguiente.
 
 Si una funcionalidad futura aparece durante el desarrollo:
 
 1. documentarla;
 2. no implementarla automáticamente;
-3. mantener el MVP enfocado.
+3. mantener el piloto enfocado.
 
 ---
 

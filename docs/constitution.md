@@ -1,138 +1,128 @@
-# Constitución del Proyecto — Sistema de Cobranza Eléctrica Rural
+# Constitución del Proyecto — Sistema de Operaciones Eléctricas Rurales
 
 ## 1. Identidad
 
-- **Nombre provisional:** Sistema de Cobranza Eléctrica Rural
+- **Nombre provisional:** Sistema de Operaciones Eléctricas Rurales
 - **Institución:** SEPSA
-- **Usuario inicial:** Técnico de campo
-- **Plataforma inicial:** PWA instalable, optimizada para Android
+- **Usuarios iniciales:** Administrador y técnico de campo
+- **Plataformas iniciales:** experiencia administrativa web y PWA técnica optimizada para Android
 - **Arquitectura:** Offline-First
 
 ## 2. Propósito
 
-Crear una aplicación para que los técnicos de SEPSA gestionen sus domicilios asignados, consulten deudas, registren visitas y realicen cobros presenciales en efectivo, incluso cuando no exista conexión a Internet. Los cambios realizados offline deberán sincronizarse automáticamente al recuperar conectividad.
+Crear un sistema multirol para que un administrador identifique suministros morosos, genere y asigne órdenes de corte, y para que el técnico ejecute exclusivamente sus órdenes con contexto operativo completo, incluso cuando la conectividad sea limitada.
 
-El objetivo es reducir la dependencia del papel y facilitar una cobranza presencial simple, confiable y trazable en zonas rurales.
+El primer incremento será un corte vertical verificable: el administrador crea y asigna una orden individual; el técnico la descarga, consulta sus datos, captura información de campo, obtiene autorización, registra el resultado localmente y lo sincroniza; el administrador consulta luego la trazabilidad completa.
 
-## 3. Alcance del MVP
+## 3. Alcance del piloto operativo
 
-### Incluido
+### Incluido en el primer corte vertical
 
-- Inicio de sesión del técnico.
-- Visualización exclusiva de domicilios asignados.
-- Búsqueda y consulta de domicilios.
-- Consulta de meses adeudados y deuda total.
-- Registro de visita.
-- Cobro presencial en efectivo.
-- Pago exclusivamente por meses completos.
-- Aplicación automática de los meses más antiguos primero.
-- Actualización inmediata de deuda y meses pendientes.
-- Generación de comprobante.
-- Historial de cobros del técnico.
-- Persistencia local.
-- Cola de operaciones pendientes.
-- Estado de sincronización.
-- Sincronización automática al recuperar conexión.
+- Inicio de sesión y control de acceso para administrador y técnico.
+- Dashboard administrativo operacional.
+- Búsqueda de suministros morosos.
+- Creación individual de una orden de corte.
+- Asignación de la orden a un técnico.
+- Visualización administrativa de toda la información operativa del piloto.
+- Descarga de órdenes asignadas al técnico.
+- Consulta técnica de domicilio, cliente, medidor, Kardex y deuda asociados.
+- Dirección y mapa como ayudas complementarias de localización.
+- Captura de ubicación GPS, precisión y disponibilidad.
+- Registro de lectura del medidor.
+- Validación online obligatoria inmediatamente antes del corte.
+- Registro durable de visita, evidencia, corte ejecutado o bloqueo.
+- Persistencia local, cola idempotente y sincronización posterior.
+- Consulta administrativa del resultado y auditoría de extremo a extremo.
 
-### Fuera del MVP
+### Confirmado para incrementos posteriores
 
-- Registro de lecturas del medidor.
-- Medición automática del consumo.
-- IoT / smart meters.
-- Pagos digitales.
-- Cálculo propio de facturación.
-- Dashboard administrativo.
-- Gestión administrativa de técnicos.
-- IA.
-- Analítica avanzada.
-- Optimización automática de rutas.
+- Creación masiva y asignación masiva de órdenes con vista previa, confirmación e idempotencia por lote.
 
-## 4. Flujo principal
+### Fuera del primer corte vertical
+
+- Reconexiones nuevas; la capacidad histórica existente no se elimina.
+- Cobranza o recepción de pagos por el técnico dentro del flujo de corte.
+- Integración definitiva con una API oficial de SEPSA.
+- Cartografía offline avanzada u optimización automática de rutas.
+- Gestión completa del ciclo de vida de cuentas de usuario.
+- IoT, medición automática, IA y analítica avanzada.
+
+## 4. Flujo principal del corte vertical
 
 ```text
-Login
+Administrador autenticado
   ↓
-Mis domicilios
+Buscar suministro moroso
   ↓
-Seleccionar domicilio
+Crear orden individual
   ↓
-Consultar deuda
+Asignar técnico
   ↓
-Registrar visita
+Técnico sincroniza órdenes asignadas
   ↓
-¿El usuario paga?
-  ├── No → Finalizar visita
-  └── Sí → Seleccionar meses
-             ↓
-         Cobro en efectivo
-             ↓
-         Confirmación
-             ↓
-         Comprobante
-             ↓
-         Deuda actualizada
-             ↓
-         Pendiente de sincronización
-             ↓
-         Recuperar conexión
-             ↓
-         Sincronizar
+Consultar cliente, domicilio, medidor, Kardex y mapa
+  ↓
+Registrar visita, GPS, lectura y evidencia
+  ↓
+Obtener autorización online vigente
+  ├── Bloqueada o incierta → No cortar y registrar resultado
+  └── Autorizada → Ejecutar y confirmar corte
+                       ↓
+                 Persistir localmente
+                       ↓
+                 Sincronizar resultado
+                       ↓
+              Administrador consulta trazabilidad
 ```
 
 ## 5. Reglas de negocio
 
-### 5.1 Meses completos
+### 5.1 Roles y acceso
 
-Los pagos solo pueden representar una cantidad entera de meses. No se permiten fracciones.
+- El administrador puede consultar toda la información operativa y ejecutar todas las funciones administrativas incluidas en el piloto.
+- El acceso administrativo total no incluye secretos, contraseñas ni credenciales técnicas.
+- El técnico solo puede consultar y operar órdenes asignadas a su identidad.
+- Ocultar controles en la interfaz no sustituye la autorización del backend.
+- Toda acción administrativa o técnica debe registrar actor, fecha, entidad afectada y resultado.
 
-### 5.2 Meses más antiguos primero
+### 5.2 Creación y asignación
 
-El usuario siempre paga primero los meses pendientes más antiguos. El técnico no puede seleccionar arbitrariamente meses posteriores dejando meses anteriores pendientes.
+- Una orden debe identificar su origen, creador, suministro, técnico asignado, versión y estado.
+- Una misma deuda no debe originar órdenes activas duplicadas para el mismo propósito.
+- Una reasignación o anulación debe conservar historial; nunca debe sobrescribirse silenciosamente.
+- La creación masiva futura debe usar un identificador único de lote, vista previa y confirmación explícita.
 
-Ejemplo:
+### 5.3 Contexto técnico
 
-```text
-Deuda: Enero, Febrero, Marzo, Abril, Mayo
-Pago de 3 meses:
-✓ Enero
-✓ Febrero
-✓ Marzo
-✗ Abril
-✗ Mayo
-```
+Antes de actuar, el técnico debe poder identificar inequívocamente orden, cliente, domicilio o punto de suministro y medidor. Kardex, deuda y fecha de actualización deben ser visibles. El significado definitivo y relación entre estas entidades requiere validación con SEPSA.
 
-### 5.3 Actualización de deuda
+### 5.4 Autorización de corte
 
-Si un domicilio tiene 21 meses pendientes y paga 6, debe quedar inmediatamente con 15 meses pendientes. El mismo principio se aplica al importe de la deuda.
+- Ningún corte puede ejecutarse sin autorización online concluyente y vigente.
+- Pago y consumo de autorización deben serializarse atómicamente: si el pago se confirma primero, la orden pasa de `GENERADO` a `ANULADO` con causa y timestamp, y el corte queda bloqueado.
+- Timeout, ausencia de respuesta, `unknown`, `payment_detected` o `not_authorized` nunca significan autorización.
+- Cada autorización debe ser única, breve y vinculada a orden, técnico, dispositivo, operación y versión.
 
-### 5.4 Método de pago
+### 5.5 Captura y ejecución
 
-Durante el MVP el único método permitido es **efectivo**.
+- El registro normal del corte requiere lectura final del medidor, ubicación GPS y evidencia asociadas a orden, técnico, dispositivo y fecha.
+- El GPS debe usar coordenadas WGS84 y permitir la excepción controlada `saltar_control_coordenadas`; nunca se inventarán coordenadas.
+- La evidencia fotográfica debe permitir la excepción controlada `saltar_control_fotos`.
+- Umbral de precisión GPS, validación numérica de lectura y posibles excepciones de lectura quedan como `TODO: VALIDAR CON SEPSA`.
+- Un mapa complementa dirección y referencias; nunca será el único medio de localización.
+- El éxito solo puede mostrarse después de persistir localmente la operación.
 
-### 5.5 Cobro opcional
+### 5.6 Cobranza histórica
 
-Una visita no implica necesariamente un cobro. Si el usuario no paga, se registra la visita, pero no se crea un pago.
-
-### 5.6 Comprobante
-
-Cada cobro debe generar un comprobante digital con institución, cliente, código de domicilio, meses pagados, importe, método de pago, técnico, fecha, identificador único y estado de sincronización.
+Las reglas históricas de cobro presencial quedan fuera del primer corte vertical. Su continuidad dentro del producto debe confirmarse antes de reactivarlas o ampliarlas.
 
 ## 6. Offline-First
 
 El funcionamiento sin conexión es un requisito central, no una funcionalidad secundaria.
 
-Sin Internet el técnico debe poder:
+Sin Internet el técnico debe poder consultar el último paquete válido, identificar sus órdenes, revisar datos descargados y registrar visita, lectura, GPS disponible, evidencia y resultados no dependientes de autorización externa.
 
-- consultar sus domicilios;
-- buscar domicilios;
-- consultar deudas y meses pendientes;
-- registrar visitas;
-- registrar cobros;
-- generar comprobantes;
-- consultar cobros realizados;
-- continuar trabajando normalmente.
-
-La pérdida de conexión no debe bloquear el flujo operativo.
+La administración puede requerir conexión durante el primer incremento. La pérdida de conexión nunca habilita un corte: la autorización final continúa siendo online y obligatoria.
 
 ## 7. Persistencia local
 
@@ -183,8 +173,11 @@ La evolución esperada es:
 Situación inicial:
 Excel → carga/migración → sistema
 
+Piloto operativo:
+Fuente provisional identificada ↔ backend del piloto ↔ administración / aplicación técnica
+
 Situación futura:
-SEPSA API ↔ backend ↔ aplicación del técnico
+SEPSA API ↔ backend ↔ administración / aplicación técnica
 ```
 
 La aplicación no debe depender directamente del Excel.
@@ -214,35 +207,29 @@ El significado exacto de los campos que todavía no ha sido confirmado deberá v
 ## 12. Modelo conceptual inicial
 
 ```text
-Técnico
-   │
-   └── Asignaciones
-           │
-           ▼
-       Domicilio
-           │
-      ┌────┴────┐
-      ▼         ▼
-   Cliente    Medidor
-      │
-      ▼
-    Deuda
-      │
-      ▼
-    Meses
-      │
-      ▼
-    Pagos
-      │
-      ▼
- Comprobantes
+Administrador ── crea/asigna ── Orden de corte ── recibe ── Técnico
+                                  │
+                                  ▼
+                        Domicilio o suministro
+                           │       │       │
+                           ▼       ▼       ▼
+                        Cliente  Medidor  Ubicación
+                           │       │       │
+                           ▼       ▼       ▼
+                         Kardex  Lectura   GPS/Mapa
+                                  │
+                                  ▼
+                    Visita / Evidencia / Ejecución
+                                  │
+                                  ▼
+                         Auditoría y sincronización
 ```
 
-Este es un modelo conceptual y deberá validarse antes de definir el esquema definitivo.
+La base de conocimiento confirma relaciones operativas entre cuenta de suministro, orden, técnico y ejecución. Las cardinalidades marcadas como inferidas y cualquier historial entre cliente, domicilio y medidor deben validarse con SEPSA antes del esquema definitivo.
 
 ## 13. UX / UI
 
-La interfaz debe estar diseñada para técnicos que trabajan físicamente en campo.
+Cada rol tendrá una experiencia distinta sobre el mismo flujo operativo.
 
 Principios:
 
@@ -256,73 +243,70 @@ Principios:
 - información crítica visible inmediatamente;
 - estado de conexión siempre comprensible.
 
-La deuda, los meses pendientes y la acción de cobro deben tener prioridad visual.
-
-La aplicación no debe parecer un CRUD administrativo genérico.
+- La experiencia técnica debe priorizar identificación correcta, dirección, medidor, deuda, seguridad del corte y trabajo con una mano.
+- La experiencia administrativa debe priorizar trabajo pendiente, asignaciones, bloqueos, conflictos y trazabilidad, no gráficos decorativos.
+- Los datos simulados o provisionales deben identificarse claramente.
+- Ninguna pantalla debe parecer un CRUD genérico sin relación con el trabajo real.
 
 ## 14. Navegación inicial
 
-La navegación móvil tendrá cuatro áreas principales:
+### Administrador
 
-- Inicio
-- Domicilios
-- Cobros
-- Más
+- Dashboard operacional.
+- Morosos.
+- Órdenes.
+- Técnicos y asignaciones.
+- Auditoría.
+
+### Técnico
+
+- Jornada.
+- Órdenes asignadas.
+- Detalle operativo.
+- Pendientes de sincronización.
 
 ## 15. Pantallas principales
 
-### Inicio
+### Dashboard administrativo
 
-Mostrar técnico, domicilios asignados, pendientes, visitados, cobros, monto cobrado, última sincronización y estado de conexión.
+Mostrar estados operativos, físicos y de sincronización por separado. Debe distinguir órdenes sin asignar, `GENERADO`, `EJECUTADO`, `ANULADO`, bloqueadas y `PHYSICAL_UNKNOWN`, además de sincronización `pending`, `syncing`, `synced` y `failed`.
 
-### Domicilios
+### Búsqueda de morosos
 
-Mostrar exclusivamente los domicilios asignados al técnico. Incluir búsqueda y filtros básicos.
+Permitir localizar un registro por campos confirmados y abrir su contexto antes de crear una orden.
 
-### Detalle del domicilio
+### Creación y asignación individual
 
-Mostrar nombre, código, dirección, localidad, medidor, estado, meses pendientes, deuda total y acciones para registrar visita o cobrar.
+Mostrar suministro, deuda, medidor, advertencias y técnico seleccionado antes de confirmar.
 
-### Cobranza
+### Jornada técnica
 
-Mostrar deuda, cantidad de meses a pagar, meses que serán aplicados y total. Los meses se asignan automáticamente desde el más antiguo.
+Mostrar únicamente órdenes asignadas, última actualización, conectividad y estado de sincronización.
 
-### Confirmación de cobro
+### Detalle operativo
 
-Mostrar cliente, meses, total y método efectivo antes de confirmar.
+Mostrar cliente, domicilio, dirección, referencias, medidor, Kardex, deuda, mapa, fecha de datos y acciones de visita.
 
-### Pago registrado
+### Registro de campo y corte
 
-Mostrar meses pagados, importe, deuda restante, estado de sincronización y acceso al comprobante.
+Capturar lectura, GPS, precisión, evidencia, excepciones y autorización. Mostrar confirmación inequívoca antes de registrar resultado físico.
 
-### Comprobante
+### Trazabilidad administrativa
 
-Debe poder consultarse offline y contener un identificador único.
-
-### Historial
-
-Mostrar los cobros del técnico y su estado de sincronización.
+Mostrar creación, asignación, descarga, visita, autorización, resultado, sincronización, actor y timestamps sin permitir alteración silenciosa.
 
 ## 16. Seguridad e integridad
 
-Los cobros son operaciones financieras y deben preservar trazabilidad.
+Las órdenes de corte afectan un servicio esencial y deben preservar autorización, integridad y trazabilidad.
 
-El sistema debe evitar:
+El sistema debe evitar acceso entre técnicos, escalamiento de privilegios, órdenes duplicadas, cortes improcedentes, pérdida de operaciones, exposición innecesaria de datos personales y modificación silenciosa del historial.
 
-- cobros duplicados;
-- pérdida de operaciones;
-- modificación silenciosa de pagos;
-- comprobantes duplicados;
-- inconsistencias entre pagos y deuda.
-
-Cada operación financiera debe disponer de un identificador único y ser idempotente al sincronizar.
-
-No se debe utilizar simplemente “última escritura gana” para operaciones financieras.
+Cada orden, lote futuro y operación debe disponer de identificador único. Sincronización y comandos remotos deben ser idempotentes. No se debe utilizar “última escritura gana” para asignaciones, anulaciones, pagos, autorizaciones ni resultados físicos.
 
 ## 17. Arquitectura tecnológica objetivo
 
 ```text
-Frontend
+Administración web + PWA técnica
 React + TypeScript
 
 PWA
@@ -334,10 +318,10 @@ IndexedDB
 Sincronización
 Sync Engine + Sync Queue
 
-Backend futuro
+Backend del piloto
 API REST
 
-Base de datos futura
+Base de datos central
 PostgreSQL
 ```
 
@@ -353,90 +337,84 @@ La arquitectura debe permitir evolucionar desde el prototipo hacia el producto r
 - Validar el flujo real del técnico.
 - Definir el contrato de la futura API.
 
-### Fase 1 — Prototipo UX
+### Fase 1 — Base técnica histórica
 
-Construir un prototipo HTML/CSS/JS navegable para validar el flujo antes del backend.
+Conservar prototipo de campo offline de cortes/reconexiones ya implementado como base verificable.
 
-### Fase 2 — MVP PWA
+### Fase 2 — Corte vertical multirol
 
-Implementar autenticación, domicilios, deuda, visitas, cobros, comprobantes, almacenamiento local y sincronización.
+Implementar autenticación y permisos, búsqueda administrativa, creación y asignación individual, contexto técnico completo, captura de campo, corte, sincronización y auditoría administrativa.
 
-### Fase 3 — Integración
+### Fase 3 — Operación por lotes
 
-Conectar con la API de SEPSA.
+Agregar creación y asignación masiva con vista previa, deduplicación, confirmación y trazabilidad por lote.
 
-### Fase 4 — Validación en campo
+### Fase 4 — Integración y validación
 
-Probar con técnicos reales en condiciones reales de conectividad.
+Conectar contratos validados con SEPSA y probar en Android con usuarios reales, datos controlados y conectividad rural.
 
-### Fase 5 — Evolución
+### Fase 5 — Evolución confirmada
 
-Evaluar lecturas, mapas, rutas, administración, analítica, IoT e IA.
+Definir continuidad de cobranza, reconexiones, cartografía offline avanzada y otras capacidades solo mediante requisitos aprobados.
 
-## 19. Criterios de éxito del MVP
+## 19. Criterios de éxito del primer corte vertical
 
-El MVP debe permitir que un técnico:
-
-1. inicie sesión;
-2. vea únicamente sus domicilios;
-3. consulte una deuda sin conexión;
-4. registre una visita sin conexión;
-5. registre un cobro en efectivo sin conexión;
-6. seleccione únicamente meses completos;
-7. aplique automáticamente los meses más antiguos;
-8. obtenga un comprobante;
-9. vea la deuda actualizada inmediatamente;
-10. cierre y vuelva a abrir la aplicación sin perder cambios;
-11. recupere conexión;
-12. sincronice automáticamente las operaciones pendientes;
-13. mantenga trazabilidad de los pagos.
+1. Un administrador autenticado busca un moroso y consulta toda su información operativa.
+2. Crea una orden individual sin duplicarla y la asigna a un técnico.
+3. El técnico autenticado descarga únicamente sus órdenes.
+4. Consulta offline cliente, domicilio, medidor, Kardex, deuda, dirección y último dato disponible.
+5. Registra visita, lectura, GPS disponible y evidencia sin perder datos al cerrar o reiniciar.
+6. No ejecuta el corte sin autorización online concluyente, vigente y de un solo uso.
+7. Un pago detectado, timeout, conflicto o condición de elegibilidad inválida bloquea el corte.
+8. El resultado físico se persiste antes de mostrar éxito y se sincroniza sin duplicados.
+9. El administrador consulta resultado, actor, tiempos, evidencia y estado de sincronización.
+10. Pruebas reproducibles cubren permisos, offline, reinicio, concurrencia, pago detectado y recuperación incierta.
 
 ## 20. Principios no negociables
 
 1. **Offline primero.** Las operaciones normales no pueden depender de Internet.
 2. **No asumir datos.** Los campos de SEPSA deben validarse antes de convertirse en reglas.
-3. **Meses completos.** Nunca permitir fracciones.
-4. **Meses más antiguos primero.** El sistema controla el orden de aplicación.
+3. **Mínimo privilegio.** Cada técnico accede solo a sus órdenes; administración opera con permisos explícitos y auditados.
+4. **Corte seguro.** Ningún resultado incierto o desactualizado habilita una acción física.
 5. **Sin pérdida de datos.** Las operaciones confirmadas localmente deben persistir.
-6. **Simplicidad operacional.** El técnico debe requerir mínima capacitación.
-7. **Trazabilidad financiera.** Cada pago debe poder identificarse y rastrearse.
-8. **API como evolución natural.** El Excel es una referencia inicial.
-9. **MVP enfocado.** Resolver perfectamente la cobranza presencial offline antes de agregar funcionalidades futuras.
+6. **Simplicidad operacional.** Cada experiencia debe adaptarse al rol y contexto de trabajo.
+7. **Trazabilidad completa.** Creación, asignación, autorización, ejecución y sincronización deben poder reconstruirse.
+8. **API provisional explícita.** El Excel y los mocks son referencias, no contratos oficiales.
+9. **Incremento vertical.** Completar una orden de extremo a extremo antes de creación masiva.
 10. **Validación en campo.** Las decisiones críticas deben probarse en Android y en condiciones reales.
 
 ## 21. Estado del proyecto
 
 ### Confirmado
 
-- Usuario principal: técnico.
-- Domicilios asignados por técnico.
-- Cobro presencial opcional.
-- Método de pago: efectivo.
-- Pago por meses completos.
-- Meses antiguos primero.
-- Actualización inmediata de deuda local.
-- Funcionamiento sin conexión.
-- Sincronización posterior.
-- Comprobante.
-- PWA como primera opción.
-- Excel como referencia inicial.
-- API de SEPSA como integración futura.
-- Lectura del medidor fuera del MVP.
+- Roles iniciales: administrador y técnico.
+- Administrador con acceso a toda información operativa incluida en el piloto.
+- Dashboard, búsqueda de morosos, creación y asignación de órdenes.
+- Creación masiva confirmada después del primer corte vertical.
+- Técnico limitado a órdenes asignadas.
+- Técnico con consulta de Kardex, mapa, domicilio, cliente y medidor.
+- Captura de lectura y GPS dentro del trabajo de campo.
+- Autorización online obligatoria inmediatamente antes del corte.
+- Persistencia y consulta técnica offline.
+- Sincronización posterior, idempotencia y trazabilidad.
+- PWA técnica como primera opción para Android.
+- Excel como referencia inicial y API oficial como integración futura.
 
 ### Pendiente de confirmar con SEPSA
 
 - Significado exacto de todos los campos del Excel.
-- Estructura definitiva de deuda.
+- Relación definitiva entre cliente, cuenta, domicilio o suministro y medidor.
+- Fuente, estructura, vigencia y semántica del Kardex y deuda.
 - Contrato de la futura API.
-- Reglas de conciliación del dinero entregado por técnicos.
-- Formato oficial del comprobante.
+- Autenticación institucional y administración futura de cuentas.
+- Validación numérica y procedimiento excepcional cuando no pueda obtenerse lectura.
+- Umbral de precisión, privacidad y retención del GPS.
 - Políticas de auditoría.
-- Resolución de conflictos.
-- Autenticación y seguridad.
-- Detalles administrativos posteriores al MVP.
+- Resolución de reasignaciones, anulaciones y datos obsoletos con técnicos offline.
+- Continuidad de cobranza presencial y alcance futuro de reconexiones.
 
 ## 22. Regla fundamental
 
-> **El sistema debe adaptarse al trabajo real del técnico, no obligar al técnico a adaptarse al sistema.**
+> **El sistema debe conectar la decisión administrativa con la ejecución técnica sin perder autorización, contexto ni trazabilidad.**
 
-La tecnología debe hacer que el proceso de campo sea más rápido, confiable y trazable, especialmente cuando existe poca o ninguna conectividad.
+La tecnología debe adaptarse al trabajo real de cada rol. Ninguna conveniencia administrativa o visual puede comprometer seguridad del corte, integridad de datos o capacidad offline del técnico.
