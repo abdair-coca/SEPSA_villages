@@ -36,11 +36,11 @@ Chain strategy: stacked-to-main
 
 ## Fase 2: Persistencia e integración
 
-- [ ] 2.1 Crear IndexedDB con transacción multi-store, paquete íntegro/versionado y cola durable.
-- [ ] 2.2 Crear adapters mock con modos `online`, `weak` y `offline`, sin contrato SEPSA ficticio.
-- [ ] 2.3 Implementar corte, reconexión, autorización y sync: intención previa, vigencia, reintentos, consulta y conflictos.
-- [ ] 2.4 Probar reinicio, cola, idempotencia, `PHYSICAL_UNKNOWN`, deduplicación y trazabilidad.
-- [ ] 2.5 Probar reconexión solo desde `EJECUTADO` y ausencia de cobros.
+- [x] 2.1 Crear IndexedDB con transacción multi-store, paquete íntegro/versionado y cola durable.
+- [x] 2.2 Crear adapters mock con modos `online`, `weak` y `offline`, sin contrato SEPSA ficticio.
+- [x] 2.3 Implementar corte, reconexión, autorización y sync: intención previa, vigencia, reintentos, consulta y conflictos.
+- [x] 2.4 Probar reinicio, cola, idempotencia, `PHYSICAL_UNKNOWN`, deduplicación y trazabilidad.
+- [x] 2.5 Probar reconexión solo desde `EJECUTADO` y ausencia de cobros.
 
 ## Fase 3: UI, PWA y runtime
 
