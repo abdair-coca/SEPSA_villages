@@ -36,7 +36,7 @@ export function assertReconnectionEligible(order: WorkOrder, technicianId: strin
 export function validateEvidence(
   evidence: EvidenceReference | undefined,
   exceptionReason?: string,
-  binding?: { orderId: string; operationId: string },
+  binding?: { orderId: string; operationId: string; technicianId?: string; deviceId?: string },
 ): { valid: true; requiresOptimization: boolean } {
   if (!evidence) {
     if (!exceptionReason?.trim()) {
@@ -57,7 +57,9 @@ export function validateEvidence(
   if (
     !binding ||
     evidence.orderId !== binding.orderId ||
-    evidence.operationId !== binding.operationId
+    evidence.operationId !== binding.operationId ||
+    (binding.technicianId !== undefined && evidence.technicianId !== binding.technicianId) ||
+    (binding.deviceId !== undefined && evidence.deviceId !== binding.deviceId)
   ) {
     throw new DomainError("Evidence is bound to a different operation.", "EVIDENCE_BINDING_MISMATCH");
   }
@@ -116,6 +118,7 @@ export function createVisit(input: {
   technicianId: string;
   deviceId: string;
   reason: string;
+  action?: "CUT" | "RECONNECTION";
   recordedAt: string;
   evidenceRefs?: string[];
   attempts?: number;
@@ -131,7 +134,8 @@ export function createVisit(input: {
     orderId: input.orderId,
     technicianId: input.technicianId,
     deviceId: input.deviceId,
-    action: "CUT",
+    action: "VISIT",
+    attemptedAction: input.action ?? "CUT",
     execution: "NONE",
     reason: input.reason,
     exceptionReason: input.exceptionReason,
@@ -141,6 +145,14 @@ export function createVisit(input: {
     errorCode: input.errorCode,
     syncStatus: "pending",
   };
+}
+
+const OPERATION_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function assertOperationId(operationId: string): void {
+  if (!OPERATION_ID_PATTERN.test(operationId)) {
+    throw new DomainError("Operation identifier must contain a prefix and UUID.", "OPERATION_ID_INVALID");
+  }
 }
 
 export function copyOrderWithPhysicalStatus(

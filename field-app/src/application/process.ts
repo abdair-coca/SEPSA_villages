@@ -1,5 +1,6 @@
 import {
   assertCutEligible,
+  assertOperationId,
   copyOrderAsCancelled,
   copyOrderWithPhysicalStatus,
   createVisit,
@@ -73,6 +74,7 @@ function uncertainError(error: unknown): boolean {
 function operationChange(
   operation: OperationRecord,
   order: WorkOrder | undefined,
+  evidence?: EvidenceReference,
 ): AtomicOperationChange {
   return {
     operation,
@@ -86,11 +88,13 @@ function operationChange(
       technicianId: operation.technicianId,
       deviceId: operation.deviceId,
       errorCode: operation.errorCode,
+      uncertain: operation.physicalStatus === "PHYSICAL_UNKNOWN",
     },
+    evidence,
   };
 }
 
-function visitChange(visit: VisitRecord, order?: WorkOrder): AtomicOperationChange {
+function visitChange(visit: VisitRecord, order?: WorkOrder, evidence?: EvidenceReference): AtomicOperationChange {
   return {
     visit,
     order,
@@ -104,6 +108,7 @@ function visitChange(visit: VisitRecord, order?: WorkOrder): AtomicOperationChan
       deviceId: visit.deviceId,
       errorCode: visit.errorCode,
     },
+    evidence,
   };
 }
 
@@ -172,7 +177,7 @@ function grantIsValid(grant: AuthorizationGrant, input: CutProcessInput): boolea
 }
 
 function assertReplayBinding(existing: StoredRecord, input: CutProcessInput): void {
-  const validKind = existing.kind === "CUT" || (existing.kind === "VISIT" && existing.action === "CUT");
+  const validKind = existing.kind === "CUT" || (isVisit(existing) && existing.attemptedAction === "CUT");
   if (
     existing.orderId !== input.order.orderId ||
     existing.technicianId !== input.technicianId ||
@@ -213,7 +218,7 @@ function claimOrder(order: WorkOrder, status: WorkOrder["status"], physicalStatu
 }
 
 function isVisit(record: StoredRecord): record is VisitRecord {
-  return record.kind === "VISIT";
+  return record.kind === "VISIT" && "reason" in record;
 }
 
 function claimedVisitResult(result: ClaimResult, input: CutProcessInput): CutProcessResult {
@@ -236,7 +241,7 @@ async function recordVisit(
   order?: WorkOrder,
   expectedOrderVersion = order?.version,
 ): Promise<CutProcessResult> {
-  const result = await input.repository.claimVisit(visitChange(visit, order), expectedOrderVersion);
+  const result = await input.repository.claimVisit(visitChange(visit, order, input.evidence), expectedOrderVersion);
   return claimedVisitResult(result, input);
 }
 
@@ -247,7 +252,7 @@ async function recordPaymentDetected(
   const visit = createVisitFor(input, "PAYMENT_DETECTED", payment.reason);
   const cancelledOrder = copyOrderAsCancelled(input.order, payment);
   const result = await input.repository.claimVisit(
-    visitChange(visit, cancelledOrder),
+    visitChange(visit, cancelledOrder, input.evidence),
     requireOrderVersion(input.order),
   );
   if (result.status === "order_conflict") {
@@ -263,6 +268,31 @@ async function recoverExisting(
   input: CutProcessInput,
   existing: OperationRecord,
 ): Promise<CutProcessResult> {
+  if (existing.status === "INTENT_PERSISTED" || existing.physicalStatus === "CLAIMED") {
+    const currentOrder = await input.repository.getOrder(existing.orderId);
+    if (!currentOrder || currentOrder.version === undefined) {
+      throw new DomainError("Persisted cut recovery cannot prove current order version.", "ORDER_VERSION_REQUIRED");
+    }
+    const uncertainOperation: OperationRecord = {
+      ...existing,
+      status: "PHYSICAL_UNKNOWN",
+      physicalStatus: "PHYSICAL_UNKNOWN",
+      syncStatus: "failed",
+      updatedAt: input.now,
+      errorCode: "RECOVERY_REQUIRED",
+    };
+    const uncertainOrder: WorkOrder = {
+      ...currentOrder,
+      physicalStatus: "PHYSICAL_UNKNOWN",
+      version: currentOrder.version + 1,
+    };
+    await input.repository.updateOperationAndOrder(
+      operationChange(uncertainOperation, uncertainOrder),
+      currentOrder.version,
+    );
+    const lookup = await input.authorization.lookup(existing.operationId);
+    return { outcome: "physical_unknown", operation: uncertainOperation, lookupStatus: lookup.status };
+  }
   const lookup = await input.authorization.lookup(existing.operationId);
   if (existing.physicalStatus === "PHYSICAL_UNKNOWN") {
     return { outcome: "physical_unknown", operation: existing, lookupStatus: lookup.status };
@@ -286,7 +316,7 @@ async function recordPhysicalUnknown(
   };
   const uncertainOrder = claimOrder(claimedOrder, claimedOrder.status, "PHYSICAL_UNKNOWN");
   await input.repository.updateOperationAndOrder(
-    operationChange(uncertainOperation, uncertainOrder),
+    operationChange(uncertainOperation, uncertainOrder, input.evidence),
     requireOrderVersion(claimedOrder),
   );
   const lookup = await input.authorization.lookup(input.operationId);
@@ -323,9 +353,8 @@ function isOrderVersionConflict(error: unknown): boolean {
 }
 
 export async function executeCut(input: CutProcessInput): Promise<CutProcessResult> {
-  if (!input.operationId.trim()) {
-    throw new DomainError("Operation identifier is required.", "OPERATION_ID_REQUIRED");
-  }
+  if (!input.operationId.trim()) throw new DomainError("Operation identifier is required.", "OPERATION_ID_REQUIRED");
+  assertOperationId(input.operationId);
 
   const existing = await input.repository.getRecord(input.operationId);
   if (existing) {
@@ -343,6 +372,8 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
   validateEvidence(input.evidence, input.exceptionReason, {
     orderId: input.order.orderId,
     operationId: input.operationId,
+    technicianId: input.technicianId,
+    deviceId: input.deviceId,
   });
   assertCutEligible(input.order, input.technicianId);
   const expectedOrderVersion = requireOrderVersion(input.order);
@@ -364,6 +395,10 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
       error instanceof Error && "code" in error ? String(error.code) : "AUTHORIZATION_UNKNOWN",
     );
     return recordVisit(input, visit);
+  }
+
+  if (authorizationResponse.operationId !== input.operationId) {
+    return recordVisit(input, createVisitFor(input, "AUTHORIZATION_UNKNOWN", "AUTHORIZATION_OPERATION_ID_MISMATCH"));
   }
 
   if (authorizationResponse.status !== "authorized" || !authorizationResponse.grant) {
@@ -389,7 +424,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     input.evidence ? [input.evidence.evidenceId] : [],
   );
   const claim = await input.repository.claimCut(
-    operationChange(intent, claimOrder(input.order, "GENERADO", "CLAIMED")),
+    operationChange(intent, claimOrder(input.order, "GENERADO", "CLAIMED"), input.evidence),
     expectedOrderVersion,
   );
   const claimState = handleClaimResult(claim, input);
@@ -423,6 +458,10 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     return recordPhysicalUnknown(input, intent, claimedOrder, errorCode);
   }
 
+  if (consumeResponse.operationId !== input.operationId) {
+    return recordPhysicalUnknown(input, intent, claimedOrder, "CONSUME_OPERATION_ID_MISMATCH");
+  }
+
   if (consumeResponse.status === "unknown") {
     return recordPhysicalUnknown(input, intent, claimedOrder, consumeResponse.errorCode ?? "RESPONSE_UNKNOWN");
   }
@@ -438,7 +477,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
       cancellation: payment,
     };
     await input.repository.updateOperationAndOrder(
-      operationChange(blockedOperation, copyOrderAsCancelled(claimedOrder, payment)),
+      operationChange(blockedOperation, copyOrderAsCancelled(claimedOrder, payment), input.evidence),
       requireOrderVersion(claimedOrder),
     );
     return { outcome: "blocked", reason: "PAYMENT_DETECTED", operation: blockedOperation };
@@ -455,7 +494,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     const releasedOrder = claimOrder(claimedOrder, "GENERADO", "NONE");
     try {
       await input.repository.updateOperationAndOrder(
-        operationChange(blockedOperation, releasedOrder),
+        operationChange(blockedOperation, releasedOrder, input.evidence),
         requireOrderVersion(claimedOrder),
       );
     } catch (error) {
@@ -488,7 +527,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
       errorCode: consumeResponse.errorCode ?? reason,
     };
     await input.repository.updateOperationAndOrder(
-      operationChange(blockedOperation, undefined),
+      operationChange(blockedOperation, undefined, input.evidence),
       requireOrderVersion(claimedOrder),
     );
     return { outcome: "blocked", reason, operation: blockedOperation };
@@ -501,7 +540,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     updatedAt: input.now,
   };
   await input.repository.updateOperationAndOrder(
-    operationChange(executed, claimOrder(claimedOrder, "EJECUTADO", "CONFIRMED")),
+    operationChange(executed, claimOrder(claimedOrder, "EJECUTADO", "CONFIRMED"), input.evidence),
     requireOrderVersion(claimedOrder),
   );
   return { outcome: "executed", operation: executed };

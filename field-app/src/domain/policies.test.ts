@@ -3,6 +3,7 @@ import {
   assertAssignedOrder,
   assertCutEligible,
   assertHistoricalOperationImmutable,
+  assertOperationId,
   assertReconnectionEligible,
   DomainError,
   nextOrderState,
@@ -16,6 +17,13 @@ const generatedOrder: WorkOrder = {
   status: "GENERADO",
   physicalStatus: "NONE",
 };
+
+describe("operation identifiers", () => {
+  it("accepts only prefixed UUID identifiers", () => {
+    expect(() => assertOperationId("cut-00000000-0000-4000-8000-000000000001")).not.toThrow();
+    expect(() => assertOperationId("operation-1")).toThrowError(DomainError);
+  });
+});
 
 const operation: OperationRecord = {
   operationId: "operation-1",
@@ -43,17 +51,17 @@ describe("field domain policies", () => {
   });
 
   it("requires valid image evidence or a non-empty exception reason", () => {
-    expect(validateEvidence({ evidenceId: "image-1", orderId: "order-1", operationId: "operation-1", mimeType: "image/jpeg", width: 2000, height: 2000, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toEqual({
+    expect(validateEvidence({ evidenceId: "image-1", orderId: "order-1", operationId: "operation-1", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 2000, height: 2000, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toEqual({
       valid: true,
       requiresOptimization: false,
     });
     expect(validateEvidence(undefined, "Camera unavailable").valid).toBe(true);
     expect(() => validateEvidence(undefined, "  ")).toThrowError(DomainError);
-    expect(() => validateEvidence({ evidenceId: "", orderId: "order-1", operationId: "operation-1", mimeType: "image/jpeg", width: 1, height: 1, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
-    expect(() => validateEvidence({ evidenceId: "image-2", orderId: "order-1", operationId: "operation-1", mimeType: "image/jpeg", width: Number.NaN, height: 1, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
-    expect(() => validateEvidence({ evidenceId: "image-3", orderId: "order-1", operationId: "operation-1", mimeType: "image/jpeg", width: Number.POSITIVE_INFINITY, height: 1, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
-    expect(() => validateEvidence({ evidenceId: "image-4", orderId: "other-order", operationId: "operation-1", mimeType: "image/jpeg", width: 1, height: 1, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
-    expect(() => validateEvidence({ evidenceId: "image-5", orderId: "order-1", operationId: "operation-1", mimeType: "image/jpeg", width: 3000, height: 2000, optimized: false }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
+    expect(() => validateEvidence({ evidenceId: "", orderId: "order-1", operationId: "operation-1", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 1, height: 1, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
+    expect(() => validateEvidence({ evidenceId: "image-2", orderId: "order-1", operationId: "operation-1", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: Number.NaN, height: 1, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
+    expect(() => validateEvidence({ evidenceId: "image-3", orderId: "order-1", operationId: "operation-1", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: Number.POSITIVE_INFINITY, height: 1, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
+    expect(() => validateEvidence({ evidenceId: "image-4", orderId: "other-order", operationId: "operation-1", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 1, height: 1, optimized: true }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
+    expect(() => validateEvidence({ evidenceId: "image-5", orderId: "order-1", operationId: "operation-1", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 3000, height: 2000, optimized: false }, undefined, { orderId: "order-1", operationId: "operation-1" })).toThrowError(DomainError);
   });
 
   it("preserves historical operation identity", () => {

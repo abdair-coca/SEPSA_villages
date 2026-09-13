@@ -19,6 +19,9 @@ import type {
   RemoteResult,
 } from "../ports/authorization";
 
+type ConfiguredAuthResponse = Omit<AuthResponse, "operationId"> & { operationId?: string };
+type ConfiguredConsumeResponse = Omit<ConsumeResponse, "operationId"> & { operationId?: string };
+
 class MemoryRepository implements LocalRepository {
   readonly claims: AtomicOperationChange[] = [];
   readonly updates: AtomicOperationChange[] = [];
@@ -30,7 +33,7 @@ class MemoryRepository implements LocalRepository {
     if (currentOrder) this.orders.set(currentOrder.orderId, currentOrder);
   }
 
-  getOrder(orderId: string) {
+  async getOrder(orderId: string) {
     return this.orders.get(orderId);
   }
 
@@ -118,15 +121,31 @@ class MemoryRepository implements LocalRepository {
   async listSyncItems() {
     return [];
   }
+
+  async claimSync(): Promise<never> {
+    throw new Error("Not needed in process tests");
+  }
+
+  async recoverPhysicalUnknown(): Promise<never> {
+    throw new Error("Not needed in process tests");
+  }
+
+  async updateSyncState(): Promise<never> {
+    throw new Error("Not needed in process tests");
+  }
+
+  async recordConflictAndFail(): Promise<never> {
+    throw new Error("Not needed in process tests");
+  }
 }
 
 class StubAuthorization implements AuthorizationAdapter {
   lookupCalls: string[] = [];
   requestCalls: AuthRequest[] = [];
   consumeCalls: ConsumeRequest[] = [];
-  requestResponse: AuthResponse = { status: "unknown" };
-  consumeResponse: ConsumeResponse = { status: "consumed" };
-  requestResponses = new Map<string, AuthResponse>();
+  requestResponse: ConfiguredAuthResponse = { status: "unknown" };
+  consumeResponse: ConfiguredConsumeResponse = { status: "consumed" };
+  requestResponses = new Map<string, ConfiguredAuthResponse>();
   lookupResponse: RemoteResult = { status: "confirmed" };
   requestError: Error | undefined;
   consumeError: Error | undefined;
@@ -137,14 +156,14 @@ class StubAuthorization implements AuthorizationAdapter {
     this.requestCalls.push(input);
     this.onRequest?.(input);
     if (this.requestError) throw this.requestError;
-    return this.requestResponses.get(input.operationId) ?? this.requestResponse;
+    return { ...(this.requestResponses.get(input.operationId) ?? this.requestResponse), operationId: input.operationId };
   }
 
   async consumeCut(input: ConsumeRequest): Promise<ConsumeResponse> {
     this.consumeCalls.push(input);
     this.onConsume?.(input);
     if (this.consumeError) throw this.consumeError;
-    return this.consumeResponse;
+    return { ...this.consumeResponse, operationId: input.operationId };
   }
 
   async lookup(operationId: string): Promise<RemoteResult> {
@@ -153,7 +172,7 @@ class StubAuthorization implements AuthorizationAdapter {
   }
 }
 
-function grant(operationId = "operation-1", version = 1): AuthorizationGrant {
+function grant(operationId = "operation-00000000-0000-4000-8000-000000000001", version = 1): AuthorizationGrant {
   return {
     authorizationId: `auth-${operationId}`,
     token: "opaque-token",
@@ -188,6 +207,8 @@ function input(repository: MemoryRepository, authorization: StubAuthorization, o
       evidenceId: "evidence-1",
       orderId: "order-1",
       operationId,
+      technicianId: "tech-1",
+      deviceId: "device-1",
       mimeType: "image/jpeg" as const,
       width: 1000,
       height: 1000,
@@ -198,7 +219,7 @@ function input(repository: MemoryRepository, authorization: StubAuthorization, o
 
 function existingOperation(overrides: Partial<OperationRecord> = {}): OperationRecord {
   return {
-    operationId: "operation-1",
+    operationId: "operation-00000000-0000-4000-8000-000000000001",
     kind: "CUT",
     action: "CUT",
     orderId: "order-1",
@@ -222,7 +243,7 @@ describe("cut process integration boundaries", () => {
     timeoutAuthorization.requestError = new TimeoutError();
 
     const timeoutResult = await executeCut(
-      input(timeoutRepository, timeoutAuthorization, "operation-timeout"),
+      input(timeoutRepository, timeoutAuthorization, "operation-timeout-00000000-0000-4000-8000-000000000010"),
     );
 
     const unknownRepository = new MemoryRepository();
@@ -230,7 +251,7 @@ describe("cut process integration boundaries", () => {
     unknownAuthorization.requestResponse = { status: "unknown" };
 
     const unknownResult = await executeCut(
-      input(unknownRepository, unknownAuthorization, "operation-unknown"),
+      input(unknownRepository, unknownAuthorization, "operation-unknown-00000000-0000-4000-8000-000000000011"),
     );
 
     expect(timeoutResult.outcome).toBe("visit_recorded");
@@ -247,7 +268,7 @@ describe("cut process integration boundaries", () => {
     expect(unknownAuthorization.consumeCalls).toHaveLength(0);
     expect(timeoutRepository.claims[0].order).toBeUndefined();
     expect(timeoutRepository.claims[0].syncItem).toMatchObject({
-      operationId: "operation-timeout",
+      operationId: "operation-timeout-00000000-0000-4000-8000-000000000010",
       orderId: "order-1",
       technicianId: "tech-1",
       deviceId: "device-1",
@@ -261,14 +282,14 @@ describe("cut process integration boundaries", () => {
     const authorization = new StubAuthorization();
     authorization.requestResponse = { status: "authorized", grant: grant() };
 
-    const first = await executeCut(input(repository, authorization, "operation-1"));
+    const first = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     authorization.requestResponse = {
       status: "authorized",
-      grant: grant("operation-2"),
+      grant: grant("operation-00000000-0000-4000-8000-000000000002"),
     };
     authorization.consumeResponse = { status: "already_consumed" };
-    const second = await executeCut(input(repository, authorization, "operation-2"));
+    const second = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000002"));
 
     expect(first.outcome).toBe("executed");
     expect(second.outcome).toBe("visit_recorded");
@@ -277,14 +298,14 @@ describe("cut process integration boundaries", () => {
     }
     expect(first.operation.physicalStatus).toBe("CONFIRMED");
     expect(second.visit.reason).toBe("ORDER_CLAIM_CONFLICT");
-    expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(["operation-1"]);
+    expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
     expect(repository.updates).toHaveLength(1);
     expect(repository.updates[0].order?.version).toBe(3);
     expect(authorization.requestCalls[0]).toMatchObject({
       orderId: "order-1",
       technicianId: "tech-1",
       deviceId: "device-1",
-      operationId: "operation-1",
+      operationId: "operation-00000000-0000-4000-8000-000000000001",
       orderVersion: 1,
     });
   });
@@ -295,13 +316,13 @@ describe("cut process integration boundaries", () => {
     authorization.requestResponse = { status: "authorized", grant: grant() };
     authorization.consumeResponse = { status: "already_consumed" };
 
-    const result = await executeCut(input(repository, authorization, "operation-1"));
+    const result = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     expect(result.outcome).toBe("physical_unknown");
-    expect(authorization.lookupCalls).toEqual(["operation-1"]);
+    expect(authorization.lookupCalls).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
     expect(repository.updates[0].order?.physicalStatus).toBe("PHYSICAL_UNKNOWN");
     expect(repository.updates[0].syncItem.status).toBe("failed");
-    expect(repository.getOrder("order-1")).toMatchObject({
+    expect(await repository.getOrder("order-1")).toMatchObject({
       status: "GENERADO",
       physicalStatus: "PHYSICAL_UNKNOWN",
       version: 3,
@@ -314,18 +335,18 @@ describe("cut process integration boundaries", () => {
     authorization.requestResponse = { status: "authorized", grant: grant() };
     authorization.consumeError = new ResponseLostError();
 
-    const result = await executeCut(input(repository, authorization, "operation-1"));
+    const result = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     expect(result.outcome).toBe("physical_unknown");
     if (result.outcome !== "physical_unknown") {
       throw new Error("Expected physical uncertainty");
     }
     expect(result.operation.physicalStatus).toBe("PHYSICAL_UNKNOWN");
-    expect(authorization.lookupCalls).toEqual(["operation-1"]);
-    expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(["operation-1"]);
+    expect(authorization.lookupCalls).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
+    expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
     expect(repository.updates[0].order?.physicalStatus).toBe("PHYSICAL_UNKNOWN");
     expect(repository.updates[0].syncItem).toMatchObject({
-      operationId: "operation-1",
+      operationId: "operation-00000000-0000-4000-8000-000000000001",
       orderId: "order-1",
       technicianId: "tech-1",
       deviceId: "device-1",
@@ -340,13 +361,13 @@ describe("cut process integration boundaries", () => {
     authorization.requestResponse = { status: "authorized", grant: grant() };
     authorization.consumeError = new ResponseLostError();
 
-    await executeCut(input(repository, authorization, "operation-1"));
-    const replay = await executeCut(input(repository, authorization, "operation-1"));
+    await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
+    const replay = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     expect(replay.outcome).toBe("physical_unknown");
-    expect(authorization.lookupCalls).toEqual(["operation-1", "operation-1"]);
+    expect(authorization.lookupCalls).toEqual(["operation-00000000-0000-4000-8000-000000000001", "operation-00000000-0000-4000-8000-000000000001"]);
     expect(authorization.consumeCalls).toHaveLength(1);
-    expect(repository.getOrder("order-1")).toMatchObject({
+    expect(await repository.getOrder("order-1")).toMatchObject({
       physicalStatus: "PHYSICAL_UNKNOWN",
       version: 3,
     });
@@ -357,18 +378,18 @@ describe("cut process integration boundaries", () => {
     const authorization = new StubAuthorization();
     authorization.requestResponse = { status: "authorized", grant: grant() };
 
-    await executeCut(input(repository, authorization, "operation-1"));
-    const duplicate = await executeCut(input(repository, authorization, "operation-1"));
+    await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
+    const duplicate = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     expect(duplicate.outcome).toBe("duplicate");
-    expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(["operation-1"]);
+    expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
     expect(authorization.consumeCalls[0]).toMatchObject({
-      authorizationId: "auth-operation-1",
+      authorizationId: "auth-operation-00000000-0000-4000-8000-000000000001",
       token: "opaque-token",
       orderId: "order-1",
       technicianId: "tech-1",
       deviceId: "device-1",
-      operationId: "operation-1",
+      operationId: "operation-00000000-0000-4000-8000-000000000001",
       version: 1,
     });
     expect(repository.claims).toHaveLength(1);
@@ -379,8 +400,8 @@ describe("cut process integration boundaries", () => {
     const authorization = new StubAuthorization();
     authorization.requestResponse = { status: "unknown" };
 
-    const first = await executeCut(input(repository, authorization, "operation-visit"));
-    const replay = await executeCut(input(repository, authorization, "operation-visit"));
+    const first = await executeCut(input(repository, authorization, "operation-visit-00000000-0000-4000-8000-000000000012"));
+    const replay = await executeCut(input(repository, authorization, "operation-visit-00000000-0000-4000-8000-000000000012"));
 
     expect(first.outcome).toBe("visit_recorded");
     expect(replay.outcome).toBe("visit_recorded");
@@ -393,7 +414,7 @@ describe("cut process integration boundaries", () => {
     const authorization = new StubAuthorization();
 
     await expect(executeCut({
-      ...input(repository, authorization, "operation-no-evidence"),
+      ...input(repository, authorization, "operation-no-evidence-00000000-0000-4000-8000-000000000013"),
       evidence: undefined,
     })).rejects.toMatchObject({ code: "EVIDENCE_REQUIRED" });
 
@@ -404,9 +425,9 @@ describe("cut process integration boundaries", () => {
   it("rejects a grant whose version differs from the order version", async () => {
     const repository = new MemoryRepository();
     const authorization = new StubAuthorization();
-    authorization.requestResponse = { status: "authorized", grant: grant("operation-1", 2) };
+    authorization.requestResponse = { status: "authorized", grant: grant("operation-00000000-0000-4000-8000-000000000001", 2) };
 
-    const result = await executeCut(input(repository, authorization, "operation-1"));
+    const result = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     expect(result.outcome).toBe("visit_recorded");
     if (result.outcome !== "visit_recorded") throw new Error("Expected blocked visit");
@@ -419,11 +440,11 @@ describe("cut process integration boundaries", () => {
     const authorization = new StubAuthorization();
     authorization.requestResponse = {
       status: "authorized",
-      grant: grant("operation-exception"),
+      grant: grant("operation-exception-00000000-0000-4000-8000-000000000014"),
     };
 
     const result = await executeCut({
-      ...input(repository, authorization, "operation-exception"),
+      ...input(repository, authorization, "operation-exception-00000000-0000-4000-8000-000000000014"),
       evidence: undefined,
       exceptionReason: "Camera unavailable",
     });
@@ -437,10 +458,10 @@ describe("cut process integration boundaries", () => {
 
   it("checks replay binding before eligibility and rejects every mismatched identity", async () => {
     const mismatches: Array<{ operation: OperationRecord; input: ReturnType<typeof input> }> = [
-      { operation: existingOperation({ orderId: "other-order" }), input: input(new MemoryRepository(), new StubAuthorization(), "operation-1") },
-      { operation: existingOperation(), input: { ...input(new MemoryRepository(), new StubAuthorization(), "operation-1"), technicianId: "other-tech" } },
-      { operation: existingOperation(), input: { ...input(new MemoryRepository(), new StubAuthorization(), "operation-1"), deviceId: "other-device" } },
-      { operation: existingOperation({ kind: "RECONNECTION", action: "RECONNECTION" }), input: input(new MemoryRepository(), new StubAuthorization(), "operation-1") },
+      { operation: existingOperation({ orderId: "other-order" }), input: input(new MemoryRepository(), new StubAuthorization(), "operation-00000000-0000-4000-8000-000000000001") },
+      { operation: existingOperation(), input: { ...input(new MemoryRepository(), new StubAuthorization(), "operation-00000000-0000-4000-8000-000000000001"), technicianId: "other-tech" } },
+      { operation: existingOperation(), input: { ...input(new MemoryRepository(), new StubAuthorization(), "operation-00000000-0000-4000-8000-000000000001"), deviceId: "other-device" } },
+      { operation: existingOperation({ kind: "RECONNECTION", action: "RECONNECTION" }), input: input(new MemoryRepository(), new StubAuthorization(), "operation-00000000-0000-4000-8000-000000000001") },
     ];
 
     for (const mismatch of mismatches) {
@@ -452,21 +473,24 @@ describe("cut process integration boundaries", () => {
     }
   });
 
-  it("does not replay a claimed intent and returns lookup state for recovery", async () => {
+  it("recovers a persisted claimed intent before lookup without leaving it reenqueuable", async () => {
     const repository = new MemoryRepository();
     const authorization = new StubAuthorization();
     repository.seed(existingOperation({
       status: "INTENT_PERSISTED",
       physicalStatus: "CLAIMED",
       syncStatus: "pending",
-    }));
+    }), { ...order, physicalStatus: "CLAIMED", version: 2 });
 
-    const result = await executeCut(input(repository, authorization, "operation-1"));
+    const result = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
-    expect(result.outcome).toBe("recovery_required");
-    expect(authorization.lookupCalls).toEqual(["operation-1"]);
+    expect(result.outcome).toBe("physical_unknown");
+    expect(authorization.lookupCalls).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
     expect(authorization.consumeCalls).toHaveLength(0);
     expect(repository.claims).toHaveLength(0);
+    expect(repository.updates[0].operation).toMatchObject({ status: "PHYSICAL_UNKNOWN", physicalStatus: "PHYSICAL_UNKNOWN", syncStatus: "failed" });
+    expect(repository.updates[0].order).toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN", version: 3 });
+    expect(repository.updates[0].syncItem).toMatchObject({ status: "failed", uncertain: true });
   });
 
   it("persists request-side payment detection as an annulled order", async () => {
@@ -477,7 +501,7 @@ describe("cut process integration boundaries", () => {
       payment: { reason: "Payment settled remotely", detectedAt: "2026-09-11T10:02:00.000Z" },
     };
 
-    const result = await executeCut(input(repository, authorization, "operation-payment-request"));
+    const result = await executeCut(input(repository, authorization, "operation-payment-request-00000000-0000-4000-8000-000000000015"));
 
     expect(result.outcome).toBe("visit_recorded");
     expect(repository.claims[0].order).toMatchObject({
@@ -507,13 +531,13 @@ describe("cut process integration boundaries", () => {
       repository.setOrder({ ...order, version: 2 });
     };
 
-    const result = await executeCut(input(repository, authorization, "operation-payment-race"));
+    const result = await executeCut(input(repository, authorization, "operation-payment-race-00000000-0000-4000-8000-000000000016"));
 
     expect(result.outcome).toBe("visit_recorded");
     if (result.outcome !== "visit_recorded") throw new Error("Expected payment visit");
     expect(result.visit.errorCode).toBe("ORDER_VERSION_CONFLICT");
     expect(repository.claims[0].order).toBeUndefined();
-    expect(repository.getOrder("order-1")).toMatchObject({
+    expect(await repository.getOrder("order-1")).toMatchObject({
       status: "GENERADO",
       physicalStatus: "NONE",
       version: 2,
@@ -529,7 +553,7 @@ describe("cut process integration boundaries", () => {
       payment: { reason: "Payment arrived during claim", detectedAt: "2026-09-11T10:03:00.000Z" },
     };
 
-    const result = await executeCut(input(repository, authorization, "operation-1"));
+    const result = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     expect(result.outcome).toBe("blocked");
     expect(repository.updates[0].order).toMatchObject({
@@ -552,7 +576,7 @@ describe("cut process integration boundaries", () => {
     authorization.requestResponse = { status: "authorized", grant: grant() };
     authorization.consumeResponse = { status: "not_authorized", errorCode: "AUTHORIZATION_REVOKED" };
 
-    const result = await executeCut(input(repository, authorization, "operation-1"));
+    const result = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     expect(result.outcome).toBe("blocked");
     expect(repository.updates[0].order).toMatchObject({
@@ -560,7 +584,7 @@ describe("cut process integration boundaries", () => {
       physicalStatus: "NONE",
       version: 3,
     });
-    expect(repository.getOrder("order-1")).toMatchObject({
+    expect(await repository.getOrder("order-1")).toMatchObject({
       status: "GENERADO",
       physicalStatus: "NONE",
       version: 3,
@@ -581,11 +605,11 @@ describe("cut process integration boundaries", () => {
       });
     };
 
-    const result = await executeCut(input(repository, authorization, "operation-1"));
+    const result = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
 
     expect(result.outcome).toBe("recovery_required");
     expect(repository.updates).toHaveLength(0);
-    expect(repository.getOrder("order-1")).toMatchObject({
+    expect(await repository.getOrder("order-1")).toMatchObject({
       status: "EJECUTADO",
       physicalStatus: "CONFIRMED",
       version: 9,
@@ -595,18 +619,18 @@ describe("cut process integration boundaries", () => {
   it("claims one order through CAS when two operations race", async () => {
     const repository = new MemoryRepository();
     const authorization = new StubAuthorization();
-    authorization.requestResponses.set("operation-a", { status: "authorized", grant: grant("operation-a") });
-    authorization.requestResponses.set("operation-b", { status: "authorized", grant: grant("operation-b") });
+    authorization.requestResponses.set("operation-a-00000000-0000-4000-8000-00000000000a", { status: "authorized", grant: grant("operation-a-00000000-0000-4000-8000-00000000000a") });
+    authorization.requestResponses.set("operation-b-00000000-0000-4000-8000-00000000000b", { status: "authorized", grant: grant("operation-b-00000000-0000-4000-8000-00000000000b") });
 
     const [first, second] = await Promise.all([
-      executeCut(input(repository, authorization, "operation-a")),
-      executeCut(input(repository, authorization, "operation-b")),
+      executeCut(input(repository, authorization, "operation-a-00000000-0000-4000-8000-00000000000a")),
+      executeCut(input(repository, authorization, "operation-b-00000000-0000-4000-8000-00000000000b")),
     ]);
 
     expect([first.outcome, second.outcome].sort()).toEqual(["executed", "visit_recorded"]);
     expect(authorization.consumeCalls).toHaveLength(1);
     expect(repository.claims.filter((change) => change.operation?.kind === "CUT")).toHaveLength(1);
-    expect(repository.getOrder("order-1")).toMatchObject({
+    expect(await repository.getOrder("order-1")).toMatchObject({
       status: "EJECUTADO",
       physicalStatus: "CONFIRMED",
       version: 3,

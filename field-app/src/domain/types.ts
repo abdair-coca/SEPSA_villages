@@ -26,6 +26,17 @@ export interface WorkPackage {
   orders: WorkOrder[];
 }
 
+export type PackageValidationStatus = "SIMULATED_VALID" | "INVALID";
+
+export interface WorkPackageEnvelope {
+  packageId: string;
+  package: WorkPackage;
+  authenticity: "SIMULATED";
+  integrity: "SIMULATED";
+  validation: PackageValidationStatus;
+  checksum: string;
+}
+
 export type VisitExecution = "NONE" | "CUT" | "RECONNECTION";
 
 export interface VisitRecord {
@@ -34,7 +45,8 @@ export interface VisitRecord {
   orderId: string;
   technicianId: string;
   deviceId: string;
-  action: "CUT" | "RECONNECTION";
+  action: "VISIT";
+  attemptedAction: "CUT" | "RECONNECTION";
   execution: VisitExecution;
   reason: string;
   exceptionReason?: string;
@@ -49,6 +61,8 @@ export interface EvidenceReference {
   evidenceId: string;
   orderId: string;
   operationId: string;
+  technicianId: string;
+  deviceId: string;
   mimeType: "image/jpeg" | "image/png";
   width: number;
   height: number;
@@ -76,6 +90,9 @@ export interface OperationRecord {
 }
 
 export function generateOperationId(prefix = "operation"): string {
+  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/i.test(prefix)) {
+    throw new Error("Operation identifier prefix is invalid.");
+  }
   const randomUuid = globalThis.crypto?.randomUUID?.();
   if (!randomUuid) {
     throw new Error("Secure operation identifier generation is unavailable.");

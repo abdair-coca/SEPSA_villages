@@ -12,6 +12,7 @@ export interface AuthRequest {
   deviceId: string;
   operationId: string;
   orderVersion?: number;
+  signal?: AbortSignal;
 }
 
 export interface AuthorizationGrant {
@@ -32,6 +33,7 @@ export interface PaymentDetection {
 }
 
 export interface AuthResponse {
+  operationId: string;
   status: AuthorizationStatus;
   grant?: AuthorizationGrant;
   errorCode?: string;
@@ -46,9 +48,11 @@ export interface ConsumeRequest {
   deviceId: string;
   operationId: string;
   version: number;
+  signal?: AbortSignal;
 }
 
 export interface ConsumeResponse {
+  operationId: string;
   status: ConsumeStatus;
   errorCode?: string;
   payment?: PaymentDetection;
@@ -62,6 +66,66 @@ export type RemoteResult =
 export interface AuthorizationAdapter {
   requestCut(input: AuthRequest): Promise<AuthResponse>;
   consumeCut(input: ConsumeRequest): Promise<ConsumeResponse>;
+  lookup(operationId: string): Promise<RemoteResult>;
+}
+
+export type EnablementStatus = "enabled" | "not_enabled" | "unknown";
+
+export interface EnablementRequest {
+  orderId: string;
+  technicianId: string;
+  deviceId: string;
+  operationId: string;
+  orderVersion?: number;
+  signal?: AbortSignal;
+}
+
+export interface EnablementGrant {
+  enablementId: string;
+  token: string;
+  orderId: string;
+  technicianId: string;
+  deviceId: string;
+  operationId: string;
+  version: number;
+  issuedAt: string;
+  expiresAt: string;
+}
+
+export interface EnablementResponse {
+  operationId: string;
+  status: EnablementStatus;
+  grant?: EnablementGrant;
+  errorCode?: string;
+}
+
+export interface ConsumeEnablementRequest {
+  enablementId: string;
+  token: string;
+  orderId: string;
+  technicianId: string;
+  deviceId: string;
+  operationId: string;
+  version: number;
+  signal?: AbortSignal;
+}
+
+export type ConsumeEnablementStatus =
+  | "consumed"
+  | "already_consumed"
+  | "not_enabled"
+  | "unknown";
+
+export interface ConsumeEnablementResponse {
+  operationId: string;
+  status: ConsumeEnablementStatus;
+  errorCode?: string;
+}
+
+/** Provisional seam for external reconnection habilitation. */
+export interface EnablementAdapter {
+  requestReconnection(input: EnablementRequest): Promise<EnablementResponse>;
+  consumeReconnection(input: ConsumeEnablementRequest): Promise<ConsumeEnablementResponse>;
   lookup(operationId: string): Promise<RemoteResult>;
 }
 
