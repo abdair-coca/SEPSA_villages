@@ -36,6 +36,7 @@ export interface LocalRepository {
   /** CAS update. Omitting change.order updates only record, never order. */
   updateOperationAndOrder(change: AtomicOperationChange, expectedOrderVersion?: number): Promise<void>;
   listSyncItems(): Promise<SyncItem[]>;
+  getEvidence?(evidenceId: string): Promise<EvidenceReference | undefined>;
   claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number): Promise<SyncClaimResult>;
   recoverPhysicalUnknown(operationId: string, now: string, lease?: { owner: string; leaseToken: string }): Promise<StoredRecord | undefined>;
   updateSyncState(

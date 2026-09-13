@@ -66,6 +66,21 @@ export function validateEvidence(
   if (evidence.mimeType !== "image/jpeg" && evidence.mimeType !== "image/png") {
     throw new DomainError("Evidence must be a JPEG or PNG image.", "EVIDENCE_FORMAT_INVALID");
   }
+  if (evidence.content !== undefined && (typeof Blob === "undefined" || !(evidence.content instanceof Blob))) {
+    throw new DomainError("Evidence content must be a Blob.", "EVIDENCE_CONTENT_INVALID");
+  }
+  if (evidence.contentHash !== undefined && !/^[a-f0-9]{64}$/i.test(evidence.contentHash)) {
+    throw new DomainError("Evidence content hash must be SHA-256.", "EVIDENCE_HASH_INVALID");
+  }
+  if (evidence.contentHash !== undefined && evidence.content === undefined) {
+    throw new DomainError("Evidence content is required with its hash.", "EVIDENCE_CONTENT_REQUIRED");
+  }
+  if (evidence.content !== undefined && !evidence.contentHash) {
+    throw new DomainError("Evidence content hash is required for stored content.", "EVIDENCE_HASH_REQUIRED");
+  }
+  if (evidence.content && evidence.content.type && evidence.content.type !== evidence.mimeType) {
+    throw new DomainError("Evidence content type does not match its metadata.", "EVIDENCE_CONTENT_TYPE_INVALID");
+  }
   if (evidence.optimized !== true || evidence.width * evidence.height > 5_000_000) {
     throw new DomainError("Evidence must already be optimized to five megapixels or less.", "EVIDENCE_NOT_OPTIMIZED");
   }

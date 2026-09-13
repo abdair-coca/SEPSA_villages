@@ -619,7 +619,10 @@ function evidenceEquivalent(left: EvidenceReference, right: EvidenceReference): 
     left.mimeType === right.mimeType &&
     left.width === right.width &&
     left.height === right.height &&
-    left.optimized === right.optimized;
+    left.optimized === right.optimized &&
+    left.contentHash?.toLowerCase() === right.contentHash?.toLowerCase() &&
+    left.content?.size === right.content?.size &&
+    left.content?.type === right.content?.type;
 }
 
 function secureRandomUuid(): string {

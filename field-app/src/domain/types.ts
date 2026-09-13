@@ -67,6 +67,8 @@ export interface EvidenceReference {
   width: number;
   height: number;
   optimized: boolean;
+  content?: Blob;
+  contentHash?: string;
 }
 
 export interface OperationRecord {
