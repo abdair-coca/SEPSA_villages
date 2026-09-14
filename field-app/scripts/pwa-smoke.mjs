@@ -44,22 +44,22 @@ try {
   await login(cdp, "admin.simulated", "SIMULATED-admin-003");
   await waitForExpression(cdp, `document.body.innerText.includes("Centro de control")`);
   await waitForExpression(cdp, `document.querySelector(".operations-search .admin-record") !== null`);
-  await evaluate(cdp, `document.querySelector(".operations-search .admin-record")?.click()`);
+  await evaluate(cdp, `document.querySelector(".operations-search .record-review")?.click()`);
   await waitForExpression(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("Crear orden"))?.disabled === false`);
   await evaluate(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("Crear orden"))?.click()`);
   await waitForExpression(cdp, `document.body.innerText.includes("Orden creada")`);
-  await waitForExpression(cdp, `[...document.querySelectorAll(".operations-orders button")].some((button) => button.textContent.includes("order-"))`);
-  await evaluate(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("order-"))?.click()`);
-  await waitForExpression(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("Asignar"))?.disabled === false`);
-  await evaluate(cdp, `[...document.querySelectorAll(".operations-orders button")].find((button) => button.textContent.includes("Asignar"))?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".operations-orders .admin-order-list .admin-record") !== null`);
+  await evaluate(cdp, `document.querySelector(".operations-orders .admin-order-list .admin-record")?.click()`);
+  await waitForExpression(cdp, `[...document.querySelectorAll(".assignment-form .secondary-action")].find((button) => button.textContent.includes("Confirmar asignación"))?.disabled === false`);
+  await evaluate(cdp, `[...document.querySelectorAll(".assignment-form .secondary-action")].find((button) => button.textContent.includes("Confirmar asignación"))?.click()`);
   await waitForExpression(cdp, `document.body.innerText.includes("Orden asignada")`);
   await evaluate(cdp, `[...document.querySelectorAll("button")].find((button) => button.textContent.includes("Cerrar sesión"))?.click()`);
   await login(cdp, "camila.simulated", "SIMULATED-camila-003");
-  await waitForExpression(cdp, `document.body.innerText.includes("Mis órdenes")`);
-  await waitForExpression(cdp, `document.querySelector(".order-item") !== null`);
+  await waitForExpression(cdp, `document.body.innerText.includes("Bandeja de cortes")`);
+  await waitForExpression(cdp, `document.querySelector(".order-card") !== null`);
 
   await evaluate(cdp, `
-    document.querySelector(".order-item")?.click()
+    document.querySelector(".order-card")?.click()
   `);
   await waitForExpression(cdp, `document.body.innerText.includes("Registrar visita")`);
   await evaluate(cdp, `
@@ -103,9 +103,8 @@ try {
   await evaluate(cdp, `document.documentElement.dataset.pwaSmokeDocument = ${JSON.stringify(documentToken)}`);
   await cdp.send("Page.navigate", { url: appUrl });
   await waitForExpression(cdp, `document.documentElement.dataset.pwaSmokeDocument !== ${JSON.stringify(documentToken)}`);
-  await login(cdp, "camila.simulated", "SIMULATED-camila-003");
-  await waitForExpression(cdp, `document.body.innerText.includes("Mis órdenes")`);
-  await waitForExpression(cdp, `document.querySelector(".order-item") !== null`);
+  await waitForExpression(cdp, `document.body.innerText.includes("Bandeja de cortes")`);
+  await waitForExpression(cdp, `document.querySelector(".order-card") !== null`);
   await evaluate(cdp, `
     [...document.querySelectorAll("button")]
       .find((button) => button.textContent.includes("Cola"))

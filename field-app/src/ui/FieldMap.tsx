@@ -1,0 +1,400 @@
+import { useEffect, useRef, useState } from "react";
+import type { ConnectivityMode, WorkOrder } from "../domain";
+import { MAP_CACHE_NAME, SATELLITE_TILE_URL_TEMPLATE } from "../app/map-cache";
+import {
+  IconCrosshair,
+  IconSignal,
+  IconStop,
+  IconRoute,
+  IconPin,
+  IconCheck,
+} from "./Icons";
+
+interface FieldMapProps {
+  orders: WorkOrder[];
+  selectedOrderId: string | null;
+  onSelectOrder: (orderId: string) => void;
+  technicianLocation?: { latitude: number; longitude: number; accuracy?: number };
+  mode: ConnectivityMode;
+  onLocationUpdate?: (loc: { latitude: number; longitude: number; accuracyMeters: number }) => void;
+}
+
+export function FieldMap({
+  orders,
+  selectedOrderId,
+  onSelectOrder,
+  technicianLocation = { latitude: -19.589366, longitude: -65.259119, accuracy: 8 },
+  mode,
+  onLocationUpdate,
+}: FieldMapProps) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [mapStatus, setMapStatus] = useState<string>("");
+  const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [isTracking, setIsTracking] = useState<boolean>(false);
+  const [liveLocation, setLiveLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  } | null>(null);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapInstanceRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const techMarkerRef = useRef<any>(null);
+  const watchIdRef = useRef<number | null>(null);
+
+  const activeLocation = liveLocation ?? technicianLocation;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !mapContainerRef.current) return;
+    let active = true;
+
+    void (async () => {
+      const LModule = await import("leaflet");
+      const L = LModule.default ?? LModule;
+      await import("leaflet/dist/leaflet.css");
+      if (!active || !mapContainerRef.current) return;
+
+      // Extraer coordenadas de las órdenes asignadas
+      const orderPoints: Array<{ lat: number; lng: number; order: WorkOrder }> = [];
+      orders.forEach((order, index) => {
+        const lat =
+          order.context?.cadastralLatitude ??
+          (-19.589366 + ((index % 5) - 2) * 0.0012);
+        const lng =
+          order.context?.cadastralLongitude ??
+          (-65.259119 + (Math.floor(index / 5) - 1) * 0.0014);
+        orderPoints.push({ lat, lng, order });
+      });
+
+      const initialCenterLat =
+        orderPoints.length > 0
+          ? orderPoints.reduce((acc, p) => acc + p.lat, 0) / orderPoints.length
+          : -19.589366;
+      const initialCenterLng =
+        orderPoints.length > 0
+          ? orderPoints.reduce((acc, p) => acc + p.lng, 0) / orderPoints.length
+          : -65.259119;
+
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: true,
+        minZoom: 11,
+        maxZoom: 19,
+      }).setView([initialCenterLat, initialCenterLng], 16);
+
+      mapInstanceRef.current = map;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const CachedSatelliteLayer = (L.TileLayer as any).extend({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        createTile(coords: any, done: any) {
+          const tile = document.createElement("img");
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const url = (this as any).getTileUrl(coords);
+          tile.alt = "";
+          tile.setAttribute("role", "presentation");
+
+          if (typeof caches !== "undefined") {
+            caches
+              .open(MAP_CACHE_NAME)
+              .then((cache) => cache.match(url))
+              .then((response) => {
+                if (response) {
+                  return response.blob().then((blob) => {
+                    tile.src = URL.createObjectURL(blob);
+                    done(undefined, tile);
+                  });
+                }
+                tile.src = url;
+                L.DomEvent.on(tile, "load", () => done(undefined, tile));
+                L.DomEvent.on(tile, "error", (e: unknown) => done(e, tile));
+              })
+              .catch(() => {
+                tile.src = url;
+                L.DomEvent.on(tile, "load", () => done(undefined, tile));
+                L.DomEvent.on(tile, "error", (e: unknown) => done(e, tile));
+              });
+          } else {
+            tile.src = url;
+            L.DomEvent.on(tile, "load", () => done(undefined, tile));
+            L.DomEvent.on(tile, "error", (e: unknown) => done(e, tile));
+          }
+
+          return tile;
+        },
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const satelliteLayer = new (CachedSatelliteLayer as any)(SATELLITE_TILE_URL_TEMPLATE, {
+        maxNativeZoom: 17,
+        maxZoom: 19,
+        attribution: "Tiles &copy; Esri",
+      }).addTo(map);
+
+      satelliteLayer.on("tileerror", () => {
+        if (mode === "offline") {
+          setMapStatus("Imágenes satelitales no descargadas para este cuadrante. Mostrando referencias vectoriales.");
+        }
+      });
+
+      const isRealGps = liveLocation !== null;
+      const techIcon = L.divIcon({
+        className: "field-user-marker-wrap",
+        html: `<div class="user-gps-marker ${isRealGps ? "user-gps-marker--live" : ""}"><div class="user-gps-pulse"></div><div class="user-gps-dot"></div></div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const techMarker = L.marker([activeLocation.latitude, activeLocation.longitude], {
+        icon: techIcon,
+        title: isRealGps ? "Mi ubicación GPS" : "Ubicación técnica asignada",
+      })
+        .addTo(map)
+        .bindPopup(
+          `<strong>${isRealGps ? "Mi ubicación GPS (En vivo)" : "Ubicación técnica asignada"}</strong><br>Lat: ${activeLocation.latitude.toFixed(
+            6
+          )}<br>Lng: ${activeLocation.longitude.toFixed(6)}<br>Precisión: ${
+            Math.round(activeLocation.accuracy ?? 10)
+          } m`
+        );
+
+      techMarkerRef.current = techMarker;
+
+      const ordersBounds = L.latLngBounds([]);
+
+      orderPoints.forEach(({ lat, lng, order }) => {
+        const isCancelled = order.status === "ANULADO";
+        const isExecuted = order.status === "EJECUTADO";
+        const isSelected = order.orderId === selectedOrderId;
+
+        const markerColor = isCancelled ? "#64748b" : isExecuted ? "#16a34a" : "#dc2626";
+
+        const marker = L.circleMarker([lat, lng], {
+          radius: isSelected ? 10 : 7,
+          color: isSelected ? "#f59e0b" : "#ffffff",
+          weight: isSelected ? 3 : 2,
+          fillColor: markerColor,
+          fillOpacity: 0.95,
+        }).addTo(map);
+
+        const debtBs = order.context?.debtCents ? (order.context.debtCents / 100).toFixed(2) : "0.00";
+        const account = order.context?.accountId || order.accountId || "S/C";
+        const meter = order.context?.meterId || "S/M";
+        const customer = order.context?.customerName || order.orderId;
+
+        const popupContent = document.createElement("div");
+        popupContent.className = "map-popup";
+        popupContent.innerHTML = `
+          <strong>Cuenta ${account}</strong>
+          <span>${customer}</span>
+          <span>Medidor ${meter}</span>
+          <span>Deuda: Bs ${debtBs} · <strong>${order.status}</strong></span>
+        `;
+
+        const viewBtn = document.createElement("button");
+        viewBtn.className = "btn-map-popup";
+        viewBtn.textContent = "Ver ficha de corte";
+        viewBtn.onclick = () => {
+          onSelectOrder(order.orderId);
+        };
+        popupContent.appendChild(viewBtn);
+
+        marker.bindPopup(popupContent);
+        ordersBounds.extend([lat, lng]);
+      });
+
+      if (orderPoints.length > 1) {
+        map.fitBounds(ordersBounds.pad(0.18), { maxZoom: 16 });
+      } else if (orderPoints.length === 1) {
+        map.setView([orderPoints[0].lat, orderPoints[0].lng], 16);
+      }
+    })();
+
+    return () => {
+      active = false;
+      if (watchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [orders, selectedOrderId, onSelectOrder, mode]);
+
+  // Actualizar marcador de técnico cuando cambie la ubicación en vivo
+  useEffect(() => {
+    if (!liveLocation || !mapInstanceRef.current || !techMarkerRef.current) return;
+    const { latitude, longitude, accuracy } = liveLocation;
+
+    techMarkerRef.current.setLatLng([latitude, longitude]);
+    techMarkerRef.current
+      .bindPopup(
+        `<strong>Mi ubicación GPS ${isTracking ? "(En vivo)" : ""}</strong><br>Lat: ${latitude.toFixed(
+          6
+        )}<br>Lng: ${longitude.toFixed(6)}<br>Precisión: ${Math.round(accuracy)} m`
+      )
+      .openPopup();
+  }, [liveLocation, isTracking]);
+
+  const handleGetRealLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setMapStatus("Geolocalización no soportada en este navegador o dispositivo.");
+      return;
+    }
+
+    setIsLocating(true);
+    setMapStatus("Consultando señal GPS del dispositivo…");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        const newLoc = { latitude, longitude, accuracy };
+        setLiveLocation(newLoc);
+        setIsLocating(false);
+        setMapStatus(`Ubicación GPS fijada · Lat ${latitude.toFixed(5)}, Lng ${longitude.toFixed(5)} · Precisión ${Math.round(accuracy)} m`);
+
+        onLocationUpdate?.({ latitude, longitude, accuracyMeters: accuracy });
+
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.setView([latitude, longitude], 17, { animate: true });
+        }
+      },
+      (error) => {
+        setIsLocating(false);
+        if (error.code === 1) {
+          setMapStatus("Permiso de GPS denegado. Habilitá la ubicación en tu navegador.");
+        } else if (error.code === 2) {
+          setMapStatus("Señal GPS no disponible. Verificá la ubicación de tu dispositivo.");
+        } else {
+          setMapStatus("Tiempo de espera agotado al consultar GPS.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  const toggleLiveTracking = () => {
+    if (isTracking) {
+      if (watchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      setIsTracking(false);
+      setMapStatus("Seguimiento continuo desactivado.");
+    } else {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        setMapStatus("Geolocalización no soportada.");
+        return;
+      }
+      setIsTracking(true);
+      setMapStatus("Iniciando seguimiento continuo en tiempo real…");
+
+      const id = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          const newLoc = { latitude, longitude, accuracy };
+          setLiveLocation(newLoc);
+          setMapStatus(`Rastreando en tiempo real · Lat ${latitude.toFixed(5)}, Lng ${longitude.toFixed(5)} (±${Math.round(accuracy)}m)`);
+          onLocationUpdate?.({ latitude, longitude, accuracyMeters: accuracy });
+
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.setView([latitude, longitude], mapInstanceRef.current.getZoom(), { animate: true });
+          }
+        },
+        (error) => {
+          setIsTracking(false);
+          setMapStatus("Error en seguimiento: " + error.message);
+        },
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+      );
+      watchIdRef.current = id;
+    }
+  };
+
+  const fitAllOrders = () => {
+    if (!mapInstanceRef.current) return;
+    const points: Array<[number, number]> = orders.map((o, index) => {
+      const lat =
+        o.context?.cadastralLatitude ??
+        (-19.589366 + ((index % 5) - 2) * 0.0012);
+      const lng =
+        o.context?.cadastralLongitude ??
+        (-65.259119 + (Math.floor(index / 5) - 1) * 0.0014);
+      return [lat, lng];
+    });
+
+    if (points.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const L = (window as any).L;
+      if (L) {
+        const bounds = L.latLngBounds(points);
+        mapInstanceRef.current.fitBounds(bounds.pad(0.18), { maxZoom: 16 });
+      }
+    } else if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([-19.589366, -65.259119], 16);
+    }
+  };
+
+  return (
+    <div className="field-map-container" aria-label="Mapa interactivo de la ruta">
+      <div className="field-map-toolbar">
+        <div className="field-map-info">
+          <span className="field-map-stat">
+            <IconPin className="toolbar-icon" /> <strong>{orders.length}</strong> suministros en zona
+          </span>
+          <span className="field-map-stat">
+            <IconCrosshair className="toolbar-icon" /> GPS: <strong>{Math.round(activeLocation.accuracy ?? 8)} m</strong>
+          </span>
+          {liveLocation ? (
+            <span className="real-gps-indicator">
+              <IconCheck className="toolbar-icon" /> GPS activo
+            </span>
+          ) : null}
+        </div>
+
+        <div className="field-map-buttons">
+          <button
+            type="button"
+            className={`btn-center-map ${liveLocation ? "btn-center-map--active" : ""}`}
+            onClick={handleGetRealLocation}
+            disabled={isLocating}
+            title="Centrar en mi ubicación GPS"
+          >
+            <IconCrosshair className="btn-icon" />
+            <span>{isLocating ? "Obteniendo GPS…" : "Mi ubicación"}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`btn-tracking ${isTracking ? "btn-tracking--active" : ""}`}
+            onClick={toggleLiveTracking}
+            title="Seguimiento GPS continuo en mapa"
+          >
+            {isTracking ? <IconStop className="btn-icon" /> : <IconSignal className="btn-icon" />}
+            <span>{isTracking ? "Detener" : "Rastrear"}</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-fit-orders"
+            onClick={fitAllOrders}
+            title="Enfocar la zona donde están todas las órdenes"
+          >
+            <IconRoute className="btn-icon" />
+            <span>Zona de órdenes</span>
+          </button>
+        </div>
+      </div>
+
+      {mapStatus ? (
+        <div className="map-warning-banner" role="status">
+          {mapStatus}
+        </div>
+      ) : null}
+
+      <div ref={mapContainerRef} className="field-map-canvas" />
+    </div>
+  );
+}

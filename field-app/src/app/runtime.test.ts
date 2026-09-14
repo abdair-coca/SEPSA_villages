@@ -61,6 +61,22 @@ describe("simulated authoritative technician runtime", () => {
 
     expect(store.getSnapshot().activity).toMatchObject([{ record: { kind: "VISIT", attemptedAction: "CUT", execution: "NONE", syncStatus: "pending" } }]);
   });
+
+  it("refreshes technician tray after a new order is assigned", async () => {
+    const setup = await createRuntime("runtime-tray-refresh");
+    const transport = new SimulatedAuthoritySyncTransport(setup.authority, setup.technician, setup.repository);
+    const store = createAuthenticatedTechnicianStore(setup.technician.userId, setup.deviceId, { repository: setup.repository, seedPackage: await setup.repository.loadAssignedPackage(), transport });
+    await store.init();
+
+    const [debtor] = await findDebtors(setup.authority, setup.admin, { query: "SUM-1002" });
+    const newOrder = await createOrder(setup.authority, setup.admin, { operationId: "runtime-tray-refresh-create-2", debtorId: debtor.debtorId, purpose: "CUT" });
+    await assignOrder(setup.authority, setup.admin, { operationId: "runtime-tray-refresh-assign-2", orderId: newOrder.orderId, technicianId: setup.technician.userId, expectedOrderVersion: 1 });
+
+    await setup.repository.savePackage(await downloadAssigned(setup.authority, setup.technician, setup.deviceId));
+    await store.refresh();
+
+    expect(store.getSnapshot().orders).toEqual(expect.arrayContaining([expect.objectContaining({ orderId: newOrder.orderId, assignedTechnicianId: setup.technician.userId })]));
+  });
 });
 
 async function createRuntime(name: string) {

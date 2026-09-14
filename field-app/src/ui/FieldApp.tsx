@@ -1,142 +1,724 @@
-import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import type { ActivityEntry, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
 import { selectVisibleOrders } from "../app/index";
+import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
+import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
+import { FieldMap } from "./FieldMap";
+import { IconCheck, IconDownload, IconMap, IconPin, IconRefresh, IconSearch } from "./Icons";
 
 export interface FieldAppProps {
   store: AppStore;
   technicianId?: string;
+  technicianName?: string;
   deviceId?: string;
   enableReconnection?: boolean;
-  environment?: "SIMULATED" | "PILOT_PROVISIONAL";
+  onRefreshAssigned?: () => Promise<void>;
 }
 
-export function FieldApp({ store, technicianId = "tech-camila", deviceId = "device-rugged-01", enableReconnection = true, environment = "SIMULATED" }: FieldAppProps) {
+export function FieldApp({
+  store,
+  technicianId = "tech-camila",
+  technicianName,
+  deviceId = "device-rugged-01",
+  enableReconnection = true,
+  onRefreshAssigned,
+}: FieldAppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
+  const [isProbingNetwork, setIsProbingNetwork] = useState(false);
+  const [isRefreshingAssigned, setIsRefreshingAssigned] = useState(false);
+  const [assignedRefreshError, setAssignedRefreshError] = useState<string>();
+  const connectivityRef = useRef<BrowserConnectivity | null>(null);
+  const prevModeRef = useRef<ConnectivityMode>(state.mode);
+
   useEffect(() => {
     void store.init();
   }, [store]);
 
+  // Adaptador de conectividad real para el navegador
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const connectivity = new BrowserConnectivity();
+    connectivityRef.current = connectivity;
+
+    const unsubscribe = connectivity.subscribe((nextMode) => {
+      store.setMode(nextMode);
+    });
+
+    // Sondeo inicial
+    void connectivity.probe();
+
+    return () => {
+      unsubscribe();
+      connectivity.stop();
+      connectivityRef.current = null;
+    };
+  }, [store]);
+
+  // Auto-sincronización en segundo plano al recuperar señal
+  useEffect(() => {
+    const wasDisconnected = prevModeRef.current === "offline" || prevModeRef.current === "weak";
+    const isNowOnline = state.mode === "online";
+    if (wasDisconnected && isNowOnline) {
+      const hasPendingSync = state.syncItems.some((item) => item.status !== "synced");
+      if (hasPendingSync && state.busyAction !== "SYNC") {
+        void store.sync();
+      }
+    }
+    prevModeRef.current = state.mode;
+  }, [state.mode, state.syncItems, state.busyAction, store]);
+
+  const handleRefreshAssigned = async (): Promise<void> => {
+    if (!onRefreshAssigned || isRefreshingAssigned) return;
+    setIsRefreshingAssigned(true);
+    setAssignedRefreshError(undefined);
+    try {
+      await onRefreshAssigned();
+    } catch (error) {
+      setAssignedRefreshError(error instanceof Error ? error.message : "No pudimos actualizar la bandeja.");
+    } finally {
+      setIsRefreshingAssigned(false);
+    }
+  };
+
+  const handleRetryConnection = async () => {
+    if (isProbingNetwork) return;
+    setIsProbingNetwork(true);
+    try {
+      if (connectivityRef.current) {
+        const nextMode = await connectivityRef.current.checkNow();
+        store.setMode(nextMode);
+      } else {
+        const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+        store.setMode(online ? "online" : "offline");
+      }
+      if (store.getSnapshot().mode !== "offline") {
+        await store.sync().catch(() => undefined);
+        await handleRefreshAssigned();
+      }
+    } finally {
+      setIsProbingNetwork(false);
+    }
+  };
+
   return (
     <div className="field-app">
-      <Header state={state} onModeChange={store.setMode} technicianId={technicianId} deviceId={deviceId} environment={environment} />
-      {state.message ? <div className={`message message--${state.message.tone}`} role="status">{state.message.text}</div> : null}
+      <Header
+        state={state}
+        isProbingNetwork={isProbingNetwork}
+        onRetryConnection={handleRetryConnection}
+        isRefreshingAssigned={isRefreshingAssigned}
+        onRefreshAssigned={onRefreshAssigned ? () => void handleRefreshAssigned() : undefined}
+        technicianId={technicianId}
+        technicianName={technicianName}
+        deviceId={deviceId}
+      />
+      {state.message ? (
+        <div className={`message message--${state.message.tone}`} role="status">
+          {state.message.text}
+        </div>
+      ) : null}
+      {assignedRefreshError ? <div className="message message--warning" role="status">{assignedRefreshError}</div> : null}
       {state.status === "loading" ? <LoadingState /> : null}
-      {state.status === "error" ? <ErrorState text={state.error ?? "No pudimos cargar el paquete local."} onRetry={store.init} /> : null}
-      {state.status === "ready" ? <Workbench state={state} store={store} enableReconnection={enableReconnection} /> : null}
+      {state.status === "error" ? (
+        <ErrorState text={state.error ?? "No pudimos cargar el paquete local."} onRetry={store.init} />
+      ) : null}
+      {state.status === "ready" ? (
+        <Workbench
+          state={state}
+          store={store}
+          enableReconnection={enableReconnection}
+          technicianName={technicianName}
+        />
+      ) : null}
     </div>
   );
 }
 
-function Header({ state, onModeChange, technicianId, deviceId, environment }: { state: AppState; onModeChange: (mode: ConnectivityMode) => void; technicianId: string; deviceId: string; environment: "SIMULATED" | "PILOT_PROVISIONAL" }) {
+function Header({
+  state,
+  isProbingNetwork,
+  onRetryConnection,
+  isRefreshingAssigned,
+  onRefreshAssigned,
+  technicianId,
+  technicianName,
+  deviceId,
+}: {
+  state: AppState;
+  isProbingNetwork: boolean;
+  onRetryConnection: () => void;
+  isRefreshingAssigned: boolean;
+  onRefreshAssigned?: () => void;
+  technicianId: string;
+  technicianName?: string;
+  deviceId: string;
+}) {
+  const modeLabel =
+    state.mode === "online" ? "Conectada" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
+
   return (
     <header className="app-header">
       <div className="identity-block">
         <div className="eyebrow">SEPSA · CAMPO</div>
         <h1>Jornada de campo</h1>
-        <p className="identity">Técnico <strong>{technicianId}</strong> · dispositivo <strong>{deviceId}</strong></p>
+        <p className="identity">
+          Técnico <strong>{technicianName ?? technicianId}</strong> · dispositivo <strong>{deviceId}</strong>
+        </p>
       </div>
       <div className="header-meta">
-        <div className="network-control">
-          <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
-          <label htmlFor="network-mode">Red</label>
-          <select id="network-mode" value={state.mode} onChange={(event) => onModeChange(event.target.value as ConnectivityMode)}>
-            <option value="online">Conectada</option>
-            <option value="weak">Señal débil</option>
-            <option value="offline">Sin conexión</option>
-          </select>
+        <div className="network-control-auto">
+          <span className={`network-status-badge network-status-badge--${state.mode}`}>
+            <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
+            <span className="network-status-text">{modeLabel}</span>
+          </span>
+          <button
+            type="button"
+            className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
+            onClick={onRetryConnection}
+            disabled={isProbingNetwork}
+            title="Reintentar conexión ahora"
+            aria-label="Reintentar conexión"
+          >
+            <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
+            <span className="retry-label">{isProbingNetwork ? "Probando…" : "Reintentar"}</span>
+          </button>
+          {onRefreshAssigned ? <button type="button" className="btn-inbox-refresh" onClick={onRefreshAssigned} disabled={isRefreshingAssigned} title="Descargar órdenes asignadas ahora"><IconDownload /><span className="refresh-label">{isRefreshingAssigned ? "Actualizando…" : "Actualizar bandeja"}</span></button> : null}
         </div>
-        <p className="last-update">Última actualización<br /><strong>{formatDate(state.package?.downloadedAt ?? state.lastRefreshAt)}</strong></p>
+        <LastUpdateDisplay
+        timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
+        isRefreshing={isProbingNetwork || isRefreshingAssigned}
+        onRefresh={onRefreshAssigned ?? onRetryConnection}
+        />
       </div>
-      <div className="simulation-banner">{environment === "SIMULATED" ? "Simulación, sin conexión a SEPSA" : "PILOT_PROVISIONAL · backend provisional"}</div>
+      <div className="simulation-banner">Datos de demostración · fuente pendiente de validación con SEPSA</div>
     </header>
   );
 }
 
-function Workbench({ state, store, enableReconnection }: { state: AppState; store: AppStore; enableReconnection: boolean }) {
+function Workbench({
+  state,
+  store,
+  enableReconnection,
+  technicianName,
+}: {
+  state: AppState;
+  store: AppStore;
+  enableReconnection: boolean;
+  technicianName?: string;
+}) {
   const visibleOrders = selectVisibleOrders(state);
   const selectedOrder = state.orders.find((order) => order.orderId === state.selectedOrderId);
+
   return (
     <main className="workbench">
       <nav className="section-tabs" aria-label="Secciones de trabajo">
-        <button className={state.tab === "orders" ? "tab tab--active" : "tab"} onClick={() => store.setTab("orders")}>Órdenes <span>{state.orders.length}</span></button>
-        <button className={state.tab === "queue" ? "tab tab--active" : "tab"} onClick={() => store.setTab("queue")}>Cola <span>{pendingCount(state.syncItems)}</span></button>
+        <button
+          className={state.tab === "orders" ? "tab tab--active" : "tab"}
+          onClick={() => {
+            store.selectOrder(null);
+            store.setTab("orders");
+          }}
+        >
+          Órdenes <span>{state.orders.length}</span>
+        </button>
+        <button
+          className={state.tab === "queue" ? "tab tab--active" : "tab"}
+          onClick={() => {
+            store.selectOrder(null);
+            store.setTab("queue");
+          }}
+        >
+          Cola <span>{pendingCount(state.syncItems)}</span>
+        </button>
       </nav>
+
       {state.tab === "orders" ? (
-        <section className="orders-layout" aria-label="Órdenes asignadas">
+        selectedOrder ? (
+          <OrderDetail
+            order={selectedOrder}
+            state={state}
+            store={store}
+            enableReconnection={enableReconnection}
+            technicianName={technicianName}
+            onBack={() => store.selectOrder(null)}
+          />
+        ) : (
           <OrdersPanel state={state} orders={visibleOrders} store={store} />
-          {selectedOrder ? <OrderDetail order={selectedOrder} state={state} store={store} enableReconnection={enableReconnection} /> : <EmptyDetail />}
-        </section>
-      ) : <QueuePanel state={state} store={store} />}
+        )
+      ) : (
+        <QueuePanel state={state} store={store} />
+      )}
     </main>
   );
 }
 
 function OrdersPanel({ state, orders, store }: { state: AppState; orders: WorkOrder[]; store: AppStore }) {
-  const filters: Array<{ value: OrderFilter; label: string }> = [
-    { value: "ALL", label: "Todas" },
-    { value: "GENERADO", label: "Por ejecutar" },
-    { value: "EJECUTADO", label: "Ejecutadas" },
-    { value: "RECONEXIÓN", label: "Reconectadas" },
-    { value: "ANULADO", label: "Anuladas" },
+  const [showMap, setShowMap] = useState(false);
+  const [isMapCachedState, setIsMapCachedState] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<CacheProgress | null>(null);
+  const [isDownloadingMap, setIsDownloadingMap] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void isRouteMapCached(state.orders).then((cached) => {
+      if (active) setIsMapCachedState(cached);
+    });
+    return () => {
+      active = false;
+    };
+  }, [state.orders]);
+
+  const handleDownloadMap = async () => {
+    setIsDownloadingMap(true);
+    try {
+      await downloadRouteMap(state.orders, (progress) => {
+        setDownloadProgress(progress);
+      });
+      setIsMapCachedState(true);
+    } catch {
+      // Manejo silencioso en UI para no interrumpir la jornada
+    } finally {
+      setIsDownloadingMap(false);
+      setDownloadProgress(null);
+    }
+  };
+
+  const generatedCount = state.orders.filter((o) => o.status === "GENERADO").length;
+  const executedCount = state.orders.filter((o) => o.status === "EJECUTADO").length;
+  const cancelledCount = state.orders.filter((o) => o.status === "ANULADO").length;
+
+  const filters: Array<{ value: OrderFilter; label: string; count?: number }> = [
+    { value: "ALL", label: "Todas", count: state.orders.length },
+    { value: "GENERADO", label: "Por ejecutar", count: generatedCount },
+    { value: "EJECUTADO", label: "Ejecutadas", count: executedCount },
+    { value: "ANULADO", label: "Anuladas", count: cancelledCount },
     { value: "REVIEW", label: "Revisión" },
   ];
+
   return (
-    <div className="orders-panel panel">
+    <section className="orders-panel panel" aria-label="Órdenes asignadas">
       <div className="panel-heading">
-        <div><div className="eyebrow">PAQUETE v{state.package?.version ?? "—"}</div><h2>Mis órdenes</h2></div>
-        <span className="count-badge">{orders.length}</span>
+        <div>
+          <div className="eyebrow">PAQUETE v{state.package?.version ?? "—"}</div>
+          <h2>Mis órdenes · Bandeja de cortes</h2>
+        </div>
+        <div className="panel-heading-badges">
+          <span className="count-badge count-badge--danger">{generatedCount} por ejecutar</span>
+          <span className="count-badge">{orders.length} en vista</span>
+        </div>
       </div>
-      <label className="search-field" htmlFor="order-search"><span aria-hidden="true">⌕</span><input id="order-search" type="search" value={state.query} onChange={(event) => store.setQuery(event.target.value)} placeholder="Buscar por ID de orden" /></label>
+
+      {/* Buscador Único Inteligente */}
+      <div className="search-bar-wrap">
+        <label className="search-field" htmlFor="order-search">
+          <IconSearch className="search-field-icon" />
+          <input
+            id="order-search"
+            type="search"
+            value={state.query}
+            onChange={(event) => store.setQuery(event.target.value)}
+            placeholder="Buscar por cuenta, medidor, CUC o cliente…"
+          />
+        </label>
+        {state.query ? (
+          <button
+            type="button"
+            className="search-clear-btn"
+            onClick={() => store.setQuery("")}
+            aria-label="Limpiar búsqueda"
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+
+      {/* Chips de filtro rápido */}
       <div className="filter-row" aria-label="Filtrar órdenes">
-        {filters.map((filter) => <button key={filter.value} className={state.filter === filter.value ? "filter-chip filter-chip--active" : "filter-chip"} onClick={() => store.setFilter(filter.value)}>{filter.label}</button>)}
+        {filters.map((filter) => (
+          <button
+            key={filter.value}
+            className={state.filter === filter.value ? "filter-chip filter-chip--active" : "filter-chip"}
+            onClick={() => store.setFilter(filter.value)}
+          >
+            {filter.label} {filter.count !== undefined ? <span className="chip-count">({filter.count})</span> : null}
+          </button>
+        ))}
       </div>
-      {orders.length ? <div className="order-list">{orders.map((order) => <OrderListItem key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => store.selectOrder(order.orderId)} />)}</div> : <EmptyOrders />}
-    </div>
+
+      {/* Barra de herramientas de mapa */}
+      <div className="map-actions-bar">
+        <button
+          type="button"
+          className={showMap ? "btn-map-toggle btn-map-toggle--active" : "btn-map-toggle"}
+          onClick={() => setShowMap(!showMap)}
+        >
+          <IconMap className="btn-icon" />
+          <span>{showMap ? "Ocultar mapa" : "Ver mapa de órdenes"}</span>
+        </button>
+
+        {!isMapCachedState ? (
+          <button
+            type="button"
+            className="btn-download-map"
+            disabled={isDownloadingMap}
+            onClick={handleDownloadMap}
+            title="Descarga la zona completa donde están ubicadas las órdenes"
+          >
+            <IconDownload className="btn-icon" />
+            <span>
+              {isDownloadingMap
+                ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…`
+                : "Descargar mapa de la zona de órdenes"}
+            </span>
+          </button>
+        ) : (
+          <span className="map-cached-tag">
+            <IconCheck className="cached-icon" />
+            <span>Mapa de órdenes descargado</span>
+          </span>
+        )}
+      </div>
+
+      {/* Vista interactiva del mapa */}
+      {showMap ? (
+        <FieldMap
+          orders={orders}
+          selectedOrderId={state.selectedOrderId}
+          onSelectOrder={(orderId) => store.selectOrder(orderId)}
+          mode={state.mode}
+        />
+      ) : null}
+
+      {/* Lista de Cards Táctiles */}
+      {orders.length ? (
+        <div className="order-cards-list">
+          {orders.map((order) => (
+            <OrderCard
+              key={order.orderId}
+              order={order}
+              selected={state.selectedOrderId === order.orderId}
+              onSelect={() => store.selectOrder(order.orderId)}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyOrders />
+      )}
+    </section>
   );
 }
 
-function OrderListItem({ order, selected, onSelect }: { order: WorkOrder; selected: boolean; onSelect: () => void }) {
+function OrderCard({
+  order,
+  selected,
+  onSelect,
+}: {
+  order: WorkOrder;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const isCancelled = order.status === "ANULADO";
+  const isExecuted = order.status === "EJECUTADO";
+  const account = order.context?.accountId || order.accountId || "S/C";
+  const meter = order.context?.meterId || "S/M";
+  const customer = order.context?.customerName || order.orderId;
+  const address = order.context?.address || "Dirección no especificada";
+  const route = order.context?.route || "Ruta —";
+  const debtBs = order.context?.debtCents ? (order.context.debtCents / 100).toFixed(2) : "0.00";
+  const daysSince = formatDaysSince(order.createdAt);
+  const cuc = order.cuc;
+
   return (
-    <button className={selected ? "order-item order-item--selected" : "order-item"} onClick={onSelect} aria-pressed={selected}>
-      <span className="order-item__main"><strong>{order.orderId}</strong><span className="order-state">{orderStatusLabel(order.status)}</span></span>
-      <span className="order-item__side"><span className={`status-mark status-mark--${orderStatusTone(order)}`}>{physicalStatusLabel(order.physicalStatus)}</span><span className="chevron" aria-hidden="true">›</span></span>
-    </button>
+    <article
+      className={`order-card order-item ${selected ? "order-card--selected" : ""} ${
+        isCancelled ? "order-card--cancelled" : ""
+      }`}
+      onClick={onSelect}
+    >
+      <div className="order-card__header">
+        <div className="order-card__identifiers">
+          <span className="order-card__order-id">{order.orderId}</span>
+          <span className="order-card__divider">·</span>
+          <span className="order-card__account">CTA. {account}</span>
+          <span className="order-card__divider">·</span>
+          <span className="order-card__meter">MED. {meter}</span>
+          {cuc ? <span className="order-card__cuc">CUC {cuc}</span> : null}
+        </div>
+        <div className="order-card__badges">
+          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
+            {orderStatusLabel(order.status)}
+          </span>
+        </div>
+      </div>
+
+      <div className="order-card__body">
+        <h3 className="order-card__customer">{customer}</h3>
+        <p className="order-card__address">
+          <IconPin className="card-address-icon" /> {address} · <span className="order-card__route">{route}</span>
+        </p>
+      </div>
+
+      <div className="order-card__footer">
+        <div className="order-card__debt-info">
+          <span className="order-card__debt-label">Deuda:</span>
+          <strong className="order-card__debt-val">Bs {debtBs}</strong>
+          <span className="order-card__days">{daysSince}</span>
+        </div>
+
+        <button
+          type="button"
+          className={`order-card__action-btn ${
+            isCancelled ? "order-card__action-btn--outline" : isExecuted ? "order-card__action-btn--success" : "order-card__action-btn--danger"
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          {isCancelled ? "Ver anulado ›" : isExecuted ? "Ver ejecutado ›" : "Ver corte ›"}
+        </button>
+      </div>
+    </article>
   );
 }
 
-function OrderDetail({ order, state, store, enableReconnection }: { order: WorkOrder; state: AppState; store: AppStore; enableReconnection: boolean }) {
+function OrderDetail({
+  order,
+  state,
+  store,
+  enableReconnection,
+  technicianName,
+  onBack,
+}: {
+  order: WorkOrder;
+  state: AppState;
+  store: AppStore;
+  enableReconnection: boolean;
+  technicianName?: string;
+  onBack: () => void;
+}) {
   const [draft, setDraft] = useState<ActionKind | null>(null);
+  const isCancelled = order.status === "ANULADO";
+
   return (
-    <section className="detail-panel panel" aria-label={`Detalle de ${order.orderId}`}>
-      <div className="detail-topline"><span className="eyebrow">DETALLE DE ORDEN</span><span className="version-tag">Versión {order.version ?? "—"}</span></div>
-      <div className="detail-heading"><div><h2>{order.orderId}</h2><p>Orden asignada a tu dispositivo</p></div><span className={`large-status large-status--${orderStatusTone(order)}`}>{orderStatusLabel(order.status)}</span></div>
-      <div className="physical-card"><span className="physical-card__label">Estado físico</span><strong>{physicalStatusLabel(order.physicalStatus)}</strong>{order.physicalStatus === "PHYSICAL_UNKNOWN" ? <p>Revisión humana requerida. No repetir acción.</p> : <p>Estado local verificable sin conexión.</p>}</div>
-      {order.physicalStatus === "PHYSICAL_UNKNOWN" ? <div className="review-callout" role="alert"><strong>Resultado incierto</strong><span>Espere conciliación operativa. No hay acción de repetición disponible.</span></div> : null}
-      {order.context ? <OperationalContext context={order.context} /> : <div className="context-missing">Contexto operativo no disponible en este paquete.</div>}
-      <ActivityPanel entries={state.activity.filter((entry) => entry.record.orderId === order.orderId)} />
-      <div className="action-stack">
-        <button className="primary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>Registrar visita <span>→</span></button>
-        {order.status === "GENERADO" && order.physicalStatus === "NONE" ? <button className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("CUT")}>Preparar corte <span>→</span></button> : null}
-        {enableReconnection && order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED" ? <button className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("RECONNECTION")}>Preparar reconexión <span>→</span></button> : null}
+    <section className="detail-panel panel detail-panel--fullscreen" aria-label={`Detalle de ${order.orderId}`}>
+      {/* Barra superior de retorno */}
+      <div className="detail-navigation-bar">
+        <button type="button" className="btn-back" onClick={onBack}>
+          ← Volver a la bandeja
+        </button>
+        <div className="detail-cuc-badge">
+          {order.cuc ? <span>C.U.C.: {order.cuc}</span> : <span>Orden {order.orderId}</span>}
+          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
+            {orderStatusLabel(order.status)}
+          </span>
+        </div>
       </div>
-      {draft ? <ActionForm kind={draft} order={order} busy={state.busyAction === draft} onCancel={() => setDraft(null)} onSubmit={async (input) => { if (draft === "VISIT") await store.registerVisit(order.orderId, input); else if (draft === "CUT") await store.executeCut(order.orderId, input); else await store.executeReconnection(order.orderId, input); setDraft(null); }} /> : null}
+
+      {/* Banner de orden anulada si corresponde */}
+      {isCancelled ? (
+        <div className="alert-banner alert-banner-warning" role="alert">
+          <strong>ORDEN ANULADA:</strong> Anulado ya que se registró la regularización de la mora.
+          {order.cancellation?.detectedAt ? (
+            <div className="cancellation-timestamp">
+              Fecha de regularización: {formatDate(order.cancellation.detectedAt)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="physical-card">
+        <span className="physical-card__label">Estado físico</span>
+        <strong>{physicalStatusLabel(order.physicalStatus)}</strong>
+        {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
+          <p>Revisión humana requerida. No repetir acción.</p>
+        ) : (
+          <p>Estado local verificable sin conexión.</p>
+        )}
+      </div>
+
+      {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
+        <div className="review-callout" role="alert">
+          <strong>Resultado incierto</strong>
+          <span>Espere conciliación operativa. No hay acción de repetición disponible.</span>
+        </div>
+      ) : null}
+
+      {order.context ? (
+        <OperationalContext context={order.context} />
+      ) : (
+        <div className="context-missing">Contexto operativo no disponible en este paquete.</div>
+      )}
+
+      <ActivityPanel entries={state.activity.filter((entry) => entry.record.orderId === order.orderId)} />
+
+      <div className="action-stack">
+        <button className="primary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
+          Registrar visita <span>→</span>
+        </button>
+        {order.status === "GENERADO" && order.physicalStatus === "NONE" ? (
+          <button className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("CUT")}>
+            Preparar corte <span>→</span>
+          </button>
+        ) : null}
+        {enableReconnection && order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED" ? (
+          <button
+            className="secondary-action"
+            disabled={Boolean(state.busyAction)}
+            onClick={() => setDraft("RECONNECTION")}
+          >
+            Preparar reconexión <span>→</span>
+          </button>
+        ) : null}
+      </div>
+
+      {draft ? (
+        <ActionForm
+          kind={draft}
+          order={order}
+          technicianName={technicianName}
+          busy={state.busyAction === draft}
+          onCancel={() => setDraft(null)}
+          onSubmit={async (input) => {
+            if (draft === "VISIT") await store.registerVisit(order.orderId, input);
+            else if (draft === "CUT") await store.executeCut(order.orderId, input);
+            else await store.executeReconnection(order.orderId, input);
+            setDraft(null);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
 
 function OperationalContext({ context }: { context: NonNullable<WorkOrder["context"]> }) {
-  return <section className="context-panel" aria-label="Contexto operativo"><div className="eyebrow">CONTEXTO OPERATIVO</div><div className="context-grid"><div><span>Cliente</span><strong>{context.customerName || "Dato no disponible"}</strong></div><div><span>Cuenta / suministro</span><strong>{context.accountId || "Dato no disponible"} · {context.supplyId || "Dato no disponible"}</strong></div><div><span>Dirección</span><strong>{context.address || "Dato no disponible"}</strong></div><div><span>Referencias</span><strong>{context.references || "Dato no disponible"}</strong></div><div><span>Medidor</span><strong>{context.meterId || "Dato no disponible"}</strong></div><div><span>Deuda de referencia</span><strong>Bs {(context.debtCents / 100).toFixed(2)} · {context.monthsPending} meses</strong></div></div><div className="context-source">Datos {context.source} · actualizados {formatDate(context.updatedAt)}</div><div className="kardex-panel"><strong>Kardex y deuda</strong>{context.kardex.length ? context.kardex.map((entry) => <div className="kardex-row" key={entry.entryId}><span>{entry.period}</span><span>Bs {(entry.amountCents / 100).toFixed(2)}</span><span>{entry.status === "PENDING" ? "Pendiente" : "Pagado"}</span></div>) : <p>Historial no disponible en paquete local.</p>}</div><div className="map-fallback"><strong>Localización</strong><span>Mapa no disponible. Use dirección y referencias descargadas.</span></div></section>;
+  return (
+    <section className="context-panel" aria-label="Contexto operativo">
+      <div className="eyebrow">CONTEXTO OPERATIVO</div>
+      <div className="context-grid">
+        <div>
+          <span>Cliente</span>
+          <strong>{context.customerName || "Dato no disponible"}</strong>
+        </div>
+        <div>
+          <span>Cuenta / suministro</span>
+          <strong>
+            {context.accountId || "Dato no disponible"} · {context.supplyId || "Dato no disponible"}
+          </strong>
+        </div>
+        <div>
+          <span>Dirección</span>
+          <strong>{context.address || "Dato no disponible"}</strong>
+        </div>
+        <div>
+          <span>Referencias</span>
+          <strong>{context.references || "Dato no disponible"}</strong>
+        </div>
+        <div>
+          <span>Medidor</span>
+          <strong>
+            {context.meterId || "Dato no disponible"}
+            {context.meterBrand ? ` · ${context.meterBrand}` : ""}
+          </strong>
+        </div>
+        <div>
+          <span>Ruta / circuito</span>
+          <strong>
+            {context.route || "Dato no disponible"} · {context.circuit || "Dato no disponible"}
+          </strong>
+        </div>
+        <div>
+          <span>Tarifa / estado</span>
+          <strong>
+            {context.tariff || "Dato no disponible"} · {context.supplyStatus || "Dato no disponible"}
+          </strong>
+        </div>
+        <div>
+          <span>Deuda de referencia</span>
+          <strong>
+            Bs {(context.debtCents / 100).toFixed(2)} · {context.monthsPending} meses
+          </strong>
+        </div>
+      </div>
+      <div className="context-source">Datos de demostración · actualizados {formatDate(context.updatedAt)}</div>
+      <div className="kardex-panel">
+        <strong>Kardex y deuda</strong>
+        {context.kardex.length ? (
+          context.kardex.map((entry) => (
+            <div className="kardex-row" key={entry.entryId}>
+              <span>{entry.period}</span>
+              <span>Bs {(entry.amountCents / 100).toFixed(2)}</span>
+              <span>{entry.status === "PENDING" ? "Pendiente" : "Pagado"}</span>
+            </div>
+          ))
+        ) : (
+          <p>Historial no disponible en paquete local.</p>
+        )}
+      </div>
+      <div className="map-fallback">
+        <strong>Localización</strong>
+        <span>
+          {context.cadastralLatitude !== undefined && context.cadastralLongitude !== undefined
+            ? `${context.cadastralLatitude.toFixed(6)}, ${context.cadastralLongitude.toFixed(6)}`
+            : "Mapa no disponible. Use dirección y referencias descargadas."}
+        </span>
+      </div>
+    </section>
+  );
 }
 
 function ActivityPanel({ entries }: { entries: ActivityEntry[] }) {
   if (!entries.length) return <div className="activity-empty">Sin actividad local registrada.</div>;
-  return <section className="activity-panel" aria-label="Actividad local"><div className="eyebrow">ACTIVIDAD LOCAL</div>{entries.map((entry) => <article className="activity-entry" key={entry.record.operationId}><div className="activity-entry__top"><strong>{activityLabel(entry.record.kind)}</strong><span>{syncStatusLabel(entry.record.syncStatus)}</span></div><p>{formatDate(entry.record.recordedAt)} · {activityDetail(entry.record)}</p>{entry.evidence.length ? <div className="evidence-list">{entry.evidence.map((evidence) => <div className="evidence-meta" key={evidence.evidenceId}><strong>{evidence.mimeType === "image/jpeg" ? "JPEG" : "PNG"} · {evidence.width} × {evidence.height}</strong><span>Guardada localmente · SHA-256 {shortHash(evidence.contentHash)}</span></div>)}</div> : activityException(entry.record) ? <div className="exception-meta">Excepción: {activityException(entry.record)}</div> : null}</article>)}</section>;
+  return (
+    <section className="activity-panel" aria-label="Actividad local">
+      <div className="eyebrow">ACTIVIDAD LOCAL</div>
+      {entries.map((entry) => (
+        <article className="activity-entry" key={entry.record.operationId}>
+          <div className="activity-entry__top">
+            <strong>{activityLabel(entry.record.kind)}</strong>
+            <span>{syncStatusLabel(entry.record.syncStatus)}</span>
+          </div>
+          <p>
+            {formatDate(entry.record.recordedAt)} · {activityDetail(entry.record)}
+          </p>
+          {entry.evidence.length ? (
+            <div className="evidence-list">
+              {entry.evidence.map((evidence) => (
+                <div className="evidence-meta" key={evidence.evidenceId}>
+                  <strong>
+                    {evidence.mimeType === "image/jpeg" ? "JPEG" : "PNG"} · {evidence.width} × {evidence.height}
+                  </strong>
+                  <span>Guardada localmente · SHA-256 {shortHash(evidence.contentHash)}</span>
+                </div>
+              ))}
+            </div>
+          ) : activityException(entry.record) ? (
+            <div className="exception-meta">Excepción: {activityException(entry.record)}</div>
+          ) : null}
+        </article>
+      ))}
+    </section>
+  );
 }
 
 type ActionKind = "VISIT" | "CUT" | "RECONNECTION";
 
-function ActionForm({ kind, order, busy, onCancel, onSubmit }: { kind: ActionKind; order: WorkOrder; busy: boolean; onCancel: () => void; onSubmit: (input: ActionInput) => Promise<void> }) {
+function ActionForm({
+  kind,
+  order,
+  technicianName,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  kind: ActionKind;
+  order: WorkOrder;
+  technicianName?: string;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (input: ActionInput) => Promise<void>;
+}) {
   const [file, setFile] = useState<File | undefined>();
   const [useException, setUseException] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
@@ -150,82 +732,449 @@ function ActionForm({ kind, order, busy, onCancel, onSubmit }: { kind: ActionKin
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const requiresExternal = kind !== "VISIT";
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (kind !== "VISIT" && !file && !useException) return setFormError("Adjunte un archivo JPEG/PNG o marque excepción.");
     if (useException && !exceptionReason.trim()) return setFormError("Escriba una justificación para la excepción.");
     if (kind === "CUT") {
       const parsedReading = Number(reading);
-      if (!Number.isFinite(parsedReading) || parsedReading < 0) return setFormError("Ingrese lectura final válida del medidor.");
+      if (!Number.isFinite(parsedReading) || parsedReading < 0)
+        return setFormError("Ingrese lectura final válida del medidor.");
       if (!location && !skipLocation) return setFormError("Capture GPS o registre excepción de coordenadas.");
       if (skipLocation && !locationReason.trim()) return setFormError("Justifique excepción de coordenadas.");
     }
     setFormError("");
     setSubmitting(true);
     try {
-      const fieldCapture = kind === "CUT" ? {
-        reading: { value: Number(reading), unit: "kWh" as const, meterId: order.context?.meterId ?? "", recordedAt: new Date().toISOString(), status: "CAPTURED" as const },
-        location: location ?? { recordedAt: new Date().toISOString(), status: "BYPASSED" as const, exceptionReason: "saltar_control_coordenadas: " + locationReason },
-        cutType,
-        nearbyMeters,
-      } : undefined;
-      await onSubmit({ file, exceptionReason: useException ? "saltar_control_fotos: " + exceptionReason : undefined, gpsExceptionReason: skipLocation ? "saltar_control_coordenadas: " + locationReason : undefined, fieldCapture, reason: requiresExternal ? `Intento de ${actionLabel(kind).toLocaleLowerCase()}` : "Visita de campo sin ejecución" });
-    } catch { /* Store exposes actionable status. */ } finally { setSubmitting(false); }
+      const fieldCapture =
+        kind === "CUT"
+          ? {
+              reading: {
+                value: Number(reading),
+                unit: "kWh" as const,
+                meterId: order.context?.meterId ?? "",
+                recordedAt: new Date().toISOString(),
+                status: "CAPTURED" as const,
+              },
+              location: location ?? {
+                recordedAt: new Date().toISOString(),
+                status: "BYPASSED" as const,
+                exceptionReason: "saltar_control_coordenadas: " + locationReason,
+              },
+              cutType,
+              nearbyMeters,
+            }
+          : undefined;
+      await onSubmit({
+        file,
+        exceptionReason: useException ? "saltar_control_fotos: " + exceptionReason : undefined,
+        gpsExceptionReason: skipLocation ? "saltar_control_coordenadas: " + locationReason : undefined,
+        fieldCapture,
+        reason: requiresExternal
+          ? `Intento de ${actionLabel(kind).toLocaleLowerCase()}`
+          : "Visita de campo sin ejecución",
+      });
+    } catch {
+      /* Store exposes actionable status. */
+    } finally {
+      setSubmitting(false);
+    }
   }
+
   function captureLocation() {
     if (!navigator.geolocation) return setFormError("Este dispositivo no ofrece GPS; registre excepción controlada.");
     setLocating(true);
-    navigator.geolocation.getCurrentPosition((position) => {
-      setLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, recordedAt: new Date().toISOString(), status: "CAPTURED" });
-      setSkipLocation(false);
-      setLocating(false);
-      setFormError("");
-    }, () => { setLocating(false); setFormError("No pudimos capturar GPS. Reintente o registre excepción controlada."); });
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+          recordedAt: new Date().toISOString(),
+          status: "CAPTURED",
+        });
+        setSkipLocation(false);
+        setLocating(false);
+        setFormError("");
+      },
+      () => {
+        setLocating(false);
+        setFormError("No pudimos capturar GPS. Reintente o registre excepción controlada.");
+      }
+    );
   }
+
   return (
     <form className="action-form" onSubmit={submit}>
-      <div className="form-heading"><div><span className="eyebrow">{actionLabel(kind)}</span><h3>Confirmar datos</h3></div><button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar formulario">×</button></div>
-      <p className="form-hint">Orden {order.orderId}. La evidencia queda guardada localmente; esta simulación no afirma envío remoto.</p>
-      {kind === "CUT" ? <fieldset className="capture-fieldset"><legend>Datos obligatorios de campo</legend><label className="text-field"><span>Lectura final del medidor (kWh)</span><input type="number" min="0" step="0.01" value={reading} onChange={(event) => setReading(event.target.value)} required /></label><label className="text-field"><span>Tipo de corte</span><select value={cutType} onChange={(event) => setCutType(event.target.value as CutType)}><option value="RED">Red</option><option value="MEDIDOR">Medidor</option><option value="BARRAS">Barras</option><option value="PROTECCION">Protección</option><option value="ACOMETIDA">Acometida</option><option value="FUSIBLES">Fusibles</option></select></label><label className="checkbox-field"><input type="checkbox" checked={nearbyMeters} onChange={(event) => setNearbyMeters(event.target.checked)} /><span>Verifiqué medidores cercanos</span></label><div className="location-box"><strong>Coordenadas GPS</strong>{location ? <span>{location.latitude?.toFixed(6)}, {location.longitude?.toFixed(6)} · precisión {Math.round(location.accuracyMeters ?? 0)} m</span> : <span>No capturadas</span>}<button type="button" className="secondary-action" onClick={captureLocation} disabled={locating || skipLocation}>{locating ? "Capturando…" : "Capturar GPS"}</button></div><label className="checkbox-field"><input type="checkbox" checked={skipLocation} onChange={(event) => { setSkipLocation(event.target.checked); if (event.target.checked) setLocation(undefined); }} /><span>No puedo capturar coordenadas</span></label>{skipLocation ? <label className="text-field"><span>Justificación de coordenadas</span><textarea value={locationReason} onChange={(event) => setLocationReason(event.target.value)} rows={2} /></label> : null}</fieldset> : null}
-      <label className="file-field"><span>Archivo de evidencia</span><input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" onChange={(event) => setFile(event.target.files?.[0])} /><small>{file ? file.name : "JPEG o PNG preparado"}</small></label>
-      <label className="checkbox-field"><input type="checkbox" checked={useException} onChange={(event) => setUseException(event.target.checked)} /><span>No puedo adjuntar evidencia</span></label>
-      {useException ? <label className="text-field"><span>Justificación obligatoria</span><textarea value={exceptionReason} onChange={(event) => setExceptionReason(event.target.value)} rows={3} placeholder="Describa el motivo" /></label> : null}
+      <div className="form-heading">
+        <div>
+          <span className="eyebrow">{actionLabel(kind)}</span>
+          <h3>Confirmar datos</h3>
+        </div>
+        <button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar formulario">
+          ×
+        </button>
+      </div>
+      <p className="form-hint">
+        Orden {order.orderId} · Técnico responsable: {technicianName ?? order.assignedTechnicianId}. La evidencia queda
+        guardada localmente y espera confirmación de sincronización.
+      </p>
+      {kind === "CUT" ? (
+        <fieldset className="capture-fieldset">
+          <legend>Datos obligatorios de campo</legend>
+          <label className="text-field">
+            <span>Lectura final del medidor (kWh)</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={reading}
+              onChange={(event) => setReading(event.target.value)}
+              required
+            />
+          </label>
+          <label className="text-field">
+            <span>Tipo de corte</span>
+            <select value={cutType} onChange={(event) => setCutType(event.target.value as CutType)}>
+              <option value="RED">Red</option>
+              <option value="MEDIDOR">Medidor</option>
+              <option value="BARRAS">Barras</option>
+              <option value="PROTECCION">Protección</option>
+              <option value="ACOMETIDA">Acometida</option>
+              <option value="FUSIBLES">Fusibles</option>
+            </select>
+          </label>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={nearbyMeters}
+              onChange={(event) => setNearbyMeters(event.target.checked)}
+            />
+            <span>Verifiqué medidores cercanos</span>
+          </label>
+          <div className="location-box">
+            <strong>Coordenadas GPS</strong>
+            {location ? (
+              <span>
+                {location.latitude?.toFixed(6)}, {location.longitude?.toFixed(6)} · precisión{" "}
+                {Math.round(location.accuracyMeters ?? 0)} m
+              </span>
+            ) : (
+              <span>No capturadas</span>
+            )}
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={captureLocation}
+              disabled={locating || skipLocation}
+            >
+              {locating ? "Capturando…" : "Capturar GPS"}
+            </button>
+          </div>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={skipLocation}
+              onChange={(event) => {
+                setSkipLocation(event.target.checked);
+                if (event.target.checked) setLocation(undefined);
+              }}
+            />
+            <span>No puedo capturar coordenadas</span>
+          </label>
+          {skipLocation ? (
+            <label className="text-field">
+              <span>Justificación de coordenadas</span>
+              <textarea
+                value={locationReason}
+                onChange={(event) => setLocationReason(event.target.value)}
+                rows={2}
+              />
+            </label>
+          ) : null}
+        </fieldset>
+      ) : null}
+      <label className="file-field">
+        <span>Archivo de evidencia</span>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+          onChange={(event) => setFile(event.target.files?.[0])}
+        />
+        <small>{file ? file.name : "JPEG o PNG preparado"}</small>
+      </label>
+      <label className="checkbox-field">
+        <input
+          type="checkbox"
+          checked={useException}
+          onChange={(event) => setUseException(event.target.checked)}
+        />
+        <span>No puedo adjuntar evidencia</span>
+      </label>
+      {useException ? (
+        <label className="text-field">
+          <span>Justificación obligatoria</span>
+          <textarea
+            value={exceptionReason}
+            onChange={(event) => setExceptionReason(event.target.value)}
+            rows={3}
+            placeholder="Describa el motivo"
+          />
+        </label>
+      ) : null}
       {formError ? <p className="form-error" role="alert">{formError}</p> : null}
-      <div className="form-actions"><button type="button" className="secondary-action" onClick={onCancel}>Cancelar</button><button type="submit" className="primary-action" disabled={busy || submitting}>{busy || submitting ? "Guardando…" : "Confirmar"}</button></div>
+      <div className="form-actions">
+        <button type="button" className="secondary-action" onClick={onCancel}>
+          Cancelar
+        </button>
+        <button type="submit" className="primary-action" disabled={busy || submitting}>
+          {busy || submitting ? "Guardando…" : "Confirmar"}
+        </button>
+      </div>
     </form>
   );
 }
 
 function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
-  const items = [...state.syncItems].sort((left, right) => Number(right.status !== "synced") - Number(left.status !== "synced"));
+  const items = [...state.syncItems].sort(
+    (left, right) => Number(right.status !== "synced") - Number(left.status !== "synced")
+  );
   return (
     <section className="queue-panel panel" aria-label="Cola de sincronización">
-      <div className="panel-heading"><div><div className="eyebrow">TRAZABILIDAD LOCAL</div><h2>Cola de trabajo</h2></div><button className="sync-button" disabled={!isUsable(state.mode) || state.busyAction === "SYNC"} onClick={() => void store.sync()}>{state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar"}</button></div>
+      <div className="panel-heading">
+        <div>
+          <div className="eyebrow">TRAZABILIDAD LOCAL</div>
+          <h2>Cola de trabajo</h2>
+        </div>
+        <button
+          className="sync-button"
+          disabled={!isUsable(state.mode) || state.busyAction === "SYNC"}
+          onClick={() => void store.sync()}
+        >
+          {state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar"}
+        </button>
+      </div>
       <p className="queue-intro">Los registros permanecen en este dispositivo hasta recibir confirmación válida.</p>
-      {items.length ? <div className="queue-list">{items.map((item) => <QueueItem key={item.operationId} item={item} />)}</div> : <div className="empty-state"><strong>Cola despejada</strong><span>No hay operaciones locales para mostrar.</span></div>}
+      {items.length ? (
+        <div className="queue-list">
+          {items.map((item) => (
+            <QueueItem key={item.operationId} item={item} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <strong>Cola despejada</strong>
+          <span>No hay operaciones locales para mostrar.</span>
+        </div>
+      )}
     </section>
   );
 }
 
 function QueueItem({ item }: { item: import("../ports").SyncItem }) {
   const manualReview = item.manualReview || item.uncertain;
-  return <article className="queue-item"><div className="queue-item__header"><strong>{item.operationId}</strong><span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span></div><div className="queue-item__meta"><span>{actionLabel(item.action)}</span><span>Orden {item.orderId ?? "—"}</span><span>{item.attempts} intento(s)</span></div>{item.errorCode ? <p className="queue-error">{manualReview ? "Requiere revisión humana. " : "Último aviso: "}{item.errorCode}</p> : null}{manualReview ? <p className="queue-review">Resultado incierto: no reenviar automáticamente.</p> : null}</article>;
+  return (
+    <article className="queue-item">
+      <div className="queue-item__header">
+        <strong>{item.operationId}</strong>
+        <span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span>
+      </div>
+      <div className="queue-item__meta">
+        <span>{actionLabel(item.action)}</span>
+        <span>Orden {item.orderId ?? "—"}</span>
+        <span>{item.attempts} intento(s)</span>
+      </div>
+      {item.errorCode ? (
+        <p className="queue-error">
+          {manualReview ? "Requiere revisión humana. " : "Último aviso: "}
+          {item.errorCode}
+        </p>
+      ) : null}
+      {manualReview ? <p className="queue-review">Resultado incierto: no reenviar automáticamente.</p> : null}
+    </article>
+  );
 }
 
-function EmptyDetail() { return <section className="detail-panel panel detail-empty"><span className="empty-rail" aria-hidden="true" /><h2>Elija una orden</h2><p>Seleccione una orden para consultar estado físico y registrar trabajo.</p></section>; }
-function EmptyOrders() { return <div className="empty-state"><strong>No encontramos órdenes</strong><span>Pruebe cambiar búsqueda o filtro.</span></div>; }
-function LoadingState() { return <main className="state-card"><div className="loading-mark" /><h2>Cargando paquete local</h2><p>Recuperando órdenes asignadas y cola persistida.</p></main>; }
-function ErrorState({ text, onRetry }: { text: string; onRetry: () => Promise<void> }) { return <main className="state-card state-card--error"><h2>No pudimos abrir jornada</h2><p>{text}</p><button className="primary-action" onClick={() => void onRetry()}>Reintentar</button></main>; }
+function EmptyOrders() {
+  return (
+    <div className="empty-state">
+      <strong>No encontramos órdenes</strong>
+      <span>Pruebe cambiar búsqueda o filtro.</span>
+    </div>
+  );
+}
 
-function actionLabel(action: ActionKind): string { return action === "VISIT" ? "Visita" : action === "CUT" ? "Corte" : "Reconexión"; }
-function activityLabel(kind: import("../ports").StoredRecord["kind"]): string { return kind === "VISIT" ? "Visita sin ejecución" : kind === "CUT" ? "Corte" : "Reconexión"; }
-function activityDetail(record: import("../ports").StoredRecord): string { return "reason" in record ? record.reason : record.status === "CONFIRMED" ? "Resultado confirmado localmente" : record.status === "PHYSICAL_UNKNOWN" ? "Resultado incierto" : "Intento registrado"; }
-function activityException(record: import("../ports").StoredRecord): string | undefined { return record.exceptionReason; }
-function shortHash(hash?: string): string { return hash ? `${hash.slice(0, 10)}…` : "disponible"; }
-function orderStatusLabel(status: WorkOrder["status"]): string { return status === "GENERADO" ? "Por ejecutar" : status === "EJECUTADO" ? "Corte ejecutado" : status === "RECONEXIÓN" ? "Reconectada" : "Anulada"; }
-function physicalStatusLabel(status: WorkOrder["physicalStatus"]): string { return status === "NONE" ? "Sin ejecución" : status === "CLAIMED" ? "Reclamado" : status === "CONFIRMED" ? "Confirmado" : "Resultado incierto"; }
-function orderStatusTone(order: WorkOrder): string { return order.physicalStatus === "PHYSICAL_UNKNOWN" ? "review" : order.status === "RECONEXIÓN" ? "done" : order.status === "EJECUTADO" ? "active" : order.status === "ANULADO" ? "muted" : "ready"; }
-function syncStatusLabel(status: import("../domain").SyncStatus): string { return status === "pending" ? "Pendiente" : status === "syncing" ? "Sincronizando" : status === "synced" ? "Sincronizado" : "Falló"; }
-function pendingCount(items: import("../ports").SyncItem[]): number { return items.filter((item) => item.status !== "synced").length; }
-function isUsable(mode: ConnectivityMode): boolean { return mode !== "offline"; }
-function formatDate(value?: string): string { if (!value) return "Sin datos"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "Sin datos" : new Intl.DateTimeFormat("es-BO", { dateStyle: "short", timeStyle: "short" }).format(date); }
+function LoadingState() {
+  return (
+    <main className="state-card">
+      <div className="loading-mark" />
+      <h2>Cargando paquete local</h2>
+      <p>Recuperando órdenes asignadas y cola persistida.</p>
+    </main>
+  );
+}
+
+function ErrorState({ text, onRetry }: { text: string; onRetry: () => Promise<void> }) {
+  return (
+    <main className="state-card state-card--error">
+      <h2>No pudimos abrir jornada</h2>
+      <p>{text}</p>
+      <button className="primary-action" onClick={() => void onRetry()}>
+        Reintentar
+      </button>
+    </main>
+  );
+}
+
+function actionLabel(action: ActionKind): string {
+  return action === "VISIT" ? "Visita" : action === "CUT" ? "Corte" : "Reconexión";
+}
+function activityLabel(kind: import("../ports").StoredRecord["kind"]): string {
+  return kind === "VISIT" ? "Visita sin ejecución" : kind === "CUT" ? "Corte" : "Reconexión";
+}
+function activityDetail(record: import("../ports").StoredRecord): string {
+  return "reason" in record
+    ? record.reason
+    : record.status === "CONFIRMED"
+    ? "Resultado confirmado localmente"
+    : record.status === "PHYSICAL_UNKNOWN"
+    ? "Resultado incierto"
+    : "Intento registrado";
+}
+function activityException(record: import("../ports").StoredRecord): string | undefined {
+  return record.exceptionReason;
+}
+function shortHash(hash?: string): string {
+  return hash ? `${hash.slice(0, 10)}…` : "disponible";
+}
+function orderStatusLabel(status: WorkOrder["status"]): string {
+  return status === "GENERADO"
+    ? "Por ejecutar"
+    : status === "EJECUTADO"
+    ? "Corte ejecutado"
+    : status === "RECONEXIÓN"
+    ? "Reconectada"
+    : "Anulada";
+}
+function physicalStatusLabel(status: WorkOrder["physicalStatus"]): string {
+  return status === "NONE"
+    ? "Sin ejecución"
+    : status === "CLAIMED"
+    ? "Reclamado"
+    : status === "CONFIRMED"
+    ? "Confirmado"
+    : "Resultado incierto";
+}
+function orderStatusTone(order: WorkOrder): string {
+  return order.physicalStatus === "PHYSICAL_UNKNOWN"
+    ? "review"
+    : order.status === "RECONEXIÓN"
+    ? "done"
+    : order.status === "EJECUTADO"
+    ? "active"
+    : order.status === "ANULADO"
+    ? "muted"
+    : "ready";
+}
+function syncStatusLabel(status: import("../domain").SyncStatus): string {
+  return status === "pending"
+    ? "Pendiente"
+    : status === "syncing"
+    ? "Sincronizando"
+    : status === "synced"
+    ? "Sincronizado"
+    : "Falló";
+}
+function pendingCount(items: import("../ports").SyncItem[]): number {
+  return items.filter((item) => item.status !== "synced").length;
+}
+function isUsable(mode: ConnectivityMode): boolean {
+  return mode !== "offline";
+}
+function formatDate(value?: string): string {
+  if (!value) return "Sin datos";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Sin datos"
+    : new Intl.DateTimeFormat("es-BO", { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+function formatDaysSince(dateStr?: string): string {
+  if (!dateStr) return "—";
+  const timestamp = Date.parse(dateStr);
+  if (Number.isNaN(timestamp)) return "—";
+  const diffMs = Date.now() - timestamp;
+  const days = Math.max(0, diffMs / (1000 * 60 * 60 * 24));
+  return `${days.toFixed(1)} d`;
+}
+
+function LastUpdateDisplay({
+  timestamp,
+  isRefreshing,
+  onRefresh,
+}: {
+  timestamp?: string;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const [nowMs, setNowMs] = useState(() => (typeof Date !== "undefined" ? Date.now() : 0));
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const timer = setInterval(() => setNowMs(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const { relative, exact } = formatLastUpdate(timestamp, nowMs);
+
+  return (
+    <div
+      className="last-update"
+      onClick={onRefresh}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onRefresh();
+        }
+      }}
+      title={exact ? `Actualizado a las ${exact}. Clic para actualizar jornada.` : "Clic para actualizar jornada."}
+    >
+      <span className="last-update-label">Última actualización</span>
+      <br />
+      <strong>
+        {isRefreshing ? "Actualizando…" : relative}
+        {exact && !isRefreshing ? <span className="last-update-exact"> ({exact})</span> : null}
+      </strong>
+    </div>
+  );
+}
+
+function formatLastUpdate(value?: string, nowMs = Date.now()): { relative: string; exact: string } {
+  if (!value) return { relative: "Sin datos", exact: "" };
+  const date = new Date(value);
+  const time = date.getTime();
+  if (Number.isNaN(time)) return { relative: "Sin datos", exact: "" };
+
+  const exact = new Intl.DateTimeFormat("es-BO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
+
+  const diffSec = Math.floor(Math.max(0, nowMs - time) / 1000);
+  if (diffSec < 45) {
+    return { relative: "Hace instantes", exact };
+  }
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) {
+    return { relative: `Hace ${diffMin} min`, exact };
+  }
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) {
+    return { relative: `Hace ${diffHours} h`, exact };
+  }
+  const dateStr = new Intl.DateTimeFormat("es-BO", { dateStyle: "short" }).format(date);
+  return { relative: dateStr, exact };
+}

@@ -186,7 +186,7 @@ describe("field app store", () => {
   it("renders mobile shell without out-of-scope payment, meter, or location terms", () => {
     const markup = renderToStaticMarkup(<FieldApp store={createUnavailableAppStore()} />).toLocaleLowerCase();
     expect(markup).not.toMatch(/pago|lectura|gps/);
-    expect(markup).toContain("simulación, sin conexión a sepsa");
+    expect(markup).toContain("datos de demostración · fuente pendiente de validación con sepsa");
     expect(markup).toContain("indexeddb no está disponible");
   });
 });

@@ -84,4 +84,26 @@ describe("FieldApp SSR shell", () => {
     const markup = html(store);
     expect(markup).not.toMatch(/pago|lectura|gps/);
   });
+
+  it("filters orders by customer name or meter with unified smart search", async () => {
+    const store = await readyStore("ui-search");
+    store.setQuery("Quispe");
+    const markup = html(store);
+    expect(markup).toContain("josé quispe");
+    expect(markup).not.toContain("maría flores");
+
+    store.setQuery("MED-1001");
+    const meterMarkup = html(store);
+    expect(meterMarkup).toContain("maría flores");
+    expect(meterMarkup).not.toContain("josé quispe");
+  });
+
+  it("renders back button to tray in fullscreen order detail", async () => {
+    const store = await readyStore("ui-fullscreen");
+    store.selectOrder("ORD-24017");
+    const detailMarkup = html(store);
+    expect(detailMarkup).toContain("volver a la bandeja");
+    expect(detailMarkup).toContain("detalle de ord-24017");
+  });
 });
+

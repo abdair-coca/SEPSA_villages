@@ -79,6 +79,7 @@ export interface AppStore {
   getSnapshot(): AppState;
   getServerSnapshot(): AppState;
   init(): Promise<void>;
+  refresh(): Promise<void>;
   setQuery(query: string): void;
   setFilter(filter: OrderFilter): void;
   setTab(tab: AppTab): void;
@@ -175,6 +176,9 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
         }
       })();
       return initPromise;
+    },
+    async refresh() {
+      await refresh();
     },
     setQuery(query) {
       update({ query });
@@ -333,6 +337,7 @@ export function createUnavailableAppStore(): AppStore {
     getSnapshot: () => snapshot,
     getServerSnapshot: () => snapshot,
     init: async () => undefined,
+    refresh: async () => undefined,
     setQuery: () => undefined,
     setFilter: () => undefined,
     setTab: () => undefined,
@@ -348,9 +353,20 @@ export function createUnavailableAppStore(): AppStore {
 export function selectVisibleOrders(state: AppState): WorkOrder[] {
   const query = state.query.trim().toLocaleLowerCase();
   return state.orders.filter((order) => {
-    const matchesQuery = !query || order.orderId.toLocaleLowerCase().includes(query);
+    const matchesQuery =
+      !query ||
+      order.orderId.toLocaleLowerCase().includes(query) ||
+      (order.cuc && order.cuc.toLocaleLowerCase().includes(query)) ||
+      (order.accountId && order.accountId.toLocaleLowerCase().includes(query)) ||
+      (order.supplyId && order.supplyId.toLocaleLowerCase().includes(query)) ||
+      (order.context?.accountId && order.context.accountId.toLocaleLowerCase().includes(query)) ||
+      (order.context?.supplyId && order.context.supplyId.toLocaleLowerCase().includes(query)) ||
+      (order.context?.meterId && order.context.meterId.toLocaleLowerCase().includes(query)) ||
+      (order.context?.customerName && order.context.customerName.toLocaleLowerCase().includes(query)) ||
+      (order.context?.address && order.context.address.toLocaleLowerCase().includes(query)) ||
+      (order.context?.route && order.context.route.toLocaleLowerCase().includes(query));
     const matchesFilter = state.filter === "ALL" || (state.filter === "REVIEW" ? order.physicalStatus === "PHYSICAL_UNKNOWN" : order.status === state.filter);
-    return matchesQuery && matchesFilter;
+    return Boolean(matchesQuery && matchesFilter);
   });
 }
 

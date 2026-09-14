@@ -64,10 +64,10 @@ export function createDemoPackageFor(now: string, technicianId: string, deviceId
     version: 1,
     downloadedAt: now,
     orders: [
-      demoOrder("ORD-24017", technicianId, "GENERADO", "NONE", 1, "CTA-1001", "SUM-1001", "María Flores", "Villa Esperanza", "MED-1001", 24050, 3),
-      demoOrder("ORD-24018", technicianId, "GENERADO", "NONE", 1, "CTA-1002", "SUM-1002", "José Quispe", "San Pedro", "MED-1002", 11800, 2),
-      demoOrder("ORD-24019", technicianId, "EJECUTADO", "CONFIRMED", 3, "CTA-1001", "SUM-1001", "María Flores", "Villa Esperanza", "MED-1001", 24050, 3),
-      demoOrder("ORD-24020", technicianId, "RECONEXIÓN", "CONFIRMED", 5, "CTA-1002", "SUM-1002", "José Quispe", "San Pedro", "MED-1002", 11800, 2),
+      demoOrder("ORD-24017", technicianId, "GENERADO", "NONE", 1, "CTA-1001", "SUM-1001", "María Flores", "Villa Esperanza", "MED-1001", 24050, 3, -19.589366, -65.259119),
+      demoOrder("ORD-24018", technicianId, "GENERADO", "NONE", 1, "CTA-1002", "SUM-1002", "José Quispe", "San Pedro", "MED-1002", 11800, 2, -19.588912, -65.258647),
+      demoOrder("ORD-24019", technicianId, "EJECUTADO", "CONFIRMED", 3, "CTA-1001", "SUM-1001", "María Flores", "Villa Esperanza", "MED-1001", 24050, 3, -19.590104, -65.260398),
+      demoOrder("ORD-24020", technicianId, "RECONEXIÓN", "CONFIRMED", 5, "CTA-1002", "SUM-1002", "José Quispe", "San Pedro", "MED-1002", 11800, 2, -19.588521, -65.258941),
     ],
   };
 }
@@ -222,6 +222,49 @@ function errorCode(error: unknown, fallback: string): string {
   return error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : fallback;
 }
 
-function demoOrder(orderId: string, technicianId: string, status: WorkOrder["status"], physicalStatus: WorkOrder["physicalStatus"], version: number, accountId: string, supplyId: string, customerName: string, locality: string, meterId: string, debtCents: number, monthsPending: number): WorkOrder {
-  return { orderId, assignedTechnicianId: technicianId, status, physicalStatus, version, accountId, supplyId, referenceBalanceCents: debtCents, context: { debtorId: `debtor-${accountId.slice(-4)}`, accountId, supplyId, customerName, address: `${locality}, dirección simulada`, references: "TODO: VALIDAR CON SEPSA", meterId, area: "Valle", locality, route: "TODO: VALIDAR CON SEPSA", debtCents, monthsPending, updatedAt: "2026-09-10T12:00:00.000Z", source: "SIMULATED", kardex: [] } };
+function demoOrder(
+  orderId: string,
+  technicianId: string,
+  status: WorkOrder["status"],
+  physicalStatus: WorkOrder["physicalStatus"],
+  version: number,
+  accountId: string,
+  supplyId: string,
+  customerName: string,
+  locality: string,
+  meterId: string,
+  debtCents: number,
+  monthsPending: number,
+  lat = -19.589366,
+  lng = -65.259119
+): WorkOrder {
+  return {
+    orderId,
+    assignedTechnicianId: technicianId,
+    status,
+    physicalStatus,
+    version,
+    accountId,
+    supplyId,
+    referenceBalanceCents: debtCents,
+    context: {
+      debtorId: `debtor-${accountId.slice(-4)}`,
+      accountId,
+      supplyId,
+      customerName,
+      address: `${locality}, dirección simulada`,
+      references: "TODO: VALIDAR CON SEPSA",
+      meterId,
+      area: "B - BETANZOS",
+      locality,
+      route: "002 - MOJOTORILLO",
+      debtCents,
+      monthsPending,
+      updatedAt: "2026-09-10T12:00:00.000Z",
+      source: "SIMULATED",
+      kardex: [],
+      cadastralLatitude: lat,
+      cadastralLongitude: lng,
+    },
+  };
 }
