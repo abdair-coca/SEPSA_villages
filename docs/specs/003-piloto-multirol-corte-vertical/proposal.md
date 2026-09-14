@@ -9,7 +9,7 @@ Convertir el producto en un piloto operativo multirol que conecte administració
 ### Incluido
 
 - Roles Administrador y Técnico con control de acceso.
-- Dashboard operacional, búsqueda de morosos, creación y asignación individual.
+- Dashboard operacional, búsqueda de morosos, creación masiva por lote y asignación individual.
 - Consulta técnica de cliente, domicilio, medidor, Kardex, mapa y ubicación.
 - Captura de lectura, GPS, evidencia y resultado de visita.
 - Autorización online inmediata antes del corte y bloqueo ante incertidumbre.
@@ -18,7 +18,7 @@ Convertir el producto en un piloto operativo multirol que conecte administració
 
 ### Fuera de alcance
 
-- Creación masiva en este primer corte; queda confirmada para el siguiente incremento.
+- Asignación masiva; queda como propuesta para el siguiente incremento con distribución explícita y control de carga.
 - Nuevas funciones de reconexión; se conserva la implementación histórica.
 - Cobranza presencial dentro del flujo técnico de corte.
 - Integración, autenticación o contrato definitivo de SEPSA.
@@ -29,7 +29,7 @@ Convertir el producto en un piloto operativo multirol que conecte administració
 ### Nuevas capacidades
 
 - `identidad-control-acceso`: autenticación, roles, permisos y auditoría.
-- `gestion-ordenes-corte`: búsqueda, creación individual y asignación.
+- `gestion-ordenes-corte`: búsqueda con filtros de morosidad, creación individual, creación masiva por lote y asignación.
 - `consulta-operativa-tecnico`: contexto completo de la orden y suministro.
 - `captura-campo`: GPS, lectura, evidencia y resultado de visita.
 
@@ -73,6 +73,7 @@ Retirar el cambio 003 y conservar sin modificación la implementación y documen
 ## Criterios de éxito
 
 - [ ] Administrador crea y asigna una orden individual sin duplicarla.
+- [x] Administrador filtra morosidad y crea un lote idempotente con vista previa, omisiones y auditoría.
 - [ ] Técnico sincroniza únicamente órdenes asignadas y consulta su contexto offline.
 - [ ] Corte solo se registra con autorización online válida.
 - [ ] Resultado sobrevive reinicio y se sincroniza sin duplicados.

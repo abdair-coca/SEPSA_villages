@@ -22,6 +22,8 @@ El primer incremento será un corte vertical verificable: el administrador crea 
 - Dashboard administrativo operacional.
 - Búsqueda de suministros morosos.
 - Creación individual de una orden de corte.
+- Filtrado administrativo por área regional, localidad, ruta, mínimo de facturas vencidas y estado del cliente.
+- Creación masiva de órdenes mediante selección de resultados, vista previa, confirmación, idempotencia por lote y auditoría.
 - Asignación de la orden a un técnico.
 - Visualización administrativa de toda la información operativa del piloto.
 - Descarga de órdenes asignadas al técnico.
@@ -36,7 +38,7 @@ El primer incremento será un corte vertical verificable: el administrador crea 
 
 ### Confirmado para incrementos posteriores
 
-- Creación masiva y asignación masiva de órdenes con vista previa, confirmación e idempotencia por lote.
+- Asignación masiva de órdenes con vista previa, distribución explícita, confirmación e idempotencia por lote.
 
 ### Fuera del primer corte vertical
 
@@ -90,7 +92,7 @@ Obtener autorización online vigente
 - Una orden debe identificar su origen, creador, suministro, técnico asignado, versión y estado.
 - Una misma deuda no debe originar órdenes activas duplicadas para el mismo propósito.
 - Una reasignación o anulación debe conservar historial; nunca debe sobrescribirse silenciosamente.
-- La creación masiva futura debe usar un identificador único de lote, vista previa y confirmación explícita.
+- La creación masiva debe usar un identificador único de lote, vista previa y confirmación explícita.
 
 ### 5.3 Contexto técnico
 
@@ -347,7 +349,7 @@ Implementar autenticación y permisos, búsqueda administrativa, creación y asi
 
 ### Fase 3 — Operación por lotes
 
-Agregar creación y asignación masiva con vista previa, deduplicación, confirmación y trazabilidad por lote.
+Agregar asignación masiva con vista previa, deduplicación, confirmación y trazabilidad por lote.
 
 ### Fase 4 — Integración y validación
 
@@ -390,7 +392,7 @@ Definir continuidad de cobranza, reconexiones, cartografía offline avanzada y o
 - Roles iniciales: administrador y técnico.
 - Administrador con acceso a toda información operativa incluida en el piloto.
 - Dashboard, búsqueda de morosos, creación y asignación de órdenes.
-- Creación masiva confirmada después del primer corte vertical.
+- Creación masiva confirmada después del primer corte vertical y disponible con lote idempotente.
 - Técnico limitado a órdenes asignadas.
 - Técnico con consulta de Kardex, mapa, domicilio, cliente y medidor.
 - Captura de lectura y GPS dentro del trabajo de campo.

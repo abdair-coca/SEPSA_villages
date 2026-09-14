@@ -26,7 +26,7 @@ El sistema DEBE (MUST) permitir al Administrador buscar suministros morosos medi
 
 ### Requisito: Creación individual
 
-El Administrador DEBE (MUST) revisar el contexto antes de crear una orden individual. La orden DEBE (MUST) conservar identificador único, cuenta o suministro, saldo de referencia, creador, fecha, versión y estado. La creación masiva NO DEBE (MUST NOT) formar parte de este cambio.
+El Administrador DEBE (MUST) revisar el contexto antes de crear una orden individual. La orden DEBE (MUST) conservar identificador único, cuenta o suministro, saldo de referencia, creador, fecha, versión y estado.
 
 #### Escenario: Orden creada
 
@@ -41,6 +41,18 @@ El Administrador DEBE (MUST) revisar el contexto antes de crear una orden indivi
 - WHEN el Administrador intenta crear una orden
 - THEN el sistema rechaza la creación
 - AND explica el dato requerido
+
+### Requisito: Creación masiva por lote
+
+El Administrador DEBE (MUST) poder seleccionar resultados de una búsqueda filtrada y preparar un lote de órdenes de corte. El sistema DEBE (MUST) mostrar cantidad y deuda referencial antes de confirmar, usar un identificador único de lote, impedir duplicados activos por cuenta y propósito, devolver creadas y omitidas, y registrar auditoría del lote y de cada orden creada.
+
+#### Escenario: Lote confirmado
+
+- GIVEN resultados filtrados y suministros seleccionados
+- WHEN el Administrador revisa y confirma el lote
+- THEN el sistema crea órdenes solo para suministros elegibles
+- AND informa cantidad creada y omitida con causa
+- AND un reintento con el mismo identificador devuelve el resultado original sin duplicar órdenes
 
 ### Requisito: Prevención de duplicados
 
