@@ -564,11 +564,9 @@ function CurrentOrderCard({ order, position, total, onPrevious, onNext, onOpen, 
           <OrderDataRow icon={<IconCrosshair />} label="GPS" value={hasCoordinates ? "Listo" : undefined} status={hasCoordinates ? "ready" : undefined} />
         </div>
       </div>
-      <div className="current-order-card__readiness" aria-label="Estado para registrar corte">
-        <ReadinessItem ready={hasCoordinates} label={hasCoordinates ? "GPS listo" : "GPS no disponible"} detail={hasCoordinates ? "Coordenadas cargadas" : "Dato no disponible"} />
-        <ReadinessItem ready={hasCoordinates} label={hasCoordinates ? "Ubicación disponible" : "Ubicación no disponible"} detail={hasCoordinates ? "Punto de suministro identificado" : "Dato no disponible"} />
-        <ReadinessItem ready={!isReady} label={isReady ? "Pendiente registrar corte" : "Corte registrado"} detail={isReady ? "Ejecuta el corte y registra la evidencia" : "No hay acción pendiente"} warning={isReady} />
-      </div>
+      {isReady ? <div className="current-order-card__readiness" aria-label="Estado para registrar corte">
+        <ReadinessItem ready={false} label="Pendiente registrar corte" detail="Ejecuta el corte y registra la evidencia" warning />
+      </div> : null}
       <div className="current-order-card__actions">
         <button type="button" className="primary-action" onClick={onOpen}><IconScissors />{isReady ? "Registrar corte" : "Abrir orden"}<span>→</span></button>
         <button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver ubicación</button>
