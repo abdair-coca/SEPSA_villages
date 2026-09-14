@@ -35,6 +35,7 @@ export interface ActionInput {
 export interface AppMessage {
   tone: "success" | "info" | "warning" | "error";
   text: string;
+  transient?: boolean;
 }
 
 export interface AppState {
@@ -323,11 +324,18 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     await runWithBusy("SYNC", async () => {
       const report = await new SyncEngine(dependencies.repository, dependencies.connectivity, dependencies.transport, { now }).syncOnce();
       await refresh();
-      update({ message: { tone: report.failed ? "warning" : "success", text: report.failed ? "Algunas operaciones requieren revisión; ninguna fue eliminada." : `${report.synced} operación(es) sincronizada(s) en simulación.` } });
+      update({ message: report.failed
+        ? { tone: "warning", text: "Algunas operaciones requieren revisión; ninguna fue eliminada." }
+        : { tone: "success", text: formatSyncMessage(report.synced), transient: true } });
     });
   }
 
   return store;
+}
+
+export function formatSyncMessage(synced: number): string {
+  const count = Number.isFinite(synced) ? Math.max(0, Math.trunc(synced)) : 0;
+  return `${count} ${count === 1 ? "operación sincronizada" : "operaciones sincronizadas"}`;
 }
 
 export function createUnavailableAppStore(): AppStore {

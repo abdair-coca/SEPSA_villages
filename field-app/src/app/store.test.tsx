@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createAppStore, createDemoPackage, createUnavailableAppStore, selectVisibleOrders, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, prepareDemoExternalValidation } from "./index";
+import { createAppStore, createDemoPackage, createUnavailableAppStore, formatSyncMessage, selectVisibleOrders, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, prepareDemoExternalValidation } from "./index";
 import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
 import type { AppStore } from "./index";
@@ -31,6 +31,17 @@ function setup(name: string, configureDemoGrants = false): { store: AppStore; re
 }
 
 describe("field app store", () => {
+  it("formats one reusable transient notification for every sync count", async () => {
+    expect(formatSyncMessage(0)).toBe("0 operaciones sincronizadas");
+    expect(formatSyncMessage(1)).toBe("1 operación sincronizada");
+    expect(formatSyncMessage(3)).toBe("3 operaciones sincronizadas");
+
+    const { store } = setup("store-sync-notification");
+    await store.init();
+    await store.sync();
+    expect(store.getSnapshot().message).toEqual({ tone: "success", text: "0 operaciones sincronizadas", transient: true });
+  });
+
   it("initializes from IndexedDB and derives visible orders from persisted package", async () => {
     const { store } = setup("store-init");
     await store.init();
@@ -186,7 +197,7 @@ describe("field app store", () => {
   it("renders mobile shell without out-of-scope payment, meter, or location terms", () => {
     const markup = renderToStaticMarkup(<FieldApp store={createUnavailableAppStore()} />).toLocaleLowerCase();
     expect(markup).not.toMatch(/pago|lectura|gps/);
-    expect(markup).toContain("datos de demostración · fuente pendiente de validación con sepsa");
+    expect(markup).not.toContain("datos de demostración");
     expect(markup).toContain("indexeddb no está disponible");
   });
 });
