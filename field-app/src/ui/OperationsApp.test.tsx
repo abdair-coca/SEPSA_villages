@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAdminCoordinates, getAdminOrderPage } from "./OperationsApp";
+import { ADMIN_SUPPLIES_PAGE_SIZE, formatAdminCoordinates, getAdminOrderPage } from "./OperationsApp";
 
 describe("admin order pagination", () => {
   it("returns four recent orders per page and clamps requested page", () => {
@@ -23,5 +23,14 @@ describe("admin missing-data presentation", () => {
   it("does not invent coordinates when one value is missing", () => {
     expect(formatAdminCoordinates(-17.7833214)).toBeUndefined();
     expect(formatAdminCoordinates(undefined, -63.1821098)).toBeUndefined();
+  });
+});
+
+describe("admin supply pagination", () => {
+  it("shows seven supplies per page and keeps global position", () => {
+    const supplies = Array.from({ length: 15 }, (_, index) => `supply-${index + 1}`);
+
+    expect(getAdminOrderPage(supplies, 1, ADMIN_SUPPLIES_PAGE_SIZE)).toEqual({ items: supplies.slice(0, 7), page: 1, totalPages: 3 });
+    expect(getAdminOrderPage(supplies, 2, ADMIN_SUPPLIES_PAGE_SIZE)).toEqual({ items: supplies.slice(7, 14), page: 2, totalPages: 3 });
   });
 });

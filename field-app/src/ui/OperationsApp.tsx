@@ -29,6 +29,7 @@ type SupplyDataIconKind = "client" | "address" | "account" | "circuit" | "supply
 
 const DEFAULT_SEARCH_FILTERS: SearchFilters = { query: "", area: "", locality: "", route: "", minMonthsPending: "2", supplyStatus: "A" };
 export const ADMIN_ORDERS_PAGE_SIZE = 4;
+export const ADMIN_SUPPLIES_PAGE_SIZE = 7;
 
 export function getAdminOrderPage<T>(items: readonly T[], requestedPage: number, pageSize = ADMIN_ORDERS_PAGE_SIZE): { items: T[]; page: number; totalPages: number } {
   const safePageSize = Number.isSafeInteger(pageSize) && pageSize > 0 ? pageSize : ADMIN_ORDERS_PAGE_SIZE;
@@ -50,6 +51,7 @@ export function OperationsApp({ authority, session, onLogout, technicianId }: Op
   const [orderCreationDialog, setOrderCreationDialog] = useState<OrderCreationDialog>();
   const [selectedOrder, setSelectedOrder] = useState("");
   const [ordersPage, setOrdersPage] = useState(1);
+  const [suppliesPage, setSuppliesPage] = useState(1);
   const [selectedTechnician, setSelectedTechnician] = useState(technicianId ?? "tech-camila");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("info");
@@ -72,6 +74,7 @@ export function OperationsApp({ authority, session, onLogout, technicianId }: Op
     setOrders(nextOrders);
     setAudit(nextAudit);
     setOrdersPage(1);
+    setSuppliesPage(1);
     if (selectedDebtor && !nextDebtors.some((debtor) => debtor.debtorId === selectedDebtor)) setSelectedDebtor("");
     setSelectedDebtorIds((current) => current.filter((debtorId) => nextDebtors.some((debtor) => debtor.debtorId === debtorId)));
     if (selectedOrder && !nextOrders.some((order) => order.orderId === selectedOrder)) setSelectedOrder("");
@@ -206,6 +209,7 @@ export function OperationsApp({ authority, session, onLogout, technicianId }: Op
   const routeOptions = filterOptions(debtors.map((debtor) => debtor.route), filters.route);
   const statusOptions = filterOptions(debtors.map((debtor) => debtor.supplyStatus ?? ""), filters.supplyStatus);
   const recentOrdersPage = getAdminOrderPage(orders, ordersPage);
+  const suppliesPageData = getAdminOrderPage(debtors, suppliesPage, ADMIN_SUPPLIES_PAGE_SIZE);
 
   return (
     <div className="operations-app">
@@ -258,13 +262,12 @@ export function OperationsApp({ authority, session, onLogout, technicianId }: Op
                 <label className="text-field"><span>Facturas vencidas</span><input type="number" min="0" inputMode="numeric" value={filters.minMonthsPending} onChange={(event) => setFilters({ ...filters, minMonthsPending: event.target.value })} /></label>
               </div>
               <details className="more-filters"><summary>Más filtros</summary><label className="text-field"><span>Estado del suministro</span><select value={filters.supplyStatus} onChange={(event) => setFilters({ ...filters, supplyStatus: event.target.value })}><option value="">Todos</option>{statusOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></label></details>
-               <div className="filter-actions"><button className="primary-action" type="submit" disabled={searching || busy}>{searching ? "Consultando…" : "Buscar morosos"}<span>→</span></button><button className="filter-reset" type="button" onClick={() => void clearFilters()} disabled={searching || busy}>Limpiar</button></div>
+               <div className="filter-actions"><button className="primary-action" type="submit" disabled={searching || busy}>{searching ? "Consultando…" : "Buscar morosos"}<span>→</span></button><button className="filter-reset" type="button" onClick={() => void clearFilters()} disabled={searching || busy}>Limpiar</button><button className="primary-action filter-select-all" type="button" onClick={toggleAllDebtors} disabled={!debtors.length || searching || busy}>{allDebtorsSelected ? "Quitar selección" : "Seleccionar todos"}<span>→</span></button>{selectedDebtorIds.length ? <button className="secondary-action filter-batch-action" type="button" onClick={prepareBatch} disabled={busy}>Crear y asignar ({selectedDebtorIds.length})<span>→</span></button> : null}</div>
             </form>
 
              <div className="results-heading"><span><strong>{loading ? "Consultando suministros…" : `${debtors.length} suministros encontrados`}</strong><small>Ordenados por deuda pendiente</small></span></div>
-              {loading ? <AdminLoadingState /> : loadError && !debtors.length ? <AdminErrorState message={loadError} onRetry={() => void loadAdminData()} /> : <><div className="admin-record-list">{debtors.map((debtor, index) => <DebtorItem key={debtor.debtorId} debtor={debtor} position={index + 1} selected={selectedDebtor === debtor.debtorId} checked={selectedDebtorIds.includes(debtor.debtorId)} onSelect={() => selectDebtor(debtor.debtorId)} onToggle={() => toggleDebtor(debtor.debtorId)} />)}</div>{loadError ? <AdminInlineError message={loadError} onRetry={() => void loadAdminData()} /> : null}{!debtors.length && !loadError ? <div className="empty-state"><strong>No encontramos suministros</strong><span>Ajusta la búsqueda y vuelve a consultar.</span></div> : null}</>}
+              {loading ? <AdminLoadingState /> : loadError && !debtors.length ? <AdminErrorState message={loadError} onRetry={() => void loadAdminData()} /> : <><div className="admin-record-list">{suppliesPageData.items.map((debtor, index) => <DebtorItem key={debtor.debtorId} debtor={debtor} position={(suppliesPageData.page - 1) * ADMIN_SUPPLIES_PAGE_SIZE + index + 1} selected={selectedDebtor === debtor.debtorId} checked={selectedDebtorIds.includes(debtor.debtorId)} onSelect={() => selectDebtor(debtor.debtorId)} onToggle={() => toggleDebtor(debtor.debtorId)} />)}</div>{suppliesPageData.totalPages > 1 ? <nav className="admin-pagination supply-pagination" aria-label="Paginación de suministros"><button type="button" onClick={() => setSuppliesPage(suppliesPageData.page - 1)} disabled={suppliesPageData.page === 1} aria-label="Suministros anteriores">‹</button><span>Página {suppliesPageData.page} de {suppliesPageData.totalPages}</span><button type="button" onClick={() => setSuppliesPage(suppliesPageData.page + 1)} disabled={suppliesPageData.page === suppliesPageData.totalPages} aria-label="Suministros siguientes">›</button></nav> : null}{loadError ? <AdminInlineError message={loadError} onRetry={() => void loadAdminData()} /> : null}{!debtors.length && !loadError ? <div className="empty-state"><strong>No encontramos suministros</strong><span>Ajusta la búsqueda y vuelve a consultar.</span></div> : null}</>}
 
-            <details className="batch-tools"><summary>Crear varias órdenes</summary><div className="selection-toolbar"><div><strong>{selectedDebtorIds.length ? `${selectedDebtorIds.length} seleccionados` : "Selecciona suministros para un lote"}</strong><span>La creación masiva mantiene validaciones e idempotencia.</span></div><button className="toolbar-action" type="button" onClick={toggleAllDebtors} disabled={!debtors.length}>{allDebtorsSelected ? "Quitar selección" : "Seleccionar todos"}</button></div>{selectedDebtorIds.length ? <div className="batch-command"><div className="batch-command__summary"><strong>Crear órdenes para {selectedDebtorIds.length} suministros</strong><span>Se revisarán antes de confirmar.</span></div><button className="primary-action" type="button" onClick={prepareBatch}>Crear y asignar órdenes<span>→</span></button></div> : null}</details>
           </section>
 
           <section className="panel operations-orders selected-supply-panel" aria-labelledby="selected-supply-title">
@@ -298,7 +301,7 @@ function DebtorItem({ debtor, position, selected, checked, onSelect, onToggle }:
   return <article className={selected ? "admin-record admin-record--selected" : "admin-record"}>
     <span className="record-position" aria-hidden="true">{position}</span>
     <label className="record-select" title="Seleccionar para lote"><input type="checkbox" checked={checked} onChange={onToggle} /><span className="sr-only">Lote</span></label>
-    <button type="button" className="record-review" onClick={onSelect}><span className="record-identity"><strong>{debtor.customerName}</strong><small>Cuenta {debtor.accountId} · Medidor {debtor.meterId}</small></span><span className="record-address"><strong>{debtor.address || `${debtor.locality}`}</strong><small>Ruta {debtor.route}</small></span><span className="record-debt"><b>Bs {formatMoney(debtor.debtCents)}</b><small>{debtor.monthsPending} facturas</small></span><span className="record-state">{debtor.supplyStatus ?? "Estado no disponible"}</span><span className="record-open">Abrir <span aria-hidden="true">→</span></span></button>
+    <div className="record-review" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(); } }}><span className="record-identity"><strong>{debtor.customerName}</strong><small>Cuenta {debtor.accountId} · Medidor {debtor.meterId}</small></span><span className="record-address"><strong>{debtor.address || `${debtor.locality}`}</strong><small>Ruta {debtor.route}</small></span><span className="record-debt"><b>Bs {formatMoney(debtor.debtCents)}</b><small>{debtor.monthsPending} facturas</small></span><span className="record-state">{debtor.supplyStatus ?? "Estado no disponible"}</span></div>
   </article>;
 }
 
