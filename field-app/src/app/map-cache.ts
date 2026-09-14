@@ -36,13 +36,7 @@ export function getOrdersBoundingBox(orders: WorkOrder[]): RouteBoundingBox | nu
   }
 
   if (!points.length) {
-    // Coordenadas de contingencia basadas en Mojotorillo si las órdenes no tienen coordenadas explícitas
-    return {
-      minLat: -19.591,
-      maxLat: -19.587,
-      minLng: -65.261,
-      maxLng: -65.256,
-    };
+    return null;
   }
 
   let minLat = points[0].lat;

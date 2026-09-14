@@ -19,11 +19,18 @@ interface FieldMapProps {
   onLocationUpdate?: (loc: { latitude: number; longitude: number; accuracyMeters: number }) => void;
 }
 
+function orderCoordinates(order: WorkOrder): { lat: number; lng: number } | null {
+  const lat = order.context?.cadastralLatitude;
+  const lng = order.context?.cadastralLongitude;
+  if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
 export function FieldMap({
   orders,
   selectedOrderId,
   onSelectOrder,
-  technicianLocation = { latitude: -19.589366, longitude: -65.259119, accuracy: 8 },
+  technicianLocation,
   mode,
   onLocationUpdate,
 }: FieldMapProps) {
@@ -43,7 +50,9 @@ export function FieldMap({
   const techMarkerRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
 
-  const activeLocation = liveLocation ?? technicianLocation;
+  const activeLocation = liveLocation ?? technicianLocation ?? null;
+  const mappedOrderCount = orders.filter((order) => orderCoordinates(order) !== null).length;
+  const hasOrderCoordinates = mappedOrderCount > 0;
 
   useEffect(() => {
     if (typeof window === "undefined" || !mapContainerRef.current) return;
@@ -57,24 +66,19 @@ export function FieldMap({
 
       // Extraer coordenadas de las órdenes asignadas
       const orderPoints: Array<{ lat: number; lng: number; order: WorkOrder }> = [];
-      orders.forEach((order, index) => {
-        const lat =
-          order.context?.cadastralLatitude ??
-          (-19.589366 + ((index % 5) - 2) * 0.0012);
-        const lng =
-          order.context?.cadastralLongitude ??
-          (-65.259119 + (Math.floor(index / 5) - 1) * 0.0014);
-        orderPoints.push({ lat, lng, order });
+      orders.forEach((order) => {
+        const coordinates = orderCoordinates(order);
+        if (coordinates) orderPoints.push({ ...coordinates, order });
       });
 
-      const initialCenterLat =
-        orderPoints.length > 0
-          ? orderPoints.reduce((acc, p) => acc + p.lat, 0) / orderPoints.length
-          : -19.589366;
-      const initialCenterLng =
-        orderPoints.length > 0
-          ? orderPoints.reduce((acc, p) => acc + p.lng, 0) / orderPoints.length
-          : -65.259119;
+      if (!orderPoints.length && !activeLocation) return;
+
+      const initialCenterLat = orderPoints.length > 0
+        ? orderPoints.reduce((acc, p) => acc + p.lat, 0) / orderPoints.length
+        : activeLocation!.latitude;
+      const initialCenterLng = orderPoints.length > 0
+        ? orderPoints.reduce((acc, p) => acc + p.lng, 0) / orderPoints.length
+        : activeLocation!.longitude;
 
       const map = L.map(mapContainerRef.current, {
         zoomControl: true,
@@ -137,28 +141,30 @@ export function FieldMap({
         }
       });
 
-      const isRealGps = liveLocation !== null;
-      const techIcon = L.divIcon({
-        className: "field-user-marker-wrap",
-        html: `<div class="user-gps-marker ${isRealGps ? "user-gps-marker--live" : ""}"><div class="user-gps-pulse"></div><div class="user-gps-dot"></div></div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      });
+      if (activeLocation) {
+        const isRealGps = liveLocation !== null;
+        const techIcon = L.divIcon({
+          className: "field-user-marker-wrap",
+          html: `<div class="user-gps-marker ${isRealGps ? "user-gps-marker--live" : ""}"><div class="user-gps-pulse"></div><div class="user-gps-dot"></div></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        });
 
-      const techMarker = L.marker([activeLocation.latitude, activeLocation.longitude], {
-        icon: techIcon,
-        title: isRealGps ? "Mi ubicación GPS" : "Ubicación técnica asignada",
-      })
-        .addTo(map)
-        .bindPopup(
-          `<strong>${isRealGps ? "Mi ubicación GPS (En vivo)" : "Ubicación técnica asignada"}</strong><br>Lat: ${activeLocation.latitude.toFixed(
-            6
-          )}<br>Lng: ${activeLocation.longitude.toFixed(6)}<br>Precisión: ${
-            Math.round(activeLocation.accuracy ?? 10)
-          } m`
-        );
+        const techMarker = L.marker([activeLocation.latitude, activeLocation.longitude], {
+          icon: techIcon,
+          title: isRealGps ? "Mi ubicación GPS" : "Ubicación técnica asignada",
+        })
+          .addTo(map)
+          .bindPopup(
+            `<strong>${isRealGps ? "Mi ubicación GPS (En vivo)" : "Mi ubicación GPS"}</strong><br>Lat: ${activeLocation.latitude.toFixed(
+              6
+            )}<br>Lng: ${activeLocation.longitude.toFixed(6)}<br>Precisión: ${
+              Math.round(activeLocation.accuracy ?? 0)
+            } m`
+          );
 
-      techMarkerRef.current = techMarker;
+        techMarkerRef.current = techMarker;
+      }
 
       const ordersBounds = L.latLngBounds([]);
 
@@ -221,7 +227,7 @@ export function FieldMap({
         mapInstanceRef.current = null;
       }
     };
-  }, [orders, selectedOrderId, onSelectOrder, mode]);
+  }, [orders, selectedOrderId, onSelectOrder, mode, technicianLocation, Boolean(liveLocation)]);
 
   // Actualizar marcador de técnico cuando cambie la ubicación en vivo
   useEffect(() => {
@@ -315,14 +321,9 @@ export function FieldMap({
 
   const fitAllOrders = () => {
     if (!mapInstanceRef.current) return;
-    const points: Array<[number, number]> = orders.map((o, index) => {
-      const lat =
-        o.context?.cadastralLatitude ??
-        (-19.589366 + ((index % 5) - 2) * 0.0012);
-      const lng =
-        o.context?.cadastralLongitude ??
-        (-65.259119 + (Math.floor(index / 5) - 1) * 0.0014);
-      return [lat, lng];
+    const points: Array<[number, number]> = orders.flatMap((order) => {
+      const coordinates = orderCoordinates(order);
+      return coordinates ? [[coordinates.lat, coordinates.lng]] : [];
     });
 
     if (points.length > 0) {
@@ -332,20 +333,32 @@ export function FieldMap({
         const bounds = L.latLngBounds(points);
         mapInstanceRef.current.fitBounds(bounds.pad(0.18), { maxZoom: 16 });
       }
-    } else if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView([-19.589366, -65.259119], 16);
+    } else if (activeLocation) {
+      mapInstanceRef.current.setView([activeLocation.latitude, activeLocation.longitude], 16);
     }
   };
+
+  if (!hasOrderCoordinates && !activeLocation) {
+    return (
+      <div className="field-map-container field-map-container--empty" aria-label="Mapa de la ruta">
+        <div className="field-map-empty" role="status">
+          <IconPin className="toolbar-icon" />
+          <strong>Ubicaciones no disponibles</strong>
+          <span>Esta orden no contiene coordenadas operativas. No se mostrará una ubicación estimada.</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="field-map-container" aria-label="Mapa interactivo de la ruta">
       <div className="field-map-toolbar">
         <div className="field-map-info">
           <span className="field-map-stat">
-            <IconPin className="toolbar-icon" /> <strong>{orders.length}</strong> suministros en zona
+            <IconPin className="toolbar-icon" /> <strong>{mappedOrderCount}</strong> suministros con ubicación
           </span>
           <span className="field-map-stat">
-            <IconCrosshair className="toolbar-icon" /> GPS: <strong>{Math.round(activeLocation.accuracy ?? 8)} m</strong>
+            <IconCrosshair className="toolbar-icon" /> GPS: <strong>{activeLocation ? `${Math.round(activeLocation.accuracy ?? 0)} m` : "No disponible"}</strong>
           </span>
           {liveLocation ? (
             <span className="real-gps-indicator">

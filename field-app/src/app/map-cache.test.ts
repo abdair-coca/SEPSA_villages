@@ -164,5 +164,32 @@ describe("map-cache utilities", () => {
     expect(box!.minLng).toBeLessThanOrEqual(-65.259119);
     expect(box!.maxLng).toBeGreaterThanOrEqual(-65.258941);
   });
-});
 
+  it("does not invent a route when orders have no coordinates", () => {
+    const orders: WorkOrder[] = [{
+      orderId: "ORD-NO-COORDS",
+      assignedTechnicianId: "tech-1",
+      status: "GENERADO",
+      physicalStatus: "NONE",
+      context: {
+        debtorId: "d-1",
+        accountId: "cta-1",
+        supplyId: "sum-1",
+        customerName: "Cliente sin coordenadas",
+        address: "Dirección sin ubicación operativa",
+        references: "",
+        meterId: "m-1",
+        area: "Valle",
+        locality: "Mojotorillo",
+        route: "002",
+        debtCents: 1000,
+        monthsPending: 1,
+        updatedAt: "2026-09-10",
+        source: "SIMULATED",
+        kardex: [],
+      },
+    }];
+
+    expect(getOrdersBoundingBox(orders)).toBeNull();
+  });
+});
