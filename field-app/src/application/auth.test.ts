@@ -37,6 +37,27 @@ describe("simulated authentication", () => {
     expect(users.every((user) => typeof user.credentialHash === "string")).toBe(true);
   });
 
+  it("assigns seven-day expiry and rejects an expired stored session", async () => {
+    const dbName = "authority-auth-expiry";
+    databases.push(dbName);
+    const authority = new IndexedDbAuthorityRepository({ dbName });
+    repositories.push(authority);
+    await authority.seedSimulatedData();
+    const admin = await login(authority, { username: "admin.simulated", password: "SIMULATED-admin-003" });
+
+    expect(admin.expiresAt).toBeDefined();
+    expect(Date.parse(admin.expiresAt as string) - Date.parse(admin.issuedAt)).toBe(7 * 24 * 60 * 60 * 1000);
+    const database = await openAuthorityDatabase(dbName);
+    const transaction = database.transaction("sessions", "readwrite");
+    const stored = await requestResult(transaction.objectStore("sessions").get(admin.sessionId)) as Record<string, unknown>;
+    stored.expiresAt = new Date(Date.now() - 1).toISOString();
+    transaction.objectStore("sessions").put(stored);
+    await transactionComplete(transaction);
+    database.close();
+
+    await expect(authority.authorize(admin, "VIEW_ORDERS")).rejects.toMatchObject({ code: "AUTHENTICATION_EXPIRED" });
+  });
+
   it("rejects invalid credentials and records rejected access without operational data", async () => {
     const dbName = "authority-auth-rejected";
     databases.push(dbName);
