@@ -12,6 +12,7 @@ services:
       - ./sql/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
       - ./sql/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
       - ./sql/003_reference_fields.sql:/docker-entrypoint-initdb.d/003_reference_fields.sql:ro
+      - ./sql/004_e2e_seed.sql:/docker-entrypoint-initdb.d/004_e2e_seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pilot_provisional -d pilot_provisional"]
       interval: 5s
