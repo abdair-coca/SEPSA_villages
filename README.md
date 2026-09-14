@@ -1,25 +1,26 @@
-# SEPSA · Cobranza Eléctrica Rural
+# SEPSA · Sistema de operaciones eléctricas
 
-Sistema offline-first para que los técnicos de SEPSA gestionen domicilios asignados, consulten deudas, registren visitas y realicen cobros presenciales en efectivo en zonas rurales con conectividad limitada.
+Sistema offline-first para administrar órdenes de corte, asignarlas a técnicos y registrar ejecuciones de campo con trazabilidad.
 
 ## Estado actual
 
-Prototipo navegable de alta fidelidad en `boceto-mvp/` (HTML/CSS/JS vanilla) que valida el flujo completo del técnico antes de construir el backend:
+La aplicación principal está en `field-app/` (React, TypeScript, PWA e IndexedDB) y cuenta con backend REST/PostgreSQL para validar el recorrido administrativo y técnico:
 
-- **Inicio**: resumen de la jornada (domicilios, visitados, pendientes, cobros, monto) y estado de conexión.
-- **Domicilios**: búsqueda, filtros y deuda por domicilio.
-- **Detalle**: deuda y meses pendientes priorizados visualmente.
-- **Cobranza**: pago por meses completos, aplicando siempre los más antiguos primero, con confirmación y comprobante (`CP-YYYYMMDD-NNNNNN`).
-- **Offline-first**: simulación de modo sin conexión, persistencia local (IndexedDB) y cola de cambios con sincronización simulada.
+- **Administración**: búsqueda de morosidad, contexto completo, creación y asignación individual.
+- **Técnico**: órdenes asignadas, contexto offline, visita, lectura, GPS, evidencia y resultado.
+- **Autorización**: validación online obligatoria antes de confirmar un corte físico.
+- **Sincronización**: cola persistente, reintentos, idempotencia y auditoría.
+- **Referencia visual**: `boceto-mvp/` conserva las pantallas P-01 a P-05 y su catálogo de campos.
 
-## Cómo probar el prototipo
+## Cómo probar la aplicación
 
 ```bash
-cd boceto-mvp
-python -m http.server 8787
+cd field-app
+npm install
+npm run dev
 ```
 
-Abrir `http://localhost:8787` en el navegador. La app funciona en móvil (prioridad) y desktop (frame centrado).
+Abrir `http://localhost:5173` en el navegador. Para usar backend, configurar `VITE_PILOT_BACKEND_URL` y levantar `backend/`.
 
 ## Arquitectura objetivo
 
@@ -28,22 +29,20 @@ Frontend:   React + TypeScript + PWA
 Local:      Service Worker + IndexedDB
 Sync:       Sync Engine + Sync Queue
 Backend:    API REST
-DB futura:  PostgreSQL
+DB:         PostgreSQL
 ```
 
 El dominio del prototipo está separado de la UI para migrar a React sin rediseñar las reglas de negocio.
 
 ## Reglas de negocio críticas
 
-- Cobro **opcional** durante una visita.
-- Único método de pago del MVP: **efectivo**.
-- Pagos solo por **meses completos** (sin fracciones).
-- **Meses más antiguos primero**, siempre.
-- La deuda local se actualiza inmediatamente tras confirmar el pago.
-- Comprobante con identificador único, consultable offline.
+- El técnico solo opera órdenes asignadas a su identidad.
+- Ningún corte se confirma sin autorización online válida y de un solo uso.
+- Lectura, GPS y evidencia quedan vinculados a orden, técnico, dispositivo y fecha.
+- Las excepciones de GPS y fotos requieren justificación auditable.
 - Sin pérdida de operaciones: cola persistente, reintentable e idempotente.
 
-Fuera del MVP: lecturas del medidor, pagos digitales y dashboard administrativo.
+La fuente y el contrato oficial de SEPSA permanecen pendientes de validación; los datos visibles de la interfaz son de demostración.
 
 ## Fuente de verdad
 
@@ -53,7 +52,7 @@ Fuera del MVP: lecturas del medidor, pagos digitales y dashboard administrativo.
 
 ## Roadmap
 
-1. Prototipo UX navegable ✅
-2. MVP PWA (auth, deuda, visitas, cobros, comprobantes, sync) ⬜
+1. Referencia visual P-01 a P-05 ✅
+2. Flujo vertical administrativo-técnico ✅
 3. Integración con API de SEPSA ⬜
 4. Validación en campo ⬜

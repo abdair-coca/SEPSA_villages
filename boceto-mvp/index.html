@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SEPSA - Sistema de Cortes y Cobros (Prototipo Funcional)</title>
+  <title>SEPSA - Sistema de operaciones eléctricas</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -15,7 +15,8 @@
     <div class="brand">
       <i class="fa-solid fa-bolt"></i>
       <span>SEPSA</span>
-      <span class="badge-sys">CORTES Y RECONEXIONES</span>
+      <span class="badge-sys">SISTEMA DE OPERACIONES</span>
+      <span class="badge-source">Datos de demostración · fuente pendiente de validación con SEPSA</span>
     </div>
     <div class="user-session">
       <span><i class="fa-solid fa-user"></i> JOSUE DANIEL QUINTANILLA TABOADA (ID: 680 - CI: 10577452)</span>
@@ -29,7 +30,7 @@
     <button class="switcher-btn" onclick="switchView('view-ver-cortes')"><i class="fa-solid fa-list-check"></i> 2. Bandeja de Cortes (/verCortes)</button>
     <button class="switcher-btn" onclick="openCorteDetail(443794)"><i class="fa-solid fa-file-invoice"></i> 3. Ficha Activa (443794)</button>
     <button class="switcher-btn" onclick="openCorteDetail(443797)"><i class="fa-solid fa-ban"></i> 4. Ficha Anulada (443797)</button>
-    <button class="switcher-btn" onclick="switchView('view-kardex')"><i class="fa-solid fa-receipt"></i> 5. Kardex Comercial (Cobros)</button>
+      <button class="switcher-btn" onclick="switchView('view-kardex')"><i class="fa-solid fa-receipt"></i> 5. Kardex Comercial</button>
   </nav>
 
   <main class="main-container">
@@ -71,7 +72,7 @@
         </div>
         <div class="dash-card" onclick="switchView('view-kardex')">
           <div class="icon"><i class="fa-solid fa-cash-register"></i></div>
-          <h4>Sistema de Cobros (Kardex)</h4>
+          <h4>Kardex Comercial</h4>
           <p>Consulta contable, regularización de NIT/CI y caja central.</p>
         </div>
       </div>
@@ -446,7 +447,7 @@
     <section id="view-kardex" class="view-panel">
       <div class="card">
         <div class="card-header">
-          <span><i class="fa-solid fa-cash-register"></i> Módulo de Cobros - Kardex de Facturación</span>
+          <span><i class="fa-solid fa-cash-register"></i> Kardex Comercial - Facturación</span>
           <span>Caja: <strong>SP-JDQT</strong> | Entidad: <strong>SEPSA URBANO</strong></span>
         </div>
         <div class="card-body">
@@ -602,7 +603,7 @@
   <div class="modal-backdrop" id="modal-alerta-kardex">
     <div class="modal-box" style="border-top: 5px solid var(--danger);">
       <div class="modal-header">
-        <span style="color: var(--danger); font-weight: bold;"><i class="fa-solid fa-triangle-exclamation"></i> ¡ADVERTENCIA URGENTE DE COBROS!</span>
+        <span style="color: var(--danger); font-weight: bold;"><i class="fa-solid fa-triangle-exclamation"></i> ADVERTENCIA DE INFORMACIÓN FISCAL</span>
       </div>
       <div class="modal-body" style="text-align: center; padding: 20px;">
         <i class="fa-solid fa-id-card-clip" style="font-size: 40px; color: var(--danger); margin-bottom: 12px;"></i>

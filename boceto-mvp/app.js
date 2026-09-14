@@ -356,7 +356,7 @@
       }
     }
 
-    // Mostrar ubicación fija del prototipo, sin pedir permisos del dispositivo
+    // Mostrar ubicación de referencia sin pedir permisos del dispositivo
     function mostrarUbicacionEnFicha() {
       alert(`Ubicación del técnico: Lat ${technicianLocation.latitude.toFixed(6)}, Lng ${technicianLocation.longitude.toFixed(6)}`);
     }
