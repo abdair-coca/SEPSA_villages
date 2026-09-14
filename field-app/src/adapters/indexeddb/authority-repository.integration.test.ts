@@ -29,6 +29,22 @@ describe("SIMULATED authority vertical", () => {
     expect(result[0]).toMatchObject({ accountId: "CTA-1001", monthsPending: 3, supplyStatus: "A" });
   });
 
+  it("loads deterministic E2E fake data without changing the base fixture", async () => {
+    const dbName = "authority-e2e-seed";
+    databases.push(dbName);
+    const authority = new IndexedDbAuthorityRepository({ dbName });
+    repositories.push(authority);
+    await authority.seedSimulatedData();
+    await authority.seedE2eData();
+    const admin = await login(authority, { username: "admin.simulated", password: "SIMULATED-admin-003" });
+
+    const result = await findDebtors(authority, admin, { area: "C", minMonthsPending: 2 });
+
+    expect(result).toHaveLength(2);
+    expect(result.map((debtor) => debtor.accountId)).toEqual(expect.arrayContaining(["CTA-1006", "CTA-1007"]));
+    expect(result).toEqual(expect.arrayContaining([expect.objectContaining({ source: "SIMULATED", supplyStatus: "A" })]));
+  });
+
   it("creates a batch atomically, audits it, and replays it idempotently", async () => {
     const dbName = "authority-order-batch";
     databases.push(dbName);

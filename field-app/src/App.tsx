@@ -14,6 +14,10 @@ const remoteAuthority = pilotBackendUrl ? new HttpPilotClient({ baseUrl: pilotBa
 export function App() {
   const [session, setSession] = useState<Session | undefined>(() => readStoredSession());
   useEffect(() => {
+    if (!authority || remoteAuthority) return;
+    void authority.seedE2eData();
+  }, []);
+  useEffect(() => {
     if (!session) return;
     if (!isValidFutureDate(session.expiresAt)) {
       clearStoredSession();
@@ -90,7 +94,7 @@ function TechnicianRuntime({ authority, session, onLogout, remote = false }: { a
 
   if (error) return <main className="state-card state-card--error"><h2>No pudimos abrir jornada</h2><p>{error}</p><button className="primary-action" onClick={onLogout}>Volver al inicio</button></main>;
   if (!store) return <main className="state-card"><div className="loading-mark" /><h2>Descargando jornada</h2><p>Validando identidad y órdenes asignadas.</p></main>;
-  return <><div className="session-bar"><span>Técnico: <strong>{session.displayName ?? session.username}</strong></span><button onClick={onLogout}>Cerrar sesión</button></div><FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection={!remote} onRefreshAssigned={refreshAssigned} /></>;
+  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection={!remote} onRefreshAssigned={refreshAssigned} onLogout={onLogout} />;
 }
 
 async function loadPackage(authority: IdentityPort & OperationsAuthorityPort, session: Session, deviceId: string, repository: IndexedDbLocalRepository): Promise<WorkPackageEnvelope> {

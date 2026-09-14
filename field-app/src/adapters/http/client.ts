@@ -24,7 +24,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   constructor(options: HttpClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     if (!this.baseUrl) throw new Error("La URL del servicio de operaciones es obligatoria.");
-    this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.fetchImpl = (options.fetchImpl ?? globalThis.fetch).bind(globalThis);
   }
 
   setMode(mode: ConnectivityMode): void {

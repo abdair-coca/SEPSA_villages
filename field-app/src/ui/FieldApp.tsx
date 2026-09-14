@@ -14,6 +14,7 @@ export interface FieldAppProps {
   deviceId?: string;
   enableReconnection?: boolean;
   onRefreshAssigned?: () => Promise<void>;
+  onLogout?: () => void;
 }
 
 export function FieldApp({
@@ -23,6 +24,7 @@ export function FieldApp({
   deviceId = "device-rugged-01",
   enableReconnection = true,
   onRefreshAssigned,
+  onLogout,
 }: FieldAppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
   const [isProbingNetwork, setIsProbingNetwork] = useState(false);
@@ -112,6 +114,7 @@ export function FieldApp({
         technicianId={technicianId}
         technicianName={technicianName}
         deviceId={deviceId}
+        onLogout={onLogout}
       />
       {state.message ? (
         <div className={`message message--${state.message.tone}`} role="status">
@@ -129,6 +132,7 @@ export function FieldApp({
           store={store}
           enableReconnection={enableReconnection}
           technicianName={technicianName}
+          onRefreshAssigned={onRefreshAssigned ? () => void handleRefreshAssigned() : undefined}
         />
       ) : null}
     </div>
@@ -144,6 +148,7 @@ function Header({
   technicianId,
   technicianName,
   deviceId,
+  onLogout,
 }: {
   state: AppState;
   isProbingNetwork: boolean;
@@ -153,6 +158,7 @@ function Header({
   technicianId: string;
   technicianName?: string;
   deviceId: string;
+  onLogout?: () => void;
 }) {
   const modeLabel =
     state.mode === "online" ? "Conectada" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
@@ -160,14 +166,17 @@ function Header({
   return (
     <header className="app-header">
       <div className="identity-block">
-        <div className="eyebrow">SEPSA · CAMPO</div>
+        <div className="eyebrow">SEPSA · Campo</div>
         <h1>Jornada de campo</h1>
-        <p className="identity">
-          Técnico <strong>{technicianName ?? technicianId}</strong> · dispositivo <strong>{deviceId}</strong>
-        </p>
+        <p className="identity">Órdenes asignadas, ejecución de cortes y sincronización en terreno.</p>
+        <div className="header-person">
+          <span>Técnico</span>
+          <strong>{technicianName ?? technicianId}</strong>
+        </div>
+        <div className="technical-id header-device">Dispositivo: {shortTechnicalId(deviceId)}</div>
       </div>
       <div className="header-meta">
-        <div className="network-control-auto">
+        <div className="header-status-group">
           <span className={`network-status-badge network-status-badge--${state.mode}`}>
             <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
             <span className="network-status-text">{modeLabel}</span>
@@ -183,13 +192,13 @@ function Header({
             <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
             <span className="retry-label">{isProbingNetwork ? "Probando…" : "Reintentar"}</span>
           </button>
-          {onRefreshAssigned ? <button type="button" className="btn-inbox-refresh" onClick={onRefreshAssigned} disabled={isRefreshingAssigned} title="Descargar órdenes asignadas ahora"><IconDownload /><span className="refresh-label">{isRefreshingAssigned ? "Actualizando…" : "Actualizar bandeja"}</span></button> : null}
+          <LastUpdateDisplay
+            timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
+            isRefreshing={isProbingNetwork || isRefreshingAssigned}
+            onRefresh={onRefreshAssigned ?? onRetryConnection}
+          />
+          {onLogout ? <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button> : null}
         </div>
-        <LastUpdateDisplay
-        timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
-        isRefreshing={isProbingNetwork || isRefreshingAssigned}
-        onRefresh={onRefreshAssigned ?? onRetryConnection}
-        />
       </div>
       <div className="simulation-banner">Datos de demostración · fuente pendiente de validación con SEPSA</div>
     </header>
@@ -201,37 +210,20 @@ function Workbench({
   store,
   enableReconnection,
   technicianName,
+  onRefreshAssigned,
 }: {
   state: AppState;
   store: AppStore;
   enableReconnection: boolean;
   technicianName?: string;
+  onRefreshAssigned?: () => void;
 }) {
   const visibleOrders = selectVisibleOrders(state);
   const selectedOrder = state.orders.find((order) => order.orderId === state.selectedOrderId);
 
   return (
     <main className="workbench">
-      <nav className="section-tabs" aria-label="Secciones de trabajo">
-        <button
-          className={state.tab === "orders" ? "tab tab--active" : "tab"}
-          onClick={() => {
-            store.selectOrder(null);
-            store.setTab("orders");
-          }}
-        >
-          Órdenes <span>{state.orders.length}</span>
-        </button>
-        <button
-          className={state.tab === "queue" ? "tab tab--active" : "tab"}
-          onClick={() => {
-            store.selectOrder(null);
-            store.setTab("queue");
-          }}
-        >
-          Cola <span>{pendingCount(state.syncItems)}</span>
-        </button>
-      </nav>
+      <OperationalStrip state={state} store={store} onRefreshAssigned={onRefreshAssigned} />
 
       {state.tab === "orders" ? (
         selectedOrder ? (
@@ -244,7 +236,7 @@ function Workbench({
             onBack={() => store.selectOrder(null)}
           />
         ) : (
-          <OrdersPanel state={state} orders={visibleOrders} store={store} />
+          <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} />
         )
       ) : (
         <QueuePanel state={state} store={store} />
@@ -253,7 +245,40 @@ function Workbench({
   );
 }
 
-function OrdersPanel({ state, orders, store }: { state: AppState; orders: WorkOrder[]; store: AppStore }) {
+function OperationalStrip({ state, store, onRefreshAssigned }: { state: AppState; store: AppStore; onRefreshAssigned?: () => void }) {
+  const pending = pendingCount(state.syncItems);
+  return (
+    <section className="operational-strip" aria-label="Estado operativo">
+      <div className="operational-strip__status">
+        <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
+        <div>
+          <strong>{state.mode === "online" ? "Conectada" : state.mode === "weak" ? "Señal débil" : "Sin conexión"}</strong>
+          <span>Última actualización: <LastUpdateText timestamp={state.lastRefreshAt ?? state.package?.downloadedAt} /></span>
+        </div>
+      </div>
+      <div className="operational-strip__queue">
+        <span className={pending ? "queue-count queue-count--pending" : "queue-count"}>{pending}</span>
+        <div>
+          <strong>{pending ? `${pending} operación${pending === 1 ? "" : "es"} en cola` : "Cola despejada"}</strong>
+          <span>{pending ? "Guardadas en este dispositivo" : "Sin pendientes de sincronización"}</span>
+        </div>
+      </div>
+      <div className="operational-strip__actions">
+        <button type="button" className="toolbar-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button>
+        {pending ? (
+          <button type="button" className="sync-button sync-button--compact" disabled={!isUsable(state.mode) || Boolean(state.busyAction)} onClick={() => void store.sync()}>
+            {state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar ahora"}
+          </button>
+        ) : null}
+        <button type="button" className="queue-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>
+          Ver cola
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void }) {
   const [showMap, setShowMap] = useState(false);
   const [isMapCachedState, setIsMapCachedState] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<CacheProgress | null>(null);
@@ -287,6 +312,8 @@ function OrdersPanel({ state, orders, store }: { state: AppState; orders: WorkOr
   const generatedCount = state.orders.filter((o) => o.status === "GENERADO").length;
   const executedCount = state.orders.filter((o) => o.status === "EJECUTADO").length;
   const cancelledCount = state.orders.filter((o) => o.status === "ANULADO").length;
+  const reviewCount = state.orders.filter((o) => o.physicalStatus === "PHYSICAL_UNKNOWN").length;
+  const nextOrder = orders.find((order) => order.status === "GENERADO" && order.physicalStatus === "NONE") ?? orders[0];
 
   const filters: Array<{ value: OrderFilter; label: string; count?: number }> = [
     { value: "ALL", label: "Todas", count: state.orders.length },
@@ -297,115 +324,121 @@ function OrdersPanel({ state, orders, store }: { state: AppState; orders: WorkOr
   ];
 
   return (
-    <section className="orders-panel panel" aria-label="Órdenes asignadas">
-      <div className="panel-heading">
+    <section className="orders-panel" aria-label="Órdenes asignadas">
+      <div className="workbench-heading">
         <div>
-          <div className="eyebrow">PAQUETE v{state.package?.version ?? "—"}</div>
-          <h2>Mis órdenes · Bandeja de cortes</h2>
+          <div className="eyebrow">TRABAJO DE HOY</div>
+          <h2>Tu jornada</h2>
+          <p>Primero resuelve la orden actual. El resto queda debajo.</p>
         </div>
-        <div className="panel-heading-badges">
-          <span className="count-badge count-badge--danger">{generatedCount} por ejecutar</span>
-          <span className="count-badge">{orders.length} en vista</span>
-        </div>
+        <span className="package-label">Paquete v{state.package?.version ?? "—"}</span>
       </div>
 
-      {/* Buscador Único Inteligente */}
+      <div className="metric-row" aria-label="Resumen de órdenes">
+        <MetricCard value={generatedCount} label="Por ejecutar" tone="attention" />
+        <MetricCard value={reviewCount} label="En revisión" tone="review" />
+        <MetricCard value={executedCount} label="Ejecutadas" tone="success" />
+        <MetricCard value={cancelledCount} label="Anuladas" tone="muted" />
+        <MetricCard value={pendingCount(state.syncItems)} label="En cola" tone="queue" />
+      </div>
+
+      {nextOrder ? (
+        <div className="orders-dashboard">
+          <CurrentOrderCard order={nextOrder} mode={state.mode} onOpen={() => store.selectOrder(nextOrder.orderId)} onShowMap={() => { store.selectOrder(nextOrder.orderId); setShowMap(true); }} />
+          <section className="my-orders-section" aria-label="Mis órdenes">
+            <div className="section-heading-inline">
+              <div>
+                <span className="eyebrow">BANDEJA ASIGNADA</span>
+                <h2>Mis órdenes</h2>
+              </div>
+              <span className="section-count">{orders.length}</span>
+            </div>
+            <OrderFilters state={state} store={store} filters={filters} />
+            <div className="order-cards-list">
+              {orders.map((order) => (
+                <OrderCard
+                  key={order.orderId}
+                  order={order}
+                  selected={state.selectedOrderId === order.orderId}
+                  onSelect={() => store.selectOrder(order.orderId)}
+                  onShowMap={() => { store.selectOrder(order.orderId); setShowMap(true); }}
+                />
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : (
+        <EmptyOrders hasAnyOrders={state.orders.length > 0} onRefresh={onRefreshAssigned ?? (() => void store.refresh())} onShowMap={() => setShowMap(true)} />
+      )}
+
+      <div className="map-tools">
+        <button type="button" className={showMap ? "map-reveal map-reveal--active" : "map-reveal"} onClick={() => setShowMap(!showMap)}>
+          <IconMap className="btn-icon" />
+          <span>{showMap ? "Ocultar mapa de órdenes" : "Ver mapa de órdenes"}</span>
+        </button>
+        {!isMapCachedState ? (
+          <button type="button" className="map-download-link" disabled={isDownloadingMap} onClick={handleDownloadMap}>
+            <IconDownload className="btn-icon" />
+            {isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : "Descargar zona para trabajar offline"}
+          </button>
+        ) : <span className="map-cached-tag"><IconCheck className="cached-icon" /> Mapa descargado</span>}
+      </div>
+      {showMap ? <FieldMap orders={orders} selectedOrderId={nextOrder?.orderId ?? null} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} /> : null}
+    </section>
+  );
+}
+
+function MetricCard({ value, label, tone }: { value: number; label: string; tone: string }) {
+  return <div className={`metric-card metric-card--${tone}`}><strong>{value}</strong><span>{label}</span></div>;
+}
+
+function OrderFilters({ state, store, filters }: { state: AppState; store: AppStore; filters: Array<{ value: OrderFilter; label: string; count?: number }> }) {
+  return (
+    <div className="order-filters">
       <div className="search-bar-wrap">
         <label className="search-field" htmlFor="order-search">
           <IconSearch className="search-field-icon" />
-          <input
-            id="order-search"
-            type="search"
-            value={state.query}
-            onChange={(event) => store.setQuery(event.target.value)}
-            placeholder="Buscar por cuenta, medidor, CUC o cliente…"
-          />
+          <input id="order-search" type="search" value={state.query} onChange={(event) => store.setQuery(event.target.value)} placeholder="Buscar por cuenta, medidor o cliente" />
         </label>
-        {state.query ? (
-          <button
-            type="button"
-            className="search-clear-btn"
-            onClick={() => store.setQuery("")}
-            aria-label="Limpiar búsqueda"
-          >
-            ×
-          </button>
-        ) : null}
+        {state.query ? <button type="button" className="search-clear-btn" onClick={() => store.setQuery("")} aria-label="Limpiar búsqueda">×</button> : null}
       </div>
-
-      {/* Chips de filtro rápido */}
-      <div className="filter-row" aria-label="Filtrar órdenes">
-        {filters.map((filter) => (
-          <button
-            key={filter.value}
-            className={state.filter === filter.value ? "filter-chip filter-chip--active" : "filter-chip"}
-            onClick={() => store.setFilter(filter.value)}
-          >
-            {filter.label} {filter.count !== undefined ? <span className="chip-count">({filter.count})</span> : null}
-          </button>
-        ))}
+      <div className="filter-row" role="tablist" aria-label="Filtrar órdenes">
+        {filters.map((filter) => {
+          const isActive = state.filter === filter.value;
+          return <button key={filter.value} type="button" role="tab" aria-selected={isActive} className={isActive ? "filter-chip filter-chip--active" : "filter-chip"} onClick={() => store.setFilter(filter.value)}><span>{filter.label}</span>{filter.count !== undefined ? <span className="chip-count">{filter.count}</span> : null}</button>;
+        })}
       </div>
+    </div>
+  );
+}
 
-      {/* Barra de herramientas de mapa */}
-      <div className="map-actions-bar">
-        <button
-          type="button"
-          className={showMap ? "btn-map-toggle btn-map-toggle--active" : "btn-map-toggle"}
-          onClick={() => setShowMap(!showMap)}
-        >
-          <IconMap className="btn-icon" />
-          <span>{showMap ? "Ocultar mapa" : "Ver mapa de órdenes"}</span>
-        </button>
-
-        {!isMapCachedState ? (
-          <button
-            type="button"
-            className="btn-download-map"
-            disabled={isDownloadingMap}
-            onClick={handleDownloadMap}
-            title="Descarga la zona completa donde están ubicadas las órdenes"
-          >
-            <IconDownload className="btn-icon" />
-            <span>
-              {isDownloadingMap
-                ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…`
-                : "Descargar mapa de la zona de órdenes"}
-            </span>
-          </button>
-        ) : (
-          <span className="map-cached-tag">
-            <IconCheck className="cached-icon" />
-            <span>Mapa de órdenes descargado</span>
-          </span>
-        )}
-      </div>
-
-      {/* Vista interactiva del mapa */}
-      {showMap ? (
-        <FieldMap
-          orders={orders}
-          selectedOrderId={state.selectedOrderId}
-          onSelectOrder={(orderId) => store.selectOrder(orderId)}
-          mode={state.mode}
-        />
-      ) : null}
-
-      {/* Lista de Cards Táctiles */}
-      {orders.length ? (
-        <div className="order-cards-list">
-          {orders.map((order) => (
-            <OrderCard
-              key={order.orderId}
-              order={order}
-              selected={state.selectedOrderId === order.orderId}
-              onSelect={() => store.selectOrder(order.orderId)}
-            />
-          ))}
+function CurrentOrderCard({ order, mode, onOpen, onShowMap }: { order: WorkOrder; mode: ConnectivityMode; onOpen: () => void; onShowMap: () => void }) {
+  const context = order.context;
+  const isReady = order.status === "GENERADO" && order.physicalStatus === "NONE";
+  const debtBs = context ? (context.debtCents / 100).toFixed(2) : "0.00";
+  return (
+    <article className="current-order-card">
+      <div className="current-order-card__topline"><span className="current-label"><span className="current-pulse" aria-hidden="true" />Siguiente orden</span><span className={`status-badge status-badge--${orderStatusTone(order)}`}>{orderStatusLabel(order.status)}</span></div>
+      <div className="current-order-card__identity">
+        <div>
+          <h2>{context?.customerName || order.orderId}</h2>
+          <p>{context?.accountId || order.accountId || "Cuenta no disponible"} · {context?.meterId || "Medidor no disponible"}</p>
         </div>
-      ) : (
-        <EmptyOrders />
-      )}
-    </section>
+        {order.cuc ? <span className="technical-id">CUC: {shortTechnicalId(order.cuc)}</span> : null}
+      </div>
+      <div className="current-order-card__location"><IconPin /><div><span>Ubicación</span><strong>{context?.address || "Dirección no especificada"}</strong><small>{context?.locality || "Localidad no disponible"} · {context?.route || "Ruta no disponible"}{context?.references ? ` · ${context.references}` : ""}</small></div></div>
+      <div className="current-order-card__financial"><div><span>Deuda</span><strong>Bs {debtBs}</strong></div><div><span>Facturas pendientes</span><strong>{context?.monthsPending ?? "—"}</strong></div><div><span>Estado</span><strong>{context?.supplyStatus || "No disponible"}</strong></div></div>
+      <div className="readiness-list" aria-label="Estado para registrar corte">
+        <span className={context?.address ? "readiness readiness--ready" : "readiness readiness--missing"}><b aria-hidden="true">{context?.address ? "✓" : "!"}</b>{context?.address ? "Suministro ubicado" : "Falta dirección"}</span>
+        <span className="readiness readiness--pending"><b aria-hidden="true">•</b>Ubicación se captura al registrar</span>
+        <span className="readiness readiness--pending"><b aria-hidden="true">•</b>Evidencia fotográfica pendiente</span>
+        <span className="readiness readiness--pending"><b aria-hidden="true">•</b>Medición final pendiente</span>
+        <span className={isReady ? "readiness readiness--pending" : "readiness readiness--ready"}><b aria-hidden="true">{isReady ? "•" : "✓"}</b>{isReady ? "Corte pendiente de registrar" : "Sin acción de corte pendiente"}</span>
+        <span className={`readiness readiness--${mode === "offline" ? "missing" : "ready"}`}><b aria-hidden="true">{mode === "offline" ? "!" : "✓"}</b>{mode === "offline" ? "Sin conexión" : "Conectividad disponible"}</span>
+      </div>
+      <div className="current-order-card__actions"><button type="button" className="primary-action" onClick={onOpen}>{isReady ? "Registrar corte" : "Abrir orden"}<span>→</span></button><button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver ubicación</button></div>
+      <div className="technical-id current-order-card__technical">Orden: {shortTechnicalId(order.orderId)} · actualizado {formatDate(context?.updatedAt)}</div>
+    </article>
   );
 }
 
@@ -413,10 +446,12 @@ function OrderCard({
   order,
   selected,
   onSelect,
+  onShowMap,
 }: {
   order: WorkOrder;
   selected: boolean;
   onSelect: () => void;
+  onShowMap: () => void;
 }) {
   const isCancelled = order.status === "ANULADO";
   const isExecuted = order.status === "EJECUTADO";
@@ -437,14 +472,6 @@ function OrderCard({
       onClick={onSelect}
     >
       <div className="order-card__header">
-        <div className="order-card__identifiers">
-          <span className="order-card__order-id">{order.orderId}</span>
-          <span className="order-card__divider">·</span>
-          <span className="order-card__account">CTA. {account}</span>
-          <span className="order-card__divider">·</span>
-          <span className="order-card__meter">MED. {meter}</span>
-          {cuc ? <span className="order-card__cuc">CUC {cuc}</span> : null}
-        </div>
         <div className="order-card__badges">
           <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
             {orderStatusLabel(order.status)}
@@ -454,9 +481,11 @@ function OrderCard({
 
       <div className="order-card__body">
         <h3 className="order-card__customer">{customer}</h3>
+        <p className="order-card__supply">{account} · {meter}</p>
         <p className="order-card__address">
-          <IconPin className="card-address-icon" /> {address} · <span className="order-card__route">{route}</span>
+          <IconPin className="card-address-icon" /> {address}
         </p>
+        <p className="order-card__route">{order.context?.locality || "Localidad no disponible"} · {route}</p>
       </div>
 
       <div className="order-card__footer">
@@ -466,19 +495,14 @@ function OrderCard({
           <span className="order-card__days">{daysSince}</span>
         </div>
 
-        <button
-          type="button"
-          className={`order-card__action-btn ${
-            isCancelled ? "order-card__action-btn--outline" : isExecuted ? "order-card__action-btn--success" : "order-card__action-btn--danger"
-          }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect();
-          }}
-        >
-          {isCancelled ? "Ver anulado ›" : isExecuted ? "Ver ejecutado ›" : "Ver corte ›"}
-        </button>
+        <div className="order-card__actions">
+          <button type="button" className="order-card__action-btn" onClick={(e) => { e.stopPropagation(); onSelect(); }}>
+            {isCancelled ? "Ver anulado" : isExecuted ? "Ver ejecutado" : "Abrir"}
+          </button>
+          <button type="button" className="order-card__map-btn" onClick={(e) => { e.stopPropagation(); onShowMap(); }}>Mapa</button>
+        </div>
       </div>
+      <div className="technical-id order-card__technical">Orden {shortTechnicalId(order.orderId)}{cuc ? ` · CUC ${shortTechnicalId(cuc)}` : ""}</div>
     </article>
   );
 }
@@ -506,10 +530,9 @@ function OrderDetail({
       {/* Barra superior de retorno */}
       <div className="detail-navigation-bar">
         <button type="button" className="btn-back" onClick={onBack}>
-          ← Volver a la bandeja
+          ← Volver a la bandeja de órdenes
         </button>
         <div className="detail-cuc-badge">
-          {order.cuc ? <span>C.U.C.: {order.cuc}</span> : <span>Orden {order.orderId}</span>}
           <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
             {orderStatusLabel(order.status)}
           </span>
@@ -527,6 +550,18 @@ function OrderDetail({
           ) : null}
         </div>
       ) : null}
+
+      <div className="detail-heading">
+        <div>
+          <span className="eyebrow">ORDEN ACTUAL</span>
+          <h2>{order.context?.customerName || order.orderId}</h2>
+          <p>{order.context?.accountId || order.accountId || "Cuenta no disponible"} · {order.context?.meterId || "Medidor no disponible"}</p>
+        </div>
+        <div className="detail-technical-stack">
+          <span className="technical-id">Orden {shortTechnicalId(order.orderId)}</span>
+          {order.cuc ? <span className="technical-id">CUC: {shortTechnicalId(order.cuc)}</span> : null}
+        </div>
+      </div>
 
       <div className="physical-card">
         <span className="physical-card__label">Estado físico</span>
@@ -554,14 +589,14 @@ function OrderDetail({
       <ActivityPanel entries={state.activity.filter((entry) => entry.record.orderId === order.orderId)} />
 
       <div className="action-stack">
-        <button className="primary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
-          Registrar visita <span>→</span>
-        </button>
         {order.status === "GENERADO" && order.physicalStatus === "NONE" ? (
-          <button className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("CUT")}>
-            Preparar corte <span>→</span>
+          <button className="primary-action" aria-label="Preparar corte" disabled={Boolean(state.busyAction)} onClick={() => setDraft("CUT")}>
+            Registrar corte <span>→</span>
           </button>
         ) : null}
+        <button className={order.status === "GENERADO" && order.physicalStatus === "NONE" ? "secondary-action" : "primary-action"} disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
+          Registrar visita <span>→</span>
+        </button>
         {enableReconnection && order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED" ? (
           <button
             className="secondary-action"
@@ -595,75 +630,23 @@ function OrderDetail({
 function OperationalContext({ context }: { context: NonNullable<WorkOrder["context"]> }) {
   return (
     <section className="context-panel" aria-label="Contexto operativo">
-      <div className="eyebrow">CONTEXTO OPERATIVO</div>
+      <div className="context-heading"><div><span className="eyebrow">DATOS PARA TRABAJAR</span><h3>Cliente y suministro</h3></div><span className="context-source">Actualizado {formatDate(context.updatedAt)}</span></div>
+      <div className="detail-location"><IconPin /><div><span>Dirección</span><strong>{context.address || "Dato no disponible"}</strong><small>{context.references || "Sin referencia adicional"}</small></div></div>
+      <div className="detail-debt"><div><span>Deuda de referencia</span><strong>Bs {(context.debtCents / 100).toFixed(2)}</strong></div><span>{context.monthsPending} facturas pendientes</span></div>
       <div className="context-grid">
-        <div>
-          <span>Cliente</span>
-          <strong>{context.customerName || "Dato no disponible"}</strong>
-        </div>
-        <div>
-          <span>Cuenta / suministro</span>
-          <strong>
-            {context.accountId || "Dato no disponible"} · {context.supplyId || "Dato no disponible"}
-          </strong>
-        </div>
-        <div>
-          <span>Dirección</span>
-          <strong>{context.address || "Dato no disponible"}</strong>
-        </div>
-        <div>
-          <span>Referencias</span>
-          <strong>{context.references || "Dato no disponible"}</strong>
-        </div>
-        <div>
-          <span>Medidor</span>
-          <strong>
-            {context.meterId || "Dato no disponible"}
-            {context.meterBrand ? ` · ${context.meterBrand}` : ""}
-          </strong>
-        </div>
-        <div>
-          <span>Ruta / circuito</span>
-          <strong>
-            {context.route || "Dato no disponible"} · {context.circuit || "Dato no disponible"}
-          </strong>
-        </div>
-        <div>
-          <span>Tarifa / estado</span>
-          <strong>
-            {context.tariff || "Dato no disponible"} · {context.supplyStatus || "Dato no disponible"}
-          </strong>
-        </div>
-        <div>
-          <span>Deuda de referencia</span>
-          <strong>
-            Bs {(context.debtCents / 100).toFixed(2)} · {context.monthsPending} meses
-          </strong>
-        </div>
+        <div><span>Cuenta / suministro</span><strong>{context.accountId || "Dato no disponible"} · {context.supplyId || "Dato no disponible"}</strong></div>
+        <div><span>Medidor</span><strong>{context.meterId || "Dato no disponible"}{context.meterBrand ? ` · ${context.meterBrand}` : ""}</strong></div>
+        <div><span>Ruta / circuito</span><strong>{context.route || "Dato no disponible"} · {context.circuit || "Dato no disponible"}</strong></div>
+        <div><span>Localidad / estado</span><strong>{context.locality || "Dato no disponible"} · {context.supplyStatus || "Dato no disponible"}</strong></div>
       </div>
-      <div className="context-source">Datos de demostración · actualizados {formatDate(context.updatedAt)}</div>
-      <div className="kardex-panel">
-        <strong>Kardex y deuda</strong>
-        {context.kardex.length ? (
-          context.kardex.map((entry) => (
-            <div className="kardex-row" key={entry.entryId}>
-              <span>{entry.period}</span>
-              <span>Bs {(entry.amountCents / 100).toFixed(2)}</span>
-              <span>{entry.status === "PENDING" ? "Pendiente" : "Pagado"}</span>
-            </div>
-          ))
-        ) : (
-          <p>Historial no disponible en paquete local.</p>
-        )}
-      </div>
-      <div className="map-fallback">
-        <strong>Localización</strong>
-        <span>
-          {context.cadastralLatitude !== undefined && context.cadastralLongitude !== undefined
-            ? `${context.cadastralLatitude.toFixed(6)}, ${context.cadastralLongitude.toFixed(6)}`
-            : "Mapa no disponible. Use dirección y referencias descargadas."}
-        </span>
-      </div>
+      <details className="technical-details">
+        <summary>Ver datos técnicos</summary>
+        <div className="technical-details__body"><span>Tarifa: {context.tariff || "Dato no disponible"}</span><span>Coordenadas: {context.cadastralLatitude !== undefined && context.cadastralLongitude !== undefined ? `${context.cadastralLatitude.toFixed(6)}, ${context.cadastralLongitude.toFixed(6)}` : "No disponibles"}</span></div>
+      </details>
+      <details className="kardex-details">
+        <summary>Kardex y deuda</summary>
+        {context.kardex.length ? context.kardex.map((entry) => <div className="kardex-row" key={entry.entryId}><span>{entry.period}</span><span>Bs {(entry.amountCents / 100).toFixed(2)}</span><span>{entry.status === "PENDING" ? "Pendiente" : "Pagado"}</span></div>) : <p>Historial no disponible en paquete local.</p>}
+      </details>
     </section>
   );
 }
@@ -945,21 +928,20 @@ function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
       <div className="panel-heading">
         <div>
           <div className="eyebrow">TRAZABILIDAD LOCAL</div>
-          <h2>Cola de trabajo</h2>
+          <h2>Cola de sincronización</h2>
         </div>
-        <button
-          className="sync-button"
-          disabled={!isUsable(state.mode) || state.busyAction === "SYNC"}
-          onClick={() => void store.sync()}
-        >
-          {state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar"}
-        </button>
+        <div className="queue-panel__actions">
+          <button type="button" className="toolbar-action" onClick={() => store.setTab("orders")}>Volver a mis órdenes</button>
+          <button className="sync-button" disabled={!isUsable(state.mode) || state.busyAction === "SYNC"} onClick={() => void store.sync()}>
+            {state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar ahora"}
+          </button>
+        </div>
       </div>
       <p className="queue-intro">Los registros permanecen en este dispositivo hasta recibir confirmación válida.</p>
       {items.length ? (
         <div className="queue-list">
           {items.map((item) => (
-            <QueueItem key={item.operationId} item={item} />
+            <QueueItem key={item.operationId} item={item} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} />
           ))}
         </div>
       ) : (
@@ -972,18 +954,18 @@ function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
   );
 }
 
-function QueueItem({ item }: { item: import("../ports").SyncItem }) {
+function QueueItem({ item, order, onRetry, onViewOrder }: { item: import("../ports").SyncItem; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void }) {
   const manualReview = item.manualReview || item.uncertain;
   return (
     <article className="queue-item">
       <div className="queue-item__header">
-        <strong>{item.operationId}</strong>
+        <div><strong>{queueActionLabel(item.action)}</strong><span className="queue-item__customer">{order?.context?.customerName || `Orden ${shortTechnicalId(item.orderId ?? "sin orden")}`}</span></div>
         <span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span>
       </div>
       <div className="queue-item__meta">
-        <span>{actionLabel(item.action)}</span>
-        <span>Orden {item.orderId ?? "—"}</span>
+        <span>{formatDate(item.updatedAt)}</span>
         <span>{item.attempts} intento(s)</span>
+        <span className="technical-id">Operación {shortTechnicalId(item.operationId)}</span>
       </div>
       {item.errorCode ? (
         <p className="queue-error">
@@ -992,15 +974,24 @@ function QueueItem({ item }: { item: import("../ports").SyncItem }) {
         </p>
       ) : null}
       {manualReview ? <p className="queue-review">Resultado incierto: no reenviar automáticamente.</p> : null}
+      <div className="queue-item__actions">
+        {item.status !== "synced" && !manualReview ? <button type="button" className="queue-item__retry" onClick={onRetry}>Reintentar</button> : null}
+        {item.orderId ? <button type="button" className="queue-item__detail" onClick={() => onViewOrder(item.orderId ?? "")}>Ver detalle</button> : null}
+      </div>
     </article>
   );
 }
 
-function EmptyOrders() {
+function EmptyOrders({ hasAnyOrders, onRefresh, onShowMap }: { hasAnyOrders: boolean; onRefresh: () => void; onShowMap: () => void }) {
   return (
     <div className="empty-state">
-      <strong>No encontramos órdenes</strong>
-      <span>Pruebe cambiar búsqueda o filtro.</span>
+      <div className="empty-state__icon"><IconPin /></div>
+      <strong>{hasAnyOrders ? "No encontramos órdenes" : "No tienes órdenes asignadas en este momento"}</strong>
+      <span>{hasAnyOrders ? "Prueba cambiar búsqueda o filtro." : "Actualiza la bandeja o espera una nueva asignación."}</span>
+      <div className="empty-state__actions">
+        <button type="button" className="primary-action" onClick={onRefresh}>Actualizar bandeja</button>
+        <button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver mapa</button>
+      </div>
     </div>
   );
 }
@@ -1029,6 +1020,9 @@ function ErrorState({ text, onRetry }: { text: string; onRetry: () => Promise<vo
 
 function actionLabel(action: ActionKind): string {
   return action === "VISIT" ? "Visita" : action === "CUT" ? "Corte" : "Reconexión";
+}
+function queueActionLabel(action: import("../ports").SyncItem["action"]): string {
+  return action === "CUT" ? "Corte ejecutado" : action === "VISIT" ? "Observación de campo" : "Reconexión";
 }
 function activityLabel(kind: import("../ports").StoredRecord["kind"]): string {
   return kind === "VISIT" ? "Visita sin ejecución" : kind === "CUT" ? "Corte" : "Reconexión";
@@ -1108,6 +1102,11 @@ function formatDaysSince(dateStr?: string): string {
   return `${days.toFixed(1)} d`;
 }
 
+function shortTechnicalId(value: string): string {
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 9)}…${value.slice(-4)}`;
+}
+
 function LastUpdateDisplay({
   timestamp,
   isRefreshing,
@@ -1149,6 +1148,18 @@ function LastUpdateDisplay({
       </strong>
     </div>
   );
+}
+
+function LastUpdateText({ timestamp }: { timestamp?: string }) {
+  const [nowMs, setNowMs] = useState(() => (typeof Date !== "undefined" ? Date.now() : 0));
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const timer = setInterval(() => setNowMs(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return <>{formatLastUpdate(timestamp, nowMs).relative}</>;
 }
 
 function formatLastUpdate(value?: string, nowMs = Date.now()): { relative: string; exact: string } {

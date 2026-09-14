@@ -80,6 +80,14 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     await transactionComplete(transaction);
   }
 
+  async seedE2eData(): Promise<void> {
+    const db = await this.dbPromise;
+    const transaction = db.transaction("debtors", "readwrite");
+    const debtors = transaction.objectStore("debtors");
+    for (const debtor of EXTRA_SIMULATED_DEBTORS.map(createExtraSimulatedDebtor)) debtors.put(debtor);
+    await transactionComplete(transaction);
+  }
+
   async authenticate(input: DemoCredentials): Promise<Session> {
     await this.ensureSeeded();
     const suppliedHash = await hashCredential(input.password);
@@ -526,16 +534,14 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
 
   private async ensureSeeded(): Promise<void> {
     const db = await this.dbPromise;
-    const transaction = db.transaction(["users", "debtors"], "readonly");
+    const transaction = db.transaction("users", "readonly");
     const users = await requestResult(transaction.objectStore("users").getAll());
-    const debtors = await requestResult(transaction.objectStore("debtors").getAll()) as DebtorRecord[];
     await transactionComplete(transaction);
     const records = users as Array<StoredUser & { password?: string }>;
     if (records.length === 0) {
       await this.seedSimulatedData();
       return;
     }
-    if (!debtors.some((debtor) => debtor.debtorId === "debtor-1003")) await this.seedSimulatedData();
     if (records.some((user) => typeof user.password === "string" || typeof user.credentialHash !== "string")) {
       const credentialsByUsername = new Map<string, string>(Object.values(SIMULATED_CREDENTIALS).map((credential) => [credential.username, credential.password]));
       const migrated = await Promise.all(records.map(async (user) => {
@@ -569,7 +575,6 @@ function simulatedDebtors(): DebtorRecord[] {
   return [
     { debtorId: "debtor-1001", accountId: "CTA-1001", supplyId: "SUM-1001", customerName: "María Flores", address: "Av. Petrolera 145, Villa Esperanza", references: "Frente a unidad educativa", meterId: "MED-1001", area: "B", locality: "002 - MOJOTORILLO", route: "002", circuit: "D-1182", tariff: "RS", supplyStatus: "A", enablingTitle: "R", routeOrder: 129, meterBrand: "WASION", meterIndex: "MED-1001", meterMultiplier: 1, cadastralLatitude: -19.589366, cadastralLongitude: -65.259119, claims: false, paymentPlan: false, suspensionDate: "2026-08-27T00:00:00.000Z", debtCents: 24050, monthsPending: 3, updatedAt: "2026-09-10T12:00:00.000Z", source: "SIMULATED", kardex: [{ entryId: "k-1001-1", period: "2026-07", amountCents: 8017, status: "PENDING", billingDate: "2026-07-27", invoiceOrigin: "FA_FACTURAS", daysLate: 63 }, { entryId: "k-1001-2", period: "2026-08", amountCents: 8017, status: "PENDING", billingDate: "2026-08-27", invoiceOrigin: "FA_FACTURAS", daysLate: 31 }, { entryId: "k-1001-3", period: "2026-09", amountCents: 8016, status: "PENDING", billingDate: "2026-09-10", invoiceOrigin: "FA_FACTURAS", daysLate: 2 }] },
     { debtorId: "debtor-1002", accountId: "CTA-1002", supplyId: "SUM-1002", customerName: "José Quispe", address: "Calle Los Álamos 22, San Pedro", references: "A dos cuadras del mercado", meterId: "MED-1002", area: "B", locality: "002 - MOJOTORILLO", route: "002", circuit: "D-1182", tariff: "RS", supplyStatus: "A", enablingTitle: "R", routeOrder: 132, meterBrand: "WASION", meterIndex: "MED-1002", meterMultiplier: 1, cadastralLatitude: -19.588912, cadastralLongitude: -65.258647, claims: false, paymentPlan: false, suspensionDate: "2026-08-27T00:00:00.000Z", debtCents: 11800, monthsPending: 2, updatedAt: "2026-09-10T12:00:00.000Z", source: "SIMULATED", kardex: [{ entryId: "k-1002-1", period: "2026-08", amountCents: 5900, status: "PENDING", billingDate: "2026-08-27", invoiceOrigin: "FA_FACTURAS", daysLate: 31 }, { entryId: "k-1002-2", period: "2026-09", amountCents: 5900, status: "PENDING", billingDate: "2026-09-10", invoiceOrigin: "FA_FACTURAS", daysLate: 2 }] },
-    ...EXTRA_SIMULATED_DEBTORS.map(createExtraSimulatedDebtor),
   ];
 }
 

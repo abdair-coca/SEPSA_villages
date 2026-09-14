@@ -1,623 +1,135 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SEPSA - Sistema de operaciones eléctricas</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="styles.css?v=responsive">
+  <meta name="description" content="Centro de control administrativo de órdenes de corte SEPSA.">
+  <title>Centro de control | SEPSA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=admin-control-center">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Ir al contenido principal</a>
 
   <header class="topbar">
-    <div class="brand">
-      <i class="fa-solid fa-bolt"></i>
-      <span>SEPSA</span>
-      <span class="badge-sys">SISTEMA DE OPERACIONES</span>
-      <span class="badge-source">Datos de demostración · fuente pendiente de validación con SEPSA</span>
-    </div>
-    <div class="user-session">
-      <span><i class="fa-solid fa-user"></i> JOSUE DANIEL QUINTANILLA TABOADA (ID: 680 - CI: 10577452)</span>
-      <span class="timer-badge"><i class="fa-regular fa-clock"></i> Refresco en: <strong id="timer-display">06:00</strong></span>
+    <div class="topbar-inner">
+      <a class="brand" href="#inicio" onclick="switchView('view-dashboard'); return false;" aria-label="SEPSA, ir al inicio">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M13.4 2.8 5.8 13h5.8l-1 8.2L18.2 11h-5.7l.9-8.2Z" fill="currentColor"/></svg>
+        </span>
+        <span class="brand-copy"><strong>SEPSA</strong><span>Sistema de Operaciones</span></span>
+      </a>
+
+      <nav class="topnav" aria-label="Navegación principal">
+        <button class="topnav-link active" data-view="view-dashboard" onclick="switchView('view-dashboard')">Centro de control</button>
+        <button class="topnav-link" data-view="view-orders" onclick="switchView('view-orders')">Órdenes</button>
+        <button class="topnav-link" data-view="view-audit" onclick="switchView('view-audit')">Auditoría</button>
+      </nav>
+
+      <div class="session-area">
+        <span class="environment-badge"><span class="status-dot"></span> Ambiente de demostración</span>
+        <div class="session-user"><span class="avatar">AD</span><span><strong>Administrador</strong><small>Sesión activa</small></span></div>
+        <button class="logout-button" onclick="showToast('Sesión de demostración activa.','info')">Cerrar sesión</button>
+      </div>
     </div>
   </header>
 
-  <nav class="view-switcher">
-    <button class="switcher-btn active" onclick="switchView('view-dash')"><i class="fa-solid fa-chart-pie"></i> Dashboard</button>
-    <button class="switcher-btn" onclick="switchView('view-crear-orden')"><i class="fa-solid fa-magnifying-glass-dollar"></i> 1. Buscar Morosos (/orden/create)</button>
-    <button class="switcher-btn" onclick="switchView('view-ver-cortes')"><i class="fa-solid fa-list-check"></i> 2. Bandeja de Cortes (/verCortes)</button>
-    <button class="switcher-btn" onclick="openCorteDetail(443794)"><i class="fa-solid fa-file-invoice"></i> 3. Ficha Activa (443794)</button>
-    <button class="switcher-btn" onclick="openCorteDetail(443797)"><i class="fa-solid fa-ban"></i> 4. Ficha Anulada (443797)</button>
-      <button class="switcher-btn" onclick="switchView('view-kardex')"><i class="fa-solid fa-receipt"></i> 5. Kardex Comercial</button>
-  </nav>
-
-  <main class="main-container">
-
-    <section id="view-dash" class="view-panel active">
-      <div class="card">
-        <div class="card-header">
-          <span><i class="fa-solid fa-id-card"></i> Datos del Usuario y Operaciones</span>
-          <span class="badge badge-info">Sesión Activa</span>
-        </div>
-        <div class="card-body" style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
-          <div>
-            <p><strong>Usuario:</strong> Josue Daniel Quintanilla Taboada</p>
-            <p><strong>Email:</strong> josue.quintanilla@sepsa.com.bo</p>
-            <p><strong>Teléfono registrado:</strong> +591 72409703</p>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <input type="text" class="form-control" style="width: 180px;" value="+591 72409703" id="dash-phone-input">
-            <button class="btn btn-primary btn-sm" onclick="alert('Teléfono de operador actualizado correctamente.')">Actualizar Teléfono</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="dash-grid">
-        <div class="dash-card" onclick="switchView('view-crear-orden')">
-          <div class="icon"><i class="fa-solid fa-user-xmark" style="color: var(--danger);"></i></div>
-          <h4>Búsqueda de Morosidad / Crear orden</h4>
-          <p>Consultar suministros con mora $\ge 2$ facturas y emitir cortes masivos.</p>
-        </div>
-        <div class="dash-card" onclick="switchView('view-ver-cortes')">
-          <div class="icon"><i class="fa-solid fa-clipboard-list"></i></div>
-          <h4>Ver Registros para Cortar (Con mapa)</h4>
-          <p>Bandeja operativa de órdenes emitidas en estado GENERADO.</p>
-        </div>
-        <div class="dash-card" onclick="alert('Módulo de reposiciones: abre mapa satelital de clientes con arancel pagado.')">
-          <div class="icon"><i class="fa-solid fa-bolt" style="color: var(--success);"></i></div>
-          <h4>Reposiciones (Con mapa)</h4>
-          <p>Rehabilitación y reconexión técnica tras pago de deuda.</p>
-        </div>
-        <div class="dash-card" onclick="switchView('view-kardex')">
-          <div class="icon"><i class="fa-solid fa-cash-register"></i></div>
-          <h4>Kardex Comercial</h4>
-          <p>Consulta contable, regularización de NIT/CI y caja central.</p>
-        </div>
-      </div>
-    </section>
-
-    <section id="view-crear-orden" class="view-panel">
-      <div class="card">
-        <div class="card-header">
-          <span><i class="fa-solid fa-filter"></i> Búsqueda de Clientes Morosos por Parámetros</span>
-          <span class="badge badge-warning">Criterio: Facturas Vencidas &gt; 30 días</span>
-        </div>
-        <div class="card-body">
-          <div class="alert-banner alert-banner-info">
-            <i class="fa-solid fa-circle-info"></i>
-            <div>Los resultados mostrarán clientes con facturas vencidas mayor a 30 días. Los montos no incluyen intereses diarios de mora.</div>
-          </div>
-
-          <div class="filter-grid">
-            <div class="form-group">
-              <label>Área Regional</label>
-              <select class="form-control" id="f-area" onchange="updateLocalidades()">
-                <option value="B">B - BETANZOS</option>
-                <option value="P">P - POTOSI URBANO</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Localidad</label>
-              <select class="form-control" id="f-localidad" onchange="updateRutas()">
-                <option value="002">002 - MOJOTORILLO</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Ruta</label>
-              <select class="form-control" id="f-ruta">
-                <option value="002">002 - MOJOTORILLO</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Facturas Vencidas (Mínimo)</label>
-              <input type="number" class="form-control" id="f-facturas" value="2" min="1" max="12">
-            </div>
-            <div class="form-group">
-              <label>Estado del Cliente</label>
-              <input type="text" class="form-control" value="Activos (A)" disabled style="background:#eee;">
-            </div>
-          </div>
-
-          <div style="display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap;">
-            <div style="display: flex; gap: 8px;">
-              <button class="btn btn-primary" onclick="ejecutarBusquedaMorosos()"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
-              <button class="btn btn-outline" onclick="alert('Exportando Planilla Excel de Deudores Morosos...')"><i class="fa-solid fa-file-excel" style="color: #2e7d32;"></i> Descargar Excel</button>
-              <button class="btn btn-outline" onclick="alert('Exportando Planilla PDF...')"><i class="fa-solid fa-file-pdf" style="color: #c62828;"></i> Descargar PDF</button>
-            </div>
-            <button class="btn btn-danger" id="btn-crear-orden-masiva" onclick="triggerCrearOrdenLote()"><i class="fa-solid fa-scissors"></i> Crear orden de corte</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <span>Resultados Obtenidos (<span id="count-morosos">2</span> clientes en mora)</span>
-          <span class="badge badge-danger">Sujetos a Suspensión</span>
-        </div>
-        <div class="card-body table-responsive" style="padding: 0;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>REG/LOC</th>
-                <th>HAB</th>
-                <th>CUENTA</th>
-                <th>NOMBRES</th>
-                <th>RUTA</th>
-                <th>ORDEN</th>
-                <th>CIRCUITO</th>
-                <th>DIRECCIÓN</th>
-                <th>TARIFA</th>
-                <th>MEDIDOR</th>
-                <th>FACT. &gt; 30D</th>
-                <th>TOTAL DEUDA (BS)</th>
-                <th>ACCIONES</th>
-              </tr>
-            </thead>
-            <tbody id="tabla-morosos-body">
-              <tr>
-                <td>101 - 002</td>
-                <td><span class="badge badge-info">R</span></td>
-                <td><strong>306040</strong></td>
-                <td>MUÑOZ PEDRO</td>
-                <td>002</td>
-                <td>129</td>
-                <td>D-1182</td>
-                <td>MOJOTORILLO S/N</td>
-                <td>RS</td>
-                <td>240907792 (WASION)</td>
-                <td><span class="badge badge-danger">2</span></td>
-                <td><strong>94.34</strong></td>
-                <td>
-                  <button class="btn btn-sm btn-outline" onclick="switchView('view-kardex'); document.getElementById('kardex-cuenta-input').value = '306040'; buscarKardexReal();">
-                    <i class="fa-solid fa-receipt"></i> Ver Kardex
-                  </button>
-                </td>
-              </tr>
-              <tr>
-                <td>101 - 002</td>
-                <td><span class="badge badge-info">R</span></td>
-                <td><strong>306043</strong></td>
-                <td>CONDORI CONDORI ALEJANDRO</td>
-                <td>002</td>
-                <td>130</td>
-                <td>D-1182</td>
-                <td>MOJOTORILLO S/N</td>
-                <td>RS</td>
-                <td>240907795 (WASION)</td>
-                <td><span class="badge badge-danger">2</span></td>
-                <td><strong>78.10</strong></td>
-                <td>
-                  <button class="btn btn-sm btn-outline" onclick="switchView('view-kardex'); document.getElementById('kardex-cuenta-input').value = '306043'; buscarKardexReal();">
-                    <i class="fa-solid fa-receipt"></i> Ver Kardex
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <section id="view-ver-cortes" class="view-panel">
-      <div class="card">
-        <div class="card-header">
-          <span><i class="fa-solid fa-table-list"></i> Registros para Cortar</span>
-          <div>
-            <span class="badge badge-danger" style="font-size: 13px;"><span id="map-generated-count">11</span> GENERADOS</span>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="filter-grid">
-            <div class="form-group">
-              <label>No. de Cuenta</label>
-              <input type="text" class="form-control" placeholder="Ej. 1701603">
-            </div>
-            <div class="form-group">
-              <label>Nro. de Medidor</label>
-              <input type="text" class="form-control" placeholder="Ej. 14093786">
-            </div>
-            <div class="form-group">
-              <label>Ruta</label>
-              <input type="text" class="form-control" value="002 - MOJOTORILLO">
-            </div>
-            <div class="form-group">
-              <label>Técnico</label>
-              <select class="form-control">
-                <option value="">- Todos los técnicos -</option>
-                <option value="680">QUINTANILLA TABOADA JOSUE</option>
-              </select>
-            </div>
-          </div>
-          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <button class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i> Filtrar</button>
-            <button class="btn btn-outline"><i class="fa-solid fa-rotate"></i> Refrescar</button>
-            <button class="btn btn-outline" onclick="toggleMapView()"><i class="fa-solid fa-map-location-dot"></i> Conmutar Vista Mapa</button>
-          </div>
-
-          <div id="map-container" style="display: none; margin-bottom: 14px;">
-            <div id="map-location-status" class="map-location-status" aria-live="polite">
-              <i class="fa-solid fa-location-dot"></i>
-              <span>Ubicación del técnico · Lat -19.589366, Lng -65.259119 · Precisión 8 m</span>
-            </div>
-            <div class="map-summary-bar">
-              <span><i class="fa-solid fa-satellite"></i> Imagen satelital</span>
-              <span><strong id="map-visible-count">12</strong> domicilios en vista</span>
-              <button class="btn btn-outline btn-sm" onclick="centrarMapaEnTecnico()">
-                <i class="fa-solid fa-location-crosshairs"></i> Centrar en técnico
-              </button>
-            </div>
-            <div id="map-simulator" class="map-simulator" aria-label="Mapa satelital de domicilios SEPSA"></div>
-          </div>
-
-          <div class="table-responsive">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>CUENTA / MEDIDOR</th>
-                  <th>ACCIÓN</th>
-                  <th>TIT/HAB</th>
-                  <th>ESTADO</th>
-                  <th>FECHA GENERACIÓN</th>
-                  <th>DÍAS DESDE GENERACIÓN</th>
-                  <th>DEUDA (MES TOPE)</th>
-                  <th>TÉCNICO ASIGNADO</th>
-                  <th>ACCIÓN</th>
-                </tr>
-              </thead>
-              <tbody id="map-cortes-body"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="view-corte-detail" class="view-panel">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <h2 style="font-size: 18px;" id="corte-title-cuc">C.U.C.: 443794</h2>
-          <span class="badge badge-danger" id="corte-badge-estado" style="font-size: 13px;">ESTADO: GENERADO</span>
-        </div>
-        <div style="display: flex; gap: 6px;">
-          <button class="btn btn-outline btn-sm" onclick="alert('Mostrando histórico de cambios y logs de auditoría...')"><i class="fa-solid fa-timeline"></i> Ver Trazabilidad</button>
-          <button class="btn btn-outline btn-sm" onclick="location.reload()"><i class="fa-solid fa-arrows-rotate"></i> Actualizar</button>
-          <button class="btn btn-outline btn-sm" onclick="switchView('view-kardex'); buscarKardexReal();"><i class="fa-solid fa-receipt"></i> Ver Kardex</button>
-          <button class="btn btn-outline btn-sm"><i class="fa-solid fa-calculator"></i> Verificar Deuda</button>
-        </div>
-      </div>
-
-      <div class="alert-banner alert-banner-warning" id="banner-anulado" style="display: none;">
-        <i class="fa-solid fa-circle-exclamation" style="font-size: 16px;"></i>
+  <main id="main-content" class="main-container">
+    <section id="view-dashboard" class="view-panel active" aria-labelledby="page-title">
+      <div class="page-heading">
         <div>
-          <strong>ORDEN ANULADA:</strong> Anulado ya que pagó parte o la totalidad de facturas vencidas. <br>
-          <em>Fecha de pago registrada: 02-09-2026 16:20:13</em>
+          <p class="eyebrow">Administración / Corte vertical</p>
+          <h1 id="page-title">Centro de control de órdenes de corte</h1>
+          <p class="page-description">Busca suministros con mora, genera órdenes y asigna técnicos.</p>
         </div>
+        <div class="sync-status"><span class="status-dot status-dot-green"></span><span><strong>Datos actualizados</strong><small>13 sep 2026 · 20:51</small></span></div>
       </div>
 
-      <div class="detail-grid">
-        <div>
-          <div class="card">
-            <div class="card-header">
-              <span><i class="fa-solid fa-user"></i> Datos del Suministro y Ubicación</span>
-              <button class="btn btn-outline btn-sm" onclick="mostrarUbicacionEnFicha()"><i class="fa-solid fa-location-crosshairs"></i> Mostrar ubicación</button>
-            </div>
-            <div class="card-body">
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-                <div class="data-label-group">
-                  <div class="data-label">Cuenta</div>
-                  <div class="data-val" id="corte-val-cuenta">1701603</div>
-                </div>
-                <div class="data-label-group">
-                  <div class="data-label">Medidor</div>
-                  <div class="data-val" id="corte-val-medidor">14093786</div>
-                </div>
-                <div class="data-label-group">
-                  <div class="data-label">Consumidor</div>
-                  <div class="data-val" id="corte-val-nombre">CHOQUE CONDOR NORMA</div>
-                </div>
-                <div class="data-label-group">
-                  <div class="data-label">Dirección</div>
-                  <div class="data-val">SAN MIGUEL DE KHARI S/N</div>
-                </div>
-                <div class="data-label-group">
-                  <div class="data-label">Tarifa</div>
-                  <div class="data-val">RS (Residencial)</div>
-                </div>
-                <div class="data-label-group">
-                  <div class="data-label">Circuito</div>
-                  <div class="data-val">D-1182</div>
-                </div>
-              </div>
+      <section class="metrics" aria-label="Resumen de órdenes">
+        <article class="metric-card metric-card-accent"><span class="metric-label">Generadas</span><strong>4</strong><span class="metric-note">en total</span></article>
+        <article class="metric-card"><span class="metric-label">Sin asignar</span><strong>2</strong><span class="metric-note metric-warning">requieren acción</span></article>
+        <article class="metric-card"><span class="metric-label">Asignadas</span><strong>0</strong><span class="metric-note">listas para campo</span></article>
+        <article class="metric-card"><span class="metric-label">Ejecutadas</span><strong>0</strong><span class="metric-note">en esta jornada</span></article>
+        <article class="metric-card"><span class="metric-label">Anuladas</span><strong>0</strong><span class="metric-note">sin novedades</span></article>
+      </section>
 
-              <div style="margin-top: 10px; padding: 6px 10px; background: #fff3e0; border: 1px solid #ffe0b2; border-radius: 4px; font-size: 11px; color: #d84315;">
-                <i class="fa-solid fa-triangle-exclamation"></i> <strong>Aviso Sistema:</strong> cliente: 1 - Coordenadas obtenidas desde tabla de clientes | gis: 1 - Error en try al obtener coordenadas desde GIS: El nombre de columnas no corresponde.
-              </div>
-            </div>
+      <section class="workflow" aria-labelledby="workflow-title">
+        <div class="section-kicker"><span class="stepper-kicker">Flujo de trabajo</span><span id="workflow-title" class="sr-only">Pasos para crear y asignar una orden</span></div>
+        <ol class="stepper">
+          <li class="step active" data-step="1"><span class="step-number">1</span><span><strong>Buscar suministro</strong><small>Encuentra un cliente</small></span></li>
+          <li class="step" data-step="2"><span class="step-number">2</span><span><strong>Crear orden</strong><small>Confirma la deuda</small></span></li>
+          <li class="step" data-step="3"><span class="step-number">3</span><span><strong>Asignar técnico</strong><small>Elige responsable</small></span></li>
+          <li class="step" data-step="4"><span class="step-number">4</span><span><strong>Revisar orden</strong><small>Verifica el registro</small></span></li>
+        </ol>
+      </section>
+
+      <div class="operations-layout">
+        <section class="panel supply-panel" aria-labelledby="supplies-title">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Paso 1</p><h2 id="supplies-title">Suministros pendientes</h2><p>Selecciona un suministro para revisar su deuda y generar una orden.</p></div>
+            <span class="result-count" id="result-count">3 disponibles</span>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <span><i class="fa-solid fa-file-invoice-dollar"></i> Detalle de la Deuda Actual</span>
-              <span class="badge badge-danger" id="corte-val-total-deuda">Total: 66.82 Bs</span>
-            </div>
-            <div class="card-body table-responsive" style="padding: 0;">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>AÑO</th>
-                    <th>MES</th>
-                    <th>FECHA FACTURACIÓN</th>
-                    <th>MONTO (BS)</th>
-                    <th>ESTADO</th>
-                    <th>ORIGEN</th>
-                    <th>DÍAS MORA</th>
-                  </tr>
-                </thead>
-                <tbody id="tabla-deuda-corte-body">
-                  <tr>
-                    <td>2026</td>
-                    <td>6</td>
-                    <td>27/06/2026 10:14</td>
-                    <td>21.94</td>
-                    <td><span class="badge badge-danger">P</span></td>
-                    <td>FA_FACTURAS</td>
-                    <td>63</td>
-                  </tr>
-                  <tr>
-                    <td>2026</td>
-                    <td>7</td>
-                    <td>27/07/2026 11:02</td>
-                    <td>22.64</td>
-                    <td><span class="badge badge-danger">P</span></td>
-                    <td>FA_FACTURAS</td>
-                    <td>31</td>
-                  </tr>
-                  <tr>
-                    <td>2026</td>
-                    <td>8</td>
-                    <td>27/08/2026 09:45</td>
-                    <td>22.24</td>
-                    <td><span class="badge badge-danger">P</span></td>
-                    <td>FA_FACTURAS</td>
-                    <td>2</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+          <form class="search-form" onsubmit="runSearch(event)">
+            <label class="sr-only" for="supply-search">Buscar por cuenta, nombre o medidor</label>
+            <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+            <input id="supply-search" type="search" placeholder="Buscar por cuenta, nombre o medidor" autocomplete="off" oninput="runSearch()">
+            <button class="search-button" type="submit">Buscar</button>
+          </form>
 
-        <div>
-          <div class="card">
-            <div class="card-header">
-              <span><i class="fa-solid fa-camera"></i> Adjuntar Evidencias</span>
-              <span class="badge badge-info">Fotos: hasta 5 MP</span>
-            </div>
-            <div class="card-body">
-              <div class="dropzone" onclick="document.getElementById('file-upload-input').click()">
-                <i class="fa-solid fa-cloud-arrow-up" style="font-size: 28px; margin-bottom: 6px;"></i>
-                <p>Arrastre archivos aquí o haga clic para seleccionar.</p>
-                <small>Formatos: PDF, DOC, DOCX, JPG, PNG · Fotos optimizadas localmente</small>
-                <input type="file" id="file-upload-input" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,image/jpeg,image/png" style="display: none;" onchange="handleFileSelected(this)">
-              </div>
-              <div id="file-upload-list" style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">
-                0 archivos adjuntos registrados.
-              </div>
-            </div>
+          <div class="filter-row" aria-label="Filtros de suministros">
+            <label><span>Área</span><select id="filter-area" onchange="runSearch()"><option>Todos</option><option>C</option><option>B</option></select></label>
+            <label><span>Localidad</span><select id="filter-locality" onchange="runSearch()"><option>Todos</option><option>San Pedro</option><option>Mojotorillo</option></select></label>
+            <label><span>Ruta</span><select id="filter-route" onchange="runSearch()"><option>Todos</option><option>004</option><option>002</option></select></label>
+            <button class="more-filters" type="button" aria-expanded="false" onclick="toggleFilters()">Más filtros <span aria-hidden="true">+</span></button>
+          </div>
+          <div class="advanced-filters" id="advanced-filters" hidden>
+            <label><span>Facturas vencidas</span><select id="filter-invoices" onchange="runSearch()"><option value="0">Cualquier cantidad</option><option value="3">3 o más</option><option value="6">6 o más</option></select></label>
+            <label><span>Estado del cliente</span><select><option>Activos</option><option>Todos los estados</option></select></label>
           </div>
 
-          <div class="card" id="card-action-corte">
-            <div class="card-header">
-              <span><i class="fa-solid fa-hand-holding-hand"></i> Acción Operativa</span>
-            </div>
-            <div class="card-body" style="text-align: center;">
-              <button class="btn btn-danger" style="width: 100%; padding: 12px; font-size: 14px;" onclick="abrirModalCorteEfectivo()">
-                <i class="fa-solid fa-scissors"></i> REGISTRAR CORTE EFECTIVO
-              </button>
-              <small style="display: block; margin-top: 6px; color: var(--text-muted);">
-                Abre el formulario para capturar lectura, tipo de corte y georreferencia.
-              </small>
-            </div>
+          <div class="supply-list" id="supply-list" aria-live="polite"></div>
+          <div class="empty-state" id="supply-empty" hidden><span class="empty-icon">⌕</span><strong>No encontramos suministros</strong><p>Prueba con otra cuenta, nombre o medidor.</p></div>
+          <p class="data-disclaimer"><span class="info-icon">i</span> Datos de demostración. La fuente definitiva debe validarse con SEPSA.</p>
+        </section>
+
+        <section class="panel selected-panel" aria-labelledby="selected-title">
+          <div class="selected-topline"><div><p class="eyebrow">Contexto del suministro</p><h2 id="selected-title">Elena Poma</h2><p>Suministro seleccionado</p></div><span class="badge badge-success" id="supply-status">Activo</span></div>
+
+          <div class="identity-strip"><div><span class="field-label">Cuenta</span><strong id="detail-account">CTA-1007</strong></div><div><span class="field-label">Medidor</span><strong id="detail-meter">MED-1007</strong><small id="detail-meter-brand">Wasion</small></div><div><span class="field-label">Ubicación</span><strong id="detail-locality">San Pedro</strong><small id="detail-route">Ruta 004</small></div></div>
+
+          <div class="detail-sections">
+            <div class="detail-block"><div class="detail-block-title"><span class="section-icon section-icon-pin">⌖</span><h3>Ubicación</h3></div><dl class="detail-list"><div><dt>Dirección</dt><dd id="detail-address">Barrio Nuevo 56, San Pedro</dd></div><div><dt>Área / localidad</dt><dd id="detail-area">C · 003 San Pedro</dd></div><div><dt>Circuito</dt><dd id="detail-circuit">D 1184</dd></div></dl></div>
+            <div class="debt-block"><div class="detail-block-title"><span class="section-icon section-icon-debt">Bs</span><h3>Deuda</h3></div><div class="debt-total" id="detail-debt">Bs 425.00</div><div class="debt-meta"><span id="detail-invoices">8 facturas pendientes</span><span class="payment-plan" id="detail-plan">Sin plan de pago</span></div></div>
           </div>
-        </div>
+
+          <div class="active-order-alert" id="active-order-alert" hidden><div class="alert-icon">!</div><div><strong>Este suministro ya tiene una orden activa</strong><p id="active-order-meta">Creada hoy a las 20:51 · Sin técnico asignado</p><details><summary>Ver datos técnicos</summary><span class="technical-line">CUC: <span id="active-order-cuc">57f28e2f…0456</span> <button class="copy-button" onclick="copyTechnicalId('active-order-cuc', this)" title="Copiar CUC">Copiar</button></span></details></div><button class="text-button" onclick="viewOrder()">Ver orden</button></div>
+
+          <div class="order-action" id="order-action"><div class="action-copy"><span class="action-step">Paso 2</span><h3>Crear orden de corte</h3><p>Confirma que la deuda corresponde al suministro seleccionado.</p><div class="confirmation-line"><strong id="action-name">Elena Poma</strong><span>Deuda: <b id="action-debt">Bs 425.00</b></span><span><b id="action-invoices">8 facturas</b> pendientes</span><span>Medidor: <b id="action-meter">MED-1007</b></span></div></div><button class="primary-button" onclick="createOrder()"><span aria-hidden="true">＋</span> Crear orden de corte</button></div>
+
+          <div class="assignment-action" id="assignment-action" hidden><div class="action-copy"><span class="action-step success-step">Orden creada correctamente</span><h3>Asignar técnico</h3><p>Selecciona quién recibirá esta orden en campo.</p></div><div class="assignment-controls"><label for="technician-select" class="sr-only">Seleccionar técnico</label><select id="technician-select"><option value="">Seleccionar técnico</option><option>Camila Rojas</option><option>Miguel Chambi</option><option>Juan Vargas</option></select><button class="primary-button" onclick="assignOrder()">Confirmar asignación</button></div></div>
+
+          <details class="technical-details"><summary>Mostrar información técnica</summary><div class="technical-grid"><span>CUC <strong id="detail-cuc">57f28e2f…0456</strong></span><span>Fuente <strong>FA_FACTURAS</strong></span><span>Última actualización <strong>13 sep 2026</strong></span></div></details>
+        </section>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <span><i class="fa-solid fa-shield-halved"></i> Registros de Auditoría y Control</span>
-        </div>
-        <div class="card-body" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
-          <div>
-            <h5 style="margin-bottom: 6px; color: var(--primary);"><i class="fa-solid fa-plug-circle-xmark"></i> Datos de Suspensión</h5>
-            <p><strong>Inhabilitado:</strong> 27/08/2026</p>
-            <p><strong>Usuario:</strong> QUINTANILLA JOSUE</p>
-            <p><strong>Observación:</strong> Corte masivo por mora</p>
-          </div>
-          <div>
-            <h5 style="margin-bottom: 6px; color: var(--success);"><i class="fa-solid fa-plug-circle-bolt"></i> Datos de Reconexión</h5>
-            <p><strong>Reconexión Manual:</strong> NO</p>
-            <p><strong>Orden Emitida Por:</strong> -</p>
-            <p><strong>Fecha Reposición:</strong> Pendiente</p>
-          </div>
-        </div>
-      </div>
+      <section class="order-detail-section" id="order-detail-section" aria-labelledby="order-detail-title">
+        <div class="order-detail-heading"><div><p class="eyebrow">Detalle de la orden · Paso 4</p><h2 id="order-detail-title">Orden de corte · Elena Poma</h2><p id="order-detail-subtitle">Vista previa para revisar antes de crear la orden.</p></div><div class="order-heading-meta"><span class="badge badge-pending" id="order-state-badge">Pendiente de creación</span><span class="order-created-meta" id="order-created-meta">Aún no creada</span><span class="technical-line">CUC: <span id="order-cuc">57f28e2f…0456</span> <button class="copy-button" onclick="copyTechnicalId('order-cuc', this)" title="Copiar CUC">Copiar</button></span></div></div>
+        <div class="order-summary-grid"><article><span class="summary-icon">◉</span><div><span class="field-label">Cliente</span><strong id="order-name">Elena Poma</strong></div></article><article><span class="summary-icon">#</span><div><span class="field-label">Cuenta</span><strong id="order-account">CTA-1007</strong></div></article><article><span class="summary-icon">▣</span><div><span class="field-label">Medidor</span><strong id="order-meter">MED-1007</strong></div></article><article class="summary-debt"><span class="summary-icon">Bs</span><div><span class="field-label">Deuda asociada</span><strong id="order-debt">Bs 425.00</strong></div></article><article><span class="summary-icon">⌁</span><div><span class="field-label">Técnico asignado</span><strong id="order-technician">Sin asignar</strong></div></article><article><span class="summary-icon">✓</span><div><span class="field-label">Estado</span><strong id="order-status">Pendiente</strong></div></article><article><span class="summary-icon">↗</span><div><span class="field-label">Ruta</span><strong id="order-route">004 · San Pedro</strong></div></article><article><span class="summary-icon">⌖</span><div><span class="field-label">Dirección</span><strong id="order-address">Barrio Nuevo 56</strong></div></article></div>
+
+        <div class="debt-table-wrap"><div class="subsection-heading"><h3>Deuda asociada</h3><strong id="table-total">Total Bs 425.00</strong></div><div class="table-scroll"><table class="debt-table"><thead><tr><th>Periodo</th><th>Fecha de facturación</th><th>Monto</th><th>Estado</th><th>Días de mora</th></tr></thead><tbody id="debt-table-body"><tr><td>Agosto 2026</td><td>27 ago 2026</td><td>Bs 53.12</td><td><span class="badge badge-danger">Pendiente</span></td><td>17 días</td></tr><tr><td>Julio 2026</td><td>27 jul 2026</td><td>Bs 51.40</td><td><span class="badge badge-danger">Pendiente</span></td><td>48 días</td></tr><tr><td>Junio 2026</td><td>27 jun 2026</td><td>Bs 49.86</td><td><span class="badge badge-danger">Pendiente</span></td><td>79 días</td></tr></tbody></table></div><p class="technical-note">Mostrando facturas pendientes más recientes. Origen: FA_FACTURAS.</p></div>
+
+        <div class="order-footer-grid"><article class="additional-card"><div class="subsection-heading"><h3>Información adicional</h3><span class="field-label">Contexto operativo</span></div><div class="additional-list"><span>Plan de pago <strong id="additional-plan">No</strong></span><span>Reclamos <strong>No</strong></span><span>Fecha de suspensión <strong>Sin registro</strong></span><span>Reconexión manual <strong>No</strong></span></div></article><article class="activity-card"><div class="subsection-heading"><h3>Actividad reciente</h3><button class="text-button" onclick="toggleAudit()">Ver trazabilidad completa</button></div><div class="activity-item"><span class="activity-marker"></span><div><strong id="activity-title">Suministro seleccionado</strong><p id="activity-meta">Listo para revisar y crear una orden</p><small>Por Administrador</small></div></div><div class="audit-details" id="audit-details" hidden><div>Identificador de operación <strong>op demo 8c31</strong></div><div>Última sincronización <strong>Confirmada</strong></div></div></article></div>
+      </section>
     </section>
 
-    <section id="view-kardex" class="view-panel">
-      <div class="card">
-        <div class="card-header">
-          <span><i class="fa-solid fa-cash-register"></i> Kardex Comercial - Facturación</span>
-          <span>Caja: <strong>SP-JDQT</strong> | Entidad: <strong>SEPSA URBANO</strong></span>
-        </div>
-        <div class="card-body">
-          <div style="display: flex; gap: 10px; max-width: 400px; margin-bottom: 14px;">
-            <input type="text" class="form-control" id="kardex-cuenta-input" value="306040" placeholder="Número de cuenta">
-            <button class="btn btn-primary" onclick="buscarKardexReal()"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
-          </div>
-
-          <div style="background: #f1f5f9; padding: 12px; border-radius: 4px; margin-bottom: 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-            <div>
-              <div class="data-label">Titular</div>
-              <div class="data-val" id="kardex-val-nombre">MUÑOZ PEDRO</div>
-            </div>
-            <div>
-              <div class="data-label">Estado / Tarifa</div>
-              <div class="data-val"><span class="badge badge-success">*ACTIVO*</span> / RS</div>
-            </div>
-            <div>
-              <div class="data-label">Medidor / Marca</div>
-              <div class="data-val">240907792 (WASION)</div>
-            </div>
-            <div>
-              <div class="data-label">Multiplicador</div>
-              <div class="data-val">1</div>
-            </div>
-          </div>
-
-          <div class="table-responsive">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>AÑO/MES</th>
-                  <th>EMISIÓN</th>
-                  <th>LECT. ANT.</th>
-                  <th>LECT. ACT.</th>
-                  <th>CONSUMO KWH</th>
-                  <th>IMPORTE (BS)</th>
-                  <th>ESTADO</th>
-                  <th>FECHA PAGO</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style="background: #ffebee;">
-                  <td><strong>2026 / 08</strong></td>
-                  <td>27/08/2026</td>
-                  <td>1420</td>
-                  <td>1458</td>
-                  <td>38 kWh</td>
-                  <td>35.07</td>
-                  <td><span class="badge badge-danger">P (PENDIENTE)</span></td>
-                  <td>-</td>
-                </tr>
-                <tr style="background: #ffebee;">
-                  <td><strong>2026 / 07</strong></td>
-                  <td>27/07/2026</td>
-                  <td>1385</td>
-                  <td>1420</td>
-                  <td>35 kWh</td>
-                  <td>31.42</td>
-                  <td><span class="badge badge-danger">P (PENDIENTE)</span></td>
-                  <td>-</td>
-                </tr>
-                <tr style="background: #ffebee;">
-                  <td><strong>2026 / 06</strong></td>
-                  <td>27/06/2026</td>
-                  <td>1350</td>
-                  <td>1385</td>
-                  <td>35 kWh</td>
-                  <td>27.85</td>
-                  <td><span class="badge badge-danger">P (PENDIENTE)</span></td>
-                  <td>-</td>
-                </tr>
-                <tr>
-                  <td>2026 / 05</td>
-                  <td>27/05/2026</td>
-                  <td>1310</td>
-                  <td>1350</td>
-                  <td>40 kWh</td>
-                  <td>36.12</td>
-                  <td><span class="badge badge-success">C (CANCELADO)</span></td>
-                  <td>04/06/2026 14:11</td>
-                </tr>
-                <tr>
-                  <td>2026 / 04</td>
-                  <td>27/04/2026</td>
-                  <td>1272</td>
-                  <td>1310</td>
-                  <td>38 kWh</td>
-                  <td>34.50</td>
-                  <td><span class="badge badge-success">C (CANCELADO)</span></td>
-                  <td>05/05/2026 09:23</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-
+    <section id="view-orders" class="view-panel simple-view" aria-labelledby="orders-title"><div class="simple-view-heading"><div><p class="eyebrow">Administración</p><h1 id="orders-title">Órdenes de corte</h1><p>Consulta órdenes generadas, asignadas y ejecutadas.</p></div><button class="secondary-button" onclick="switchView('view-dashboard')">Volver al centro de control</button></div><div class="empty-state composed-empty"><span class="empty-icon">□</span><strong>La bandeja de órdenes está lista</strong><p>Usa el centro de control para crear y asignar una orden individual.</p><button class="primary-button" onclick="switchView('view-dashboard')">Crear una orden</button></div></section>
+    <section id="view-audit" class="view-panel simple-view" aria-labelledby="audit-title"><div class="simple-view-heading"><div><p class="eyebrow">Control</p><h1 id="audit-title">Auditoría</h1><p>Revisa quién hizo cada acción y cuándo ocurrió.</p></div><button class="secondary-button" onclick="switchView('view-dashboard')">Volver al centro de control</button></div><div class="empty-state composed-empty"><span class="empty-icon">✓</span><strong>Sin novedades de auditoría</strong><p>La actividad de cada orden aparecerá aquí sin exponer códigos en primer plano.</p></div></section>
   </main>
 
-  <div class="modal-backdrop" id="modal-corte-efectivo">
-    <div class="modal-box">
-      <div class="modal-header">
-        <span><i class="fa-solid fa-scissors" style="color: var(--danger);"></i> Formulario para el Registro de Corte Efectivo</span>
-        <button class="btn btn-sm btn-outline" onclick="closeModal('modal-corte-efectivo')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group" style="margin-bottom: 10px;">
-          <label>Técnico para asignar el corte</label>
-          <input type="text" class="form-control" value="JOSUE DANIEL QUINTANILLA TABOADA" disabled style="background: #eceff1;">
-        </div>
-
-        <div class="filter-grid" style="margin-bottom: 10px;">
-          <div class="form-group">
-            <label>Tipo de Corte</label>
-            <select class="form-control" id="modal-tipo-corte">
-              <option value="PROTECCION">PROTECCION</option>
-              <option value="RED">RED</option>
-              <option value="MEDIDOR">MEDIDOR</option>
-              <option value="BARRAS">BARRAS</option>
-              <option value="ACOMETIDA">ACOMETIDA</option>
-              <option value="FUSIBLES">FUSIBLES</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Lectura del Corte (kWh)</label>
-            <input type="number" class="form-control" id="modal-lectura" placeholder="Ej 1234567" value="1234">
-          </div>
-        </div>
-
-        <div class="filter-grid" style="margin-bottom: 10px; background: #fff8e1; padding: 10px; border-radius: 4px;">
-          <div class="form-group">
-            <label>¿Saltar Control de Fotos?</label>
-            <select class="form-control" id="modal-bypass-fotos">
-              <option value="NO">NO</option>
-              <option value="SI">SI</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Justificación</label>
-            <input type="text" class="form-control" id="modal-justificacion" placeholder="Motivo de la intervención">
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="closeModal('modal-corte-efectivo')">Cerrar</button>
-        <button class="btn btn-danger" onclick="guardarCorteEfectivo()"><i class="fa-solid fa-check"></i> Registrar corte efectivo</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="modal-alerta-kardex">
-    <div class="modal-box" style="border-top: 5px solid var(--danger);">
-      <div class="modal-header">
-        <span style="color: var(--danger); font-weight: bold;"><i class="fa-solid fa-triangle-exclamation"></i> ADVERTENCIA DE INFORMACIÓN FISCAL</span>
-      </div>
-      <div class="modal-body" style="text-align: center; padding: 20px;">
-        <i class="fa-solid fa-id-card-clip" style="font-size: 40px; color: var(--danger); margin-bottom: 12px;"></i>
-        <p style="font-size: 14px; font-weight: 600; margin-bottom: 6px;">El usuario no tiene NIT o CI registrado.</p>
-        <p style="color: var(--text-muted);">Infórmele que debe realizar la actualización de su información fiscal de forma <strong>URGENTE</strong> en plataforma comercial.</p>
-      </div>
-      <div class="modal-footer" style="justify-content: center;">
-        <button class="btn btn-primary" onclick="closeModal('modal-alerta-kardex')">Entendido y Continuar</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
 </body>
 </html>
