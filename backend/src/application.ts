@@ -12,12 +12,17 @@ interface SessionRow { session_id: string; user_id: string; username: string; di
 interface DebtorRow {
   debtor_id: string; account_id: string; supply_id: string; customer_name: string; address: string;
   reference_text: string; meter_id: string; area: string; locality: string; route: string; debt_cents: number;
-  months_pending: number; updated_at: string; kardex: unknown;
+  months_pending: number; updated_at: string; kardex: unknown; circuit: string; customer_ci: string | null;
+  contact_phone: string | null; tariff: string; supply_status: string; enabling_title: string | null;
+  route_order: number | null; cadastral_latitude: number | null; cadastral_longitude: number | null;
+  meter_brand: string | null; meter_index: string | null; meter_multiplier: number | null;
+  claims: boolean | null; payment_plan: boolean | null; suspension_date: string | null;
+  reconnection_manual: boolean | null; reconnection_date: string | null; reconnection_technician: string | null;
 }
 interface OrderRow {
   order_id: string; debtor_id: string; account_id: string; supply_id: string; purpose: "CUT";
   status: string; physical_status: string; version: number; created_by: string; assigned_technician_id: string | null;
-  created_at: string; context: unknown;
+  created_at: string; context: unknown; cuc: string | null;
 }
 interface StoredOperationRow { operation_id: string; technician_id: string; device_id: string; status: string; payload_hash: string; }
 interface CommandRow { operation_type: string; actor_id: string; request_hash: string; response: unknown; }
@@ -33,6 +38,7 @@ export class Application {
       this.setCorsHeaders(response);
       if (request.method === "OPTIONS") return sendNoContent(response);
       if (request.method === "GET" && url.pathname === "/healthz") return await this.health(response);
+      this.validateOrigin(request);
       await this.route(request, response, url);
     } catch (error) {
       const body = errorBody(error);
@@ -45,7 +51,13 @@ export class Application {
     response.setHeader("access-control-allow-origin", this.config.corsOrigin);
     response.setHeader("access-control-allow-headers", "authorization, content-type");
     response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+    response.setHeader("access-control-allow-credentials", "true");
     response.setHeader("vary", "Origin");
+  }
+
+  private validateOrigin(request: IncomingMessage): void {
+    const origin = request.headers.origin;
+    if (request.method === "POST" && origin && origin !== this.config.corsOrigin) throw new HttpError(403, "CSRF_ORIGIN_REJECTED", "Request origin is not allowed.");
   }
 
   private async route(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
@@ -56,6 +68,7 @@ export class Application {
     const user = await this.requireSession(request);
     if (request.method === "GET" && path === "/v1/debtors") return await this.listDebtors(response, user, url);
     if (request.method === "GET" && path === "/v1/orders") return await this.listOrders(response, user);
+    if (request.method === "POST" && path === "/v1/orders/batch") return await this.createOrdersBatch(request, response, user);
     if (request.method === "POST" && path === "/v1/orders") return await this.createOrder(request, response, user);
     const assignment = /^\/v1\/orders\/([^/]+)\/assignment$/.exec(path);
     if (request.method === "POST" && assignment) return await this.assignOrder(request, response, user, assignment[1]);
@@ -99,8 +112,8 @@ export class Application {
       );
       await insertAudit(client, { actorId: user.user_id, actorRole: user.role, action: "LOGIN", result: "accepted", entityId: sessionId });
     });
+    response.setHeader("set-cookie", sessionCookie(token, this.config.sessionTtlSeconds, this.config.corsOrigin));
     sendJson(response, 200, {
-      session_token: token,
       session_id: sessionId,
       expires_at: expiresAt,
       user: { user_id: user.user_id, username: user.username, display_name: user.display_name, role: user.role },
@@ -114,11 +127,12 @@ export class Application {
       const result = await client.query("UPDATE sessions SET revoked_at = now() WHERE session_id = $1 AND revoked_at IS NULL", [user.sessionId]);
       if (result.rowCount === 1) await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "LOGOUT", result: "accepted", entityId: user.sessionId });
     });
+    response.setHeader("set-cookie", clearSessionCookie(this.config.corsOrigin));
     sendNoContent(response);
   }
 
   private async requireSession(request: IncomingMessage): Promise<SessionUser> {
-    const token = parseBearerToken(request.headers.authorization);
+    const token = parseBearerToken(request.headers.authorization) ?? parseCookie(request.headers.cookie, "sepsa_session");
     if (!token) throw new HttpError(401, "UNAUTHENTICATED", "Valid bearer session is required.");
     const result = await this.pool.query<SessionRow>(
       `SELECT s.session_id, u.user_id, u.username, u.display_name, u.role
@@ -138,12 +152,24 @@ export class Application {
   private async listDebtors(response: ServerResponse, user: SessionUser, url: URL): Promise<void> {
     this.requireRole(user, "ADMIN");
     const search = (url.searchParams.get("query") ?? "").trim();
+    const area = (url.searchParams.get("area") ?? "").trim();
+    const locality = (url.searchParams.get("locality") ?? "").trim();
+    const route = (url.searchParams.get("route") ?? "").trim();
+    const minMonthsText = (url.searchParams.get("min_months_pending") ?? "").trim();
+    const minMonthsPending = minMonthsText === "" ? 0 : Number(minMonthsText);
+    if (!Number.isSafeInteger(minMonthsPending) || minMonthsPending < 0) throw new HttpError(400, "INVALID_REQUEST", "min_months_pending must be a non-negative integer.");
+    const supplyStatus = (url.searchParams.get("supply_status") ?? "").trim();
     const result = await this.pool.query<DebtorRow>(
       `SELECT debtor_id, account_id, supply_id, customer_name, address, reference_text, meter_id, area, locality,
-              route, debt_cents, months_pending, updated_at, kardex
-       FROM debtors WHERE source = $1 AND ($2 = '' OR debtor_id ILIKE '%' || $2 || '%' OR account_id ILIKE '%' || $2 || '%' OR supply_id ILIKE '%' || $2 || '%' OR customer_name ILIKE '%' || $2 || '%')
-       ORDER BY updated_at DESC LIMIT 100`,
-      [PROVISIONAL_SOURCE, search],
+               route, debt_cents, months_pending, updated_at, kardex, circuit, customer_ci, contact_phone, tariff,
+               supply_status, enabling_title, route_order, cadastral_latitude, cadastral_longitude, meter_brand,
+               meter_index, meter_multiplier, claims, payment_plan, suspension_date, reconnection_manual,
+               reconnection_date, reconnection_technician
+       FROM debtors WHERE source = $1 AND ($2 = '' OR debtor_id ILIKE '%' || $2 || '%' OR account_id ILIKE '%' || $2 || '%' OR supply_id ILIKE '%' || $2 || '%' OR customer_name ILIKE '%' || $2 || '%' OR meter_id ILIKE '%' || $2 || '%')
+          AND ($3 = '' OR area = $3) AND ($4 = '' OR locality = $4) AND ($5 = '' OR route = $5)
+          AND ($6 = 0 OR months_pending >= $6) AND ($7 = '' OR supply_status = $7)
+        ORDER BY updated_at DESC LIMIT 100`,
+       [PROVISIONAL_SOURCE, search, area, locality, route, minMonthsPending, supplyStatus],
     );
     sendJson(response, 200, { source: PROVISIONAL_SOURCE, debtors: result.rows.map(toDebtor) });
   }
@@ -169,11 +195,12 @@ export class Application {
       if (!debtor.rows[0]) throw new HttpError(404, "DEBTOR_NOT_FOUND", "Debtor was not found.");
       const duplicate = await client.query("SELECT order_id FROM orders WHERE debtor_id = $1 AND purpose = $2 AND status = 'GENERADO' FOR SHARE", [debtorId, purpose]);
       if (duplicate.rows[0]) throw new HttpError(409, "DUPLICATE_ORDER", "An active provisional order already exists for this debtor.");
-      const orderId = cryptoRandomUuid();
-      await client.query(
-        `INSERT INTO orders(order_id, debtor_id, purpose, status, physical_status, version, created_by, source)
-         VALUES ($1, $2, $3, 'GENERADO', 'NONE', 1, $4, $5)`,
-        [orderId, debtorId, purpose, user.userId, PROVISIONAL_SOURCE],
+       const orderId = cryptoRandomUuid();
+       const cuc = `CUC-${cryptoRandomUuid()}`;
+       await client.query(
+         `INSERT INTO orders(order_id, cuc, debtor_id, purpose, status, physical_status, version, created_by, source)
+          VALUES ($1, $2, $3, $4, 'GENERADO', 'NONE', 1, $5, $6)`,
+         [orderId, cuc, debtorId, purpose, user.userId, PROVISIONAL_SOURCE],
       );
       const inserted = await client.query<OrderRow>(orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC"), [orderId, PROVISIONAL_SOURCE]);
       const insertedOrder = inserted.rows[0];
@@ -182,6 +209,51 @@ export class Application {
       await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CREATE_ORDER", result: "accepted", entityId: orderId, orderId, operationId });
       await client.query("UPDATE command_operations SET status = 'completed', response = $2 WHERE operation_id = $1", [operationId, order]);
       return order;
+    });
+    sendJson(response, 201, result);
+  }
+
+  private async createOrdersBatch(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void> {
+    this.requireRole(user, "ADMIN");
+    const body = await parseJsonBody(request, this.config.maxBodyBytes);
+    const batchId = requiredString(body.batch_id, "batch_id");
+    const purpose = requiredString(body.purpose, "purpose");
+    const rawDebtorIds = body.debtor_ids;
+    if (!Array.isArray(rawDebtorIds) || rawDebtorIds.some((value) => typeof value !== "string")) throw new HttpError(400, "INVALID_REQUEST", "debtor_ids must be an array of strings.");
+    const debtorIds = [...new Set(rawDebtorIds.map((value) => value.trim()).filter(Boolean))];
+    if (!debtorIds.length || debtorIds.length > 500) throw new HttpError(400, "INVALID_REQUEST", "debtor_ids must contain between 1 and 500 items.");
+    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Only CUT is available in this provisional slice.");
+    const requestHash = digest({ batch_id: batchId, debtor_ids: debtorIds, purpose });
+    const result = await withTransaction(this.pool, async (client) => {
+      const command = await claimCommand(client, batchId, "CREATE_ORDER_BATCH", user.userId, requestHash);
+      if (!command.claimed) return command.replay;
+      const debtors = await client.query<DebtorRow>("SELECT * FROM debtors WHERE debtor_id = ANY($1::text[]) AND source = $2 FOR UPDATE", [debtorIds, PROVISIONAL_SOURCE]);
+      const debtorById = new Map(debtors.rows.map((debtor) => [debtor.debtor_id, debtor]));
+      const created: Record<string, unknown>[] = [];
+      const skipped: Array<{ debtor_id: string; reason: "ACTIVE_ORDER_EXISTS" | "DEBTOR_NOT_FOUND" | "SUPPLY_ID_REQUIRED"; message: string }> = [];
+      for (const debtorId of debtorIds) {
+        const debtor = debtorById.get(debtorId);
+        if (!debtor) { skipped.push({ debtor_id: debtorId, reason: "DEBTOR_NOT_FOUND", message: "Suministro no encontrado." }); continue; }
+        if (!debtor.supply_id.trim()) { skipped.push({ debtor_id: debtorId, reason: "SUPPLY_ID_REQUIRED", message: "Suministro sin identificador confirmado." }); continue; }
+        const duplicate = await client.query("SELECT o.order_id FROM orders o JOIN debtors d ON d.debtor_id = o.debtor_id WHERE d.account_id = $1 AND o.purpose = $2 AND o.status = 'GENERADO' FOR SHARE", [debtor.account_id, purpose]);
+        if (duplicate.rows[0]) { skipped.push({ debtor_id: debtorId, reason: "ACTIVE_ORDER_EXISTS", message: "Ya existe una orden activa para esta cuenta." }); continue; }
+        const orderId = cryptoRandomUuid();
+        const cuc = `CUC-${cryptoRandomUuid()}`;
+        await client.query(
+          `INSERT INTO orders(order_id, cuc, debtor_id, purpose, status, physical_status, version, created_by, source)
+           VALUES ($1, $2, $3, $4, 'GENERADO', 'NONE', 1, $5, $6)`,
+          [orderId, cuc, debtorId, purpose, user.userId, PROVISIONAL_SOURCE],
+        );
+        const inserted = await client.query<OrderRow>(orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC"), [orderId, PROVISIONAL_SOURCE]);
+        const order = inserted.rows[0];
+        if (!order) throw new Error("Created provisional batch order could not be read.");
+        created.push(toOrder(order));
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CREATE_ORDER", result: "accepted", entityId: orderId, orderId, operationId: `${batchId}:${debtorId}` });
+      }
+      const responseValue = { batch_id: batchId, requested_debtor_ids: debtorIds, created, skipped };
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CREATE_ORDER_BATCH", result: "accepted", entityId: batchId, operationId: batchId, metadata: { requested: debtorIds.length, created: created.length, skipped: skipped.length } });
+      await client.query("UPDATE command_operations SET status = 'completed', response = $2 WHERE operation_id = $1", [batchId, responseValue]);
+      return responseValue;
     });
     sendJson(response, 201, result);
   }
@@ -234,7 +306,7 @@ export class Application {
     const packageValue = { package_id: cryptoRandomUuid(), technician_id: user.userId, device_id: deviceId, version: Date.now(), downloaded_at: new Date().toISOString(), orders, source: PROVISIONAL_SOURCE };
     const checksum = digest(packageValue);
     await withTransaction(this.pool, async (client) => {
-      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "DOWNLOAD_ASSIGNED", result: "accepted", deviceId, metadata: packageValue });
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "DOWNLOAD_ASSIGNED", result: "accepted", deviceId, metadata: { package_id: packageValue.package_id, technician_id: packageValue.technician_id, device_id: packageValue.device_id, version: packageValue.version, downloaded_at: packageValue.downloaded_at, order_ids: orders.map((order) => order.order_id) } });
     });
     sendJson(response, 200, { package: packageValue, authenticity: PROVISIONAL_SOURCE, integrity: PROVISIONAL_SOURCE, validation: "PILOT_PROVISIONAL_VALID", checksum });
   }
@@ -304,6 +376,12 @@ export class Application {
     if (!order) return await rejectSync(client, user, payload, "Order was not found.");
     if (order.assigned_technician_id !== user.userId) return await rejectSync(client, user, payload, "Order is not assigned to current technician.");
     if (payload.action === "CUT") validateCaptureMeter(payload.field_capture, order.context);
+    if (payload.action === "CUT" && payload.evidence_refs.length > 0) {
+      const reason = "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA.";
+      await client.query("UPDATE sync_operations SET status = 'pending', conflict_reason = $2 WHERE operation_id = $1", [payload.operation_id, reason]);
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_CUT", result: "rejected", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, reason, metadata: safeSyncPayload(payload) });
+      return { status: "conflict", message: reason };
+    }
     if (payload.action === "VISIT") {
       await client.query("UPDATE sync_operations SET status = 'acknowledged', acknowledged_at = now() WHERE operation_id = $1", [payload.operation_id]);
        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_VISIT", result: "accepted", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, metadata: safeSyncPayload(payload) });
@@ -409,6 +487,7 @@ function parseSyncPayload(body: Record<string, unknown>): SyncPayload {
 }
 
 function validateSyncPayload(payload: SyncPayload): void {
+  if (!isIsoTimestamp(payload.recorded_at)) throw new HttpError(400, "INVALID_TIMESTAMP", "recorded_at must be an ISO timestamp.");
   if (payload.action === "VISIT") {
     if (!payload.reason?.trim()) throw new HttpError(400, "VISIT_REASON_REQUIRED", "VISIT requires a reason.");
     return;
@@ -416,19 +495,24 @@ function validateSyncPayload(payload: SyncPayload): void {
   if (payload.evidence_refs.length === 0 && !hasControlledException(payload.exception_reason, "saltar_control_fotos")) throw new HttpError(400, "EVIDENCE_REQUIRED", "CUT requires evidence_refs or a controlled photo exception.");
   const capture = isRecord(payload.field_capture) ? payload.field_capture : undefined;
   const reading = capture && isRecord(capture.reading) ? capture.reading : undefined;
-  if (!reading || reading.status !== "CAPTURED" || typeof reading.value !== "number" || !Number.isFinite(reading.value) || reading.value < 0 || typeof reading.meterId !== "string" || !reading.meterId.trim() || reading.unit !== "kWh") throw new HttpError(400, "FIELD_CAPTURE_INVALID", "CUT requires a valid final meter reading.");
+  if (!reading || reading.status !== "CAPTURED" || typeof reading.value !== "number" || !Number.isFinite(reading.value) || reading.value < 0 || typeof reading.meterId !== "string" || !reading.meterId.trim() || reading.unit !== "kWh" || !isIsoTimestamp(reading.recordedAt)) throw new HttpError(400, "FIELD_CAPTURE_INVALID", "CUT requires a valid final meter reading.");
   const location = capture && isRecord(capture.location) ? capture.location : undefined;
   if (!location) throw new HttpError(400, "FIELD_CAPTURE_INVALID", "CUT requires GPS capture or a controlled exception.");
   if (location.status === "CAPTURED") {
-    if (typeof location.latitude !== "number" || !Number.isFinite(location.latitude) || location.latitude < -90 || location.latitude > 90 || typeof location.longitude !== "number" || !Number.isFinite(location.longitude) || location.longitude < -180 || location.longitude > 180 || typeof location.accuracyMeters !== "number" || !Number.isFinite(location.accuracyMeters) || location.accuracyMeters < 0) throw new HttpError(400, "FIELD_CAPTURE_INVALID", "CUT GPS capture is invalid.");
+    if (typeof location.latitude !== "number" || !Number.isFinite(location.latitude) || location.latitude < -90 || location.latitude > 90 || typeof location.longitude !== "number" || !Number.isFinite(location.longitude) || location.longitude < -180 || location.longitude > 180 || typeof location.accuracyMeters !== "number" || !Number.isFinite(location.accuracyMeters) || location.accuracyMeters < 0 || !isIsoTimestamp(location.recordedAt)) throw new HttpError(400, "FIELD_CAPTURE_INVALID", "CUT GPS capture is invalid.");
   } else if (location.status !== "BYPASSED" || !hasControlledException(location.exceptionReason, "saltar_control_coordenadas")) {
     throw new HttpError(400, "FIELD_CAPTURE_INVALID", "CUT requires GPS capture or a controlled exception.");
   }
+  if (location.status === "BYPASSED" && !isIsoTimestamp(location.recordedAt)) throw new HttpError(400, "FIELD_CAPTURE_INVALID", "CUT GPS exception timestamp is invalid.");
   if (!isRecord(capture) || !["RED", "MEDIDOR", "BARRAS", "PROTECCION", "ACOMETIDA", "FUSIBLES"].includes(String(capture.cutType)) || typeof capture.nearbyMeters !== "boolean") throw new HttpError(400, "FIELD_CAPTURE_INVALID", "CUT field capture catalog values are invalid.");
 }
 
 function hasControlledException(value: unknown, code: string): boolean {
   return typeof value === "string" && value.trim().startsWith(`${code}:`) && value.trim().slice(code.length + 1).trim().length > 0;
+}
+
+function isIsoTimestamp(value: unknown): boolean {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) && Number.isFinite(Date.parse(value));
 }
 
 function validateCaptureMeter(rawCapture: unknown, rawContext: unknown): void {
@@ -440,8 +524,8 @@ function validateCaptureMeter(rawCapture: unknown, rawContext: unknown): void {
 }
 
 function orderColumns(alias: string): string {
-  return `${alias}.order_id, ${alias}.debtor_id, d.account_id, d.supply_id, ${alias}.purpose, ${alias}.status, ${alias}.physical_status, ${alias}.version, ${alias}.created_by, ${alias}.assigned_technician_id, ${alias}.created_at,
-    jsonb_build_object('debtor_id', d.debtor_id, 'account_id', d.account_id, 'supply_id', d.supply_id, 'customer_name', d.customer_name, 'address', d.address, 'references', d.reference_text, 'meter_id', d.meter_id, 'area', d.area, 'locality', d.locality, 'route', d.route, 'debt_cents', d.debt_cents, 'months_pending', d.months_pending, 'updated_at', d.updated_at, 'kardex', d.kardex, 'source', d.source, 'provisional_metadata', d.context) AS context`;
+  return `${alias}.order_id, ${alias}.cuc, ${alias}.debtor_id, d.account_id, d.supply_id, ${alias}.purpose, ${alias}.status, ${alias}.physical_status, ${alias}.version, ${alias}.created_by, ${alias}.assigned_technician_id, ${alias}.created_at,
+    jsonb_build_object('debtor_id', d.debtor_id, 'account_id', d.account_id, 'supply_id', d.supply_id, 'customer_name', d.customer_name, 'address', d.address, 'references', d.reference_text, 'meter_id', d.meter_id, 'area', d.area, 'locality', d.locality, 'route', d.route, 'debt_cents', d.debt_cents, 'months_pending', d.months_pending, 'updated_at', d.updated_at, 'kardex', d.kardex, 'source', d.source, 'circuit', d.circuit, 'customer_ci', d.customer_ci, 'contact_phone', d.contact_phone, 'tariff', d.tariff, 'supply_status', d.supply_status, 'enabling_title', d.enabling_title, 'route_order', d.route_order, 'cadastral_latitude', d.cadastral_latitude, 'cadastral_longitude', d.cadastral_longitude, 'meter_brand', d.meter_brand, 'meter_index', d.meter_index, 'meter_multiplier', d.meter_multiplier, 'claims', d.claims, 'payment_plan', d.payment_plan, 'suspension_date', d.suspension_date, 'reconnection_manual', d.reconnection_manual, 'reconnection_date', d.reconnection_date, 'reconnection_technician', d.reconnection_technician, 'provisional_metadata', d.context) AS context`;
 }
 
 function orderSelect(where: string, order: string): string {
@@ -449,11 +533,11 @@ function orderSelect(where: string, order: string): string {
 }
 
 function toDebtor(row: DebtorRow): Record<string, unknown> {
-  return { debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, customer_name: row.customer_name, address: row.address, references: row.reference_text, meter_id: row.meter_id, area: row.area, locality: row.locality, route: row.route, debt_cents: row.debt_cents, months_pending: row.months_pending, updated_at: row.updated_at, kardex: row.kardex, source: PROVISIONAL_SOURCE };
+  return { debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, customer_name: row.customer_name, address: row.address, references: row.reference_text, meter_id: row.meter_id, area: row.area, locality: row.locality, route: row.route, debt_cents: row.debt_cents, months_pending: row.months_pending, updated_at: row.updated_at, kardex: row.kardex, source: PROVISIONAL_SOURCE, circuit: row.circuit, customer_ci: row.customer_ci, contact_phone: row.contact_phone, tariff: row.tariff, supply_status: row.supply_status, enabling_title: row.enabling_title, route_order: row.route_order, cadastral_latitude: row.cadastral_latitude, cadastral_longitude: row.cadastral_longitude, meter_brand: row.meter_brand, meter_index: row.meter_index, meter_multiplier: row.meter_multiplier, claims: row.claims, payment_plan: row.payment_plan, suspension_date: row.suspension_date, reconnection_manual: row.reconnection_manual, reconnection_date: row.reconnection_date, reconnection_technician: row.reconnection_technician };
 }
 
 function toOrder(row: OrderRow): Record<string, unknown> {
-  return { order_id: row.order_id, debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, purpose: row.purpose, status: row.status, physical_status: row.physical_status, version: row.version, created_by: row.created_by, assigned_technician_id: row.assigned_technician_id, created_at: row.created_at, context: row.context, source: PROVISIONAL_SOURCE };
+  return { order_id: row.order_id, cuc: row.cuc, debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, purpose: row.purpose, status: row.status, physical_status: row.physical_status, version: row.version, created_by: row.created_by, assigned_technician_id: row.assigned_technician_id, created_at: row.created_at, context: row.context, source: PROVISIONAL_SOURCE };
 }
 
 function digest(value: unknown): string {
@@ -462,6 +546,20 @@ function digest(value: unknown): string {
 
 function cryptoRandomUuid(): string {
   return randomUUID();
+}
+
+function parseCookie(header: string | undefined, name: string): string | undefined {
+  return header?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || undefined;
+}
+
+function sessionCookie(token: string, maxAge: number, corsOrigin: string): string {
+  const secure = corsOrigin.startsWith("https://") ? "; Secure" : "";
+  return `sepsa_session=${encodeURIComponent(token)}; Max-Age=${maxAge}; HttpOnly; SameSite=Lax; Path=/${secure}`;
+}
+
+function clearSessionCookie(corsOrigin: string): string {
+  const secure = corsOrigin.startsWith("https://") ? "; Secure" : "";
+  return `sepsa_session=; Max-Age=0; HttpOnly; SameSite=Lax; Path=/${secure}`;
 }
 
 interface AuditInput { actorId: string; actorRole: Role; action: string; result: "accepted" | "rejected"; entityId?: string; orderId?: string; operationId?: string; deviceId?: string; reason?: string; transition?: { before: string | null; after: string; version: number }; metadata?: unknown; }

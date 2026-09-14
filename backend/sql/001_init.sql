@@ -41,9 +41,28 @@ CREATE TABLE IF NOT EXISTS debtors (
   updated_at timestamptz NOT NULL,
   source text NOT NULL DEFAULT 'PILOT_PROVISIONAL' CHECK (source = 'PILOT_PROVISIONAL')
 );
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS circuit text NOT NULL DEFAULT '';
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS customer_ci text;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS contact_phone text;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS tariff text NOT NULL DEFAULT '';
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS supply_status text NOT NULL DEFAULT '';
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS enabling_title text;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS route_order integer;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS cadastral_latitude numeric;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS cadastral_longitude numeric;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS meter_brand text;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS meter_index text;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS meter_multiplier integer;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS claims boolean;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS payment_plan boolean;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS suspension_date timestamptz;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS reconnection_manual boolean;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS reconnection_date timestamptz;
+ALTER TABLE debtors ADD COLUMN IF NOT EXISTS reconnection_technician text;
 
 CREATE TABLE IF NOT EXISTS orders (
   order_id uuid PRIMARY KEY,
+  cuc text UNIQUE,
   debtor_id text NOT NULL REFERENCES debtors(debtor_id),
   purpose text NOT NULL CHECK (purpose = 'CUT'),
   status text NOT NULL CHECK (status IN ('GENERADO', 'EJECUTADO', 'ANULADO')),
@@ -56,6 +75,8 @@ CREATE TABLE IF NOT EXISTS orders (
   source text NOT NULL DEFAULT 'PILOT_PROVISIONAL' CHECK (source = 'PILOT_PROVISIONAL'),
   CHECK (assigned_technician_id IS NULL OR status <> 'ANULADO')
 );
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cuc text;
+CREATE UNIQUE INDEX IF NOT EXISTS orders_cuc_idx ON orders(cuc) WHERE cuc IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS orders_active_debtor_purpose_idx ON orders(debtor_id, purpose) WHERE status = 'GENERADO';
 CREATE INDEX IF NOT EXISTS orders_technician_idx ON orders(assigned_technician_id, updated_at DESC);
 
