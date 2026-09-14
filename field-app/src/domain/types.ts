@@ -3,6 +3,7 @@ export type PhysicalStatus = "NONE" | "CLAIMED" | "CONFIRMED" | "PHYSICAL_UNKNOW
 export type SyncStatus = "pending" | "syncing" | "synced" | "failed";
 export type ConnectivityMode = "online" | "weak" | "offline";
 export type Role = "ADMIN" | "TECHNICIAN";
+export type DataSource = "SIMULATED" | "PILOT_PROVISIONAL";
 export type AuthorizedAction =
   | "FIND_DEBTORS"
   | "CREATE_ORDER"
@@ -21,10 +22,11 @@ export interface Session {
   sessionId: string;
   userId: string;
   username: string;
+  displayName?: string;
   role: Role;
   permissions: AuthorizedAction[];
   issuedAt: string;
-  authenticity: "SIMULATED" | "PILOT_PROVISIONAL";
+  authenticity: DataSource;
   /** Provisional HTTP session token; kept in memory by the remote adapter. */
   sessionToken?: string;
   expiresAt?: string;
@@ -46,6 +48,10 @@ export interface KardexEntry {
   period: string;
   amountCents: number;
   status: "PENDING" | "PAID";
+  billingDate?: string;
+  invoiceOrigin?: string;
+  daysLate?: number;
+  paidAt?: string;
 }
 
 export interface OperationalContext {
@@ -62,8 +68,26 @@ export interface OperationalContext {
   debtCents: number;
   monthsPending: number;
   updatedAt: string;
-  source: "SIMULATED";
+  source: DataSource;
   kardex: KardexEntry[];
+  customerCi?: string;
+  contactPhone?: string;
+  tariff?: string;
+  supplyStatus?: string;
+  enablingTitle?: string;
+  routeOrder?: number;
+  circuit?: string;
+  cadastralLatitude?: number;
+  cadastralLongitude?: number;
+  meterBrand?: string;
+  meterIndex?: string;
+  meterMultiplier?: number;
+  claims?: boolean;
+  paymentPlan?: boolean;
+  suspensionDate?: string;
+  reconnectionManual?: boolean;
+  reconnectionDate?: string;
+  reconnectionTechnician?: string;
 }
 
 export interface LocationCapture {
@@ -100,6 +124,8 @@ export interface DebtorQuery {
   area?: string;
   locality?: string;
   route?: string;
+  minMonthsPending?: number;
+  supplyStatus?: string;
   session?: Session;
 }
 
@@ -108,6 +134,26 @@ export interface CreateOrderCommand {
   debtorId: string;
   purpose: OrderPurpose;
   session?: Session;
+}
+
+export interface CreateOrdersBatchCommand {
+  batchId: string;
+  debtorIds: string[];
+  purpose: OrderPurpose;
+  session?: Session;
+}
+
+export interface BatchOrderSkip {
+  debtorId: string;
+  reason: "ACTIVE_ORDER_EXISTS" | "DEBTOR_NOT_FOUND" | "SUPPLY_ID_REQUIRED";
+  message: string;
+}
+
+export interface CreateOrdersBatchResult {
+  batchId: string;
+  requestedDebtorIds: string[];
+  created: WorkOrder[];
+  skipped: BatchOrderSkip[];
 }
 
 export interface AssignOrderCommand {
@@ -134,7 +180,7 @@ export interface AuditEvent {
   };
   deviceId?: string;
   occurredAt: string;
-  source: "SIMULATED";
+  source: DataSource;
 }
 
 export interface WorkOrder {
@@ -153,6 +199,9 @@ export interface WorkOrder {
   origin?: "SIMULATED";
   context?: OperationalContext;
   cancellation?: CancellationDetails;
+  cuc?: string;
+  debtTopMonth?: string;
+  assignedTechnicianName?: string;
 }
 
 export interface CancellationDetails {

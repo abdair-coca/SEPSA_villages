@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { assignOrder, createOrder, findDebtors } from "../../application/admin";
+import { assignOrder, createOrder, createOrdersBatch, findDebtors } from "../../application/admin";
 import { downloadAssigned } from "../../application/download";
 import { login } from "../../application/auth";
 import type { AssignOrderCommand, CreateOrderCommand, OperationRecord, WorkOrder } from "../../domain";
@@ -15,6 +15,45 @@ afterEach(async () => {
 });
 
 describe("SIMULATED authority vertical", () => {
+  it("filters debtors by pending invoices and supply status", async () => {
+    const dbName = "authority-filter-fields";
+    databases.push(dbName);
+    const authority = new IndexedDbAuthorityRepository({ dbName });
+    repositories.push(authority);
+    await authority.seedSimulatedData();
+    const admin = await login(authority, { username: "admin.simulated", password: "SIMULATED-admin-003" });
+
+    const result = await findDebtors(authority, admin, { minMonthsPending: 3, supplyStatus: "A" });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ accountId: "CTA-1001", monthsPending: 3, supplyStatus: "A" });
+  });
+
+  it("creates a batch atomically, audits it, and replays it idempotently", async () => {
+    const dbName = "authority-order-batch";
+    databases.push(dbName);
+    const authority = new IndexedDbAuthorityRepository({ dbName });
+    repositories.push(authority);
+    await authority.seedSimulatedData();
+    const admin = await login(authority, { username: "admin.simulated", password: "SIMULATED-admin-003" });
+    const debtors = await findDebtors(authority, admin);
+    const command = { batchId: "create-order-batch-1", debtorIds: debtors.map((debtor) => debtor.debtorId), purpose: "CUT" as const };
+
+    const first = await createOrdersBatch(authority, admin, command);
+    const replay = await createOrdersBatch(authority, admin, command);
+    const secondBatch = await createOrdersBatch(authority, admin, { ...command, batchId: "create-order-batch-2" });
+
+    expect(first.created).toHaveLength(2);
+    expect(first.skipped).toHaveLength(0);
+    expect(replay).toEqual(first);
+    expect(secondBatch.created).toHaveLength(0);
+    expect(secondBatch.skipped).toHaveLength(2);
+    expect(await authority.listOrders(admin)).toHaveLength(2);
+    expect(await authority.listAudit({ session: admin })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "CREATE_ORDER_BATCH", entityId: "create-order-batch-1", result: "accepted" }),
+    ]));
+  });
+
   it("runs admin login, search, create, assign and audit", async () => {
     const dbName = "authority-vertical";
     databases.push(dbName);

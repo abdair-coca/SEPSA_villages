@@ -2,6 +2,8 @@ import type {
   AssignOrderCommand,
   AuditEvent,
   CreateOrderCommand,
+  CreateOrdersBatchCommand,
+  CreateOrdersBatchResult,
   DebtorQuery,
   DebtorRecord,
   OperationRecord,
@@ -29,6 +31,7 @@ export type TechnicalOrderAuthorizationResult =
 export interface OperationsAuthorityPort {
   findDebtors(query: DebtorQuery): Promise<DebtorRecord[]>;
   createOrder(input: CreateOrderCommand): Promise<WorkOrder>;
+  createOrdersBatch(input: CreateOrdersBatchCommand): Promise<CreateOrdersBatchResult>;
   assignOrder(input: AssignOrderCommand): Promise<WorkOrder>;
   downloadAssigned(technicianId: string, deviceId: string, session?: Session): Promise<WorkPackageEnvelope>;
   recordSyncedOperation(operation: OperationRecord | VisitRecord, session: Session): Promise<void>;

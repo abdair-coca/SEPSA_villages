@@ -1,4 +1,4 @@
-import { assertCan, permissionsForRole, type AuditEvent, type ConnectivityMode, type DebtorRecord, type DemoCredentials, type OperationRecord, type Session, type VisitRecord, type WorkOrder, type WorkPackageEnvelope } from "../../domain";
+import { assertCan, permissionsForRole, type AuditEvent, type BatchOrderSkip, type ConnectivityMode, type CreateOrdersBatchResult, type DataSource, type DebtorQuery, type DebtorRecord, type DemoCredentials, type KardexEntry, type OperationRecord, type Session, type VisitRecord, type WorkOrder, type WorkPackageEnvelope } from "../../domain";
 import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, RemoteResult } from "../../ports/authorization";
 import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
@@ -9,7 +9,8 @@ interface HttpClientOptions {
 }
 
 interface ApiErrorBody { code?: string; message?: string; }
-interface LoginResponse { session_id: string; session_token: string; expires_at: string; user: { user_id: string; username: string; display_name: string; role: "ADMIN" | "TECHNICIAN" }; }
+interface LoginResponse { session_id: string; session_token?: string; expires_at: string; user: { user_id: string; username: string; display_name: string; role: "ADMIN" | "TECHNICIAN" }; }
+interface BatchOrderResponse { batch_id: string; requested_debtor_ids: string[]; created: unknown[]; skipped: Array<{ debtor_id: string; reason: BatchOrderSkip["reason"]; message: string }>; }
 interface AuthorizationResponse { authorization_id: string; token: string; order_id: string; technician_id: string; device_id: string; operation_id: string; version: number; issued_at: string; expires_at: string; }
 interface PackageResponse { package: { package_id: string; technician_id: string; device_id: string; version: number; downloaded_at: string; orders: unknown[] }; checksum: string; }
 
@@ -22,7 +23,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
 
   constructor(options: HttpClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
-    if (!this.baseUrl) throw new Error("PILOT_PROVISIONAL backend URL is required.");
+    if (!this.baseUrl) throw new Error("La URL del servicio de operaciones es obligatoria.");
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
   }
 
@@ -36,6 +37,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
       sessionId: response.session_id,
       userId: response.user.user_id,
       username: response.user.username,
+      displayName: response.user.display_name,
       role: response.user.role,
       permissions: permissionsForRole(response.user.role),
       issuedAt: new Date().toISOString(),
@@ -45,6 +47,11 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     };
     this.activeSession = session;
     return session;
+  }
+
+  restoreSession(session: Session): void {
+    if (!isValidFutureDate(session.expiresAt)) return;
+    this.activeSession = session;
   }
 
   async authorize(session: Session, action: Parameters<typeof assertCan>[1]): Promise<void> {
@@ -57,10 +64,15 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     if (this.activeSession?.sessionId === session.sessionId) this.activeSession = undefined;
   }
 
-  async findDebtors(query: { query?: string; session?: Session }): Promise<DebtorRecord[]> {
+  async findDebtors(query: DebtorQuery): Promise<DebtorRecord[]> {
     const session = this.requireSession(query.session);
     const params = new URLSearchParams();
     if (query.query?.trim()) params.set("query", query.query.trim());
+    if ("area" in query && query.area?.trim()) params.set("area", query.area.trim());
+    if ("locality" in query && query.locality?.trim()) params.set("locality", query.locality.trim());
+    if ("route" in query && query.route?.trim()) params.set("route", query.route.trim());
+    if (query.minMonthsPending !== undefined) params.set("min_months_pending", String(query.minMonthsPending));
+    if (query.supplyStatus?.trim()) params.set("supply_status", query.supplyStatus.trim());
     const response = await this.request<{ debtors: unknown[] }>(`/v1/debtors?${params}`, { method: "GET" }, session);
     return response.debtors.map(mapDebtor);
   }
@@ -69,6 +81,12 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     const session = this.requireSession(input.session);
     const response = await this.request<{ order: unknown } | unknown>("/v1/orders", { method: "POST", body: { operation_id: input.operationId, debtor_id: input.debtorId, purpose: input.purpose } }, session);
     return mapOrder("order" in asRecord(response) ? asRecord(response).order : response);
+  }
+
+  async createOrdersBatch(input: { batchId: string; debtorIds: string[]; purpose: "CUT"; session?: Session }): Promise<CreateOrdersBatchResult> {
+    const session = this.requireSession(input.session);
+    const response = await this.request<BatchOrderResponse>("/v1/orders/batch", { method: "POST", body: { batch_id: input.batchId, debtor_ids: input.debtorIds, purpose: input.purpose } }, session);
+    return { batchId: response.batch_id, requestedDebtorIds: response.requested_debtor_ids, created: response.created.map(mapOrder), skipped: response.skipped.map((item) => ({ debtorId: item.debtor_id, reason: item.reason, message: item.message })) };
   }
 
   async assignOrder(input: { operationId: string; orderId: string; technicianId: string; expectedOrderVersion: number; session?: Session }): Promise<WorkOrder> {
@@ -154,13 +172,14 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   }
 
   private requireSession(session?: Session): Session {
-    if (!session) throw new Error("PILOT_PROVISIONAL session is required.");
+    if (!session) throw new Error("Se requiere una sesión autenticada.");
     this.requireActiveSession(session);
     return session;
   }
 
   private requireActiveSession(session = this.activeSession): Session {
-    if (!session?.sessionToken) throw new Error("PILOT_PROVISIONAL session is unavailable.");
+    if (!session) throw new Error("La sesión no está disponible.");
+    if (!isValidFutureDate(session.expiresAt)) throw new Error("La sesión expiró. Ingrese nuevamente.");
     if (this.activeSession && session.sessionId !== this.activeSession.sessionId) throw new Error("Session is not active in this client.");
     return session;
   }
@@ -172,7 +191,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     if (session?.sessionToken) headers.authorization = `Bearer ${session.sessionToken}`;
     let response: Response;
     try {
-      response = await this.fetchImpl(this.baseUrl + path, { method: init.method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
+      response = await this.fetchImpl(this.baseUrl + path, { method: init.method, headers, credentials: "include", body: init.body === undefined ? undefined : JSON.stringify(init.body) });
     } catch {
       throw networkUnknown();
     }
@@ -180,7 +199,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     const body = await response.json().catch(() => undefined) as unknown;
     if (!response.ok) {
       const error = asRecord(body);
-      throw new HttpPilotError(response.status, stringOr(error.code, "HTTP_ERROR"), stringOr(error.message, "PILOT_PROVISIONAL request failed."), body);
+      throw new HttpPilotError(response.status, stringOr(error.code, "HTTP_ERROR"), stringOr(error.message, "La solicitud no pudo completarse."), body);
     }
     return body as T;
   }
@@ -231,21 +250,50 @@ function toSyncPayload(record: OperationRecord | VisitRecord): SyncPayload {
 
 function mapDebtor(value: unknown): DebtorRecord {
   const raw = asRecord(value);
+  const debtCents = requiredNonNegativeInteger(raw.debt_cents, "debt_cents");
+  const monthsPending = requiredNonNegativeInteger(raw.months_pending, "months_pending");
   return {
-    debtorId: stringOr(raw.debtor_id), accountId: stringOr(raw.account_id), supplyId: stringOr(raw.supply_id), customerName: stringOr(raw.customer_name), address: stringOr(raw.address), references: stringOr(raw.references), meterId: stringOr(raw.meter_id), area: stringOr(raw.area), locality: stringOr(raw.locality), route: stringOr(raw.route), debtCents: numberOr(raw.debt_cents), monthsPending: numberOr(raw.months_pending), updatedAt: stringOr(raw.updated_at), kardex: Array.isArray(raw.kardex) ? raw.kardex as DebtorRecord["kardex"] : [], source: "SIMULATED",
+    debtorId: stringOr(raw.debtor_id), accountId: stringOr(raw.account_id), supplyId: stringOr(raw.supply_id), customerName: stringOr(raw.customer_name), address: stringOr(raw.address), references: stringOr(raw.references), meterId: stringOr(raw.meter_id), area: stringOr(raw.area), locality: stringOr(raw.locality), route: stringOr(raw.route), debtCents, monthsPending, updatedAt: stringOr(raw.updated_at), kardex: mapKardex(raw.kardex), source: dataSource(raw.source), circuit: stringOr(raw.circuit), customerCi: optionalString(raw.customer_ci), contactPhone: optionalString(raw.contact_phone), tariff: optionalString(raw.tariff), supplyStatus: optionalString(raw.supply_status), enablingTitle: optionalString(raw.enabling_title), routeOrder: optionalNumber(raw.route_order), cadastralLatitude: optionalNumber(raw.cadastral_latitude), cadastralLongitude: optionalNumber(raw.cadastral_longitude), meterBrand: optionalString(raw.meter_brand), meterIndex: optionalString(raw.meter_index), meterMultiplier: optionalNumber(raw.meter_multiplier), claims: optionalBoolean(raw.claims), paymentPlan: optionalBoolean(raw.payment_plan), suspensionDate: optionalString(raw.suspension_date), reconnectionManual: optionalBoolean(raw.reconnection_manual), reconnectionDate: optionalString(raw.reconnection_date), reconnectionTechnician: optionalString(raw.reconnection_technician),
   };
 }
 
 function mapOrder(value: unknown): WorkOrder {
   const raw = asRecord(value);
   const context = raw.context === undefined ? undefined : mapDebtor(raw.context);
-  return { orderId: stringOr(raw.order_id), assignedTechnicianId: stringOr(raw.assigned_technician_id), status: stringOr(raw.status) as WorkOrder["status"], physicalStatus: stringOr(raw.physical_status) as WorkOrder["physicalStatus"], version: numberOr(raw.version), purpose: "CUT", debtorId: stringOr(raw.debtor_id), accountId: stringOr(raw.account_id), supplyId: stringOr(raw.supply_id), createdBy: stringOr(raw.created_by), createdAt: stringOr(raw.created_at), origin: "SIMULATED", context };
+  const orderId = requiredString(raw.order_id, "order_id");
+  const status = raw.status === "GENERADO" || raw.status === "EJECUTADO" || raw.status === "RECONEXIÓN" || raw.status === "ANULADO" ? raw.status : undefined;
+  const physicalStatus = raw.physical_status === "NONE" || raw.physical_status === "CLAIMED" || raw.physical_status === "CONFIRMED" || raw.physical_status === "PHYSICAL_UNKNOWN" ? raw.physical_status : undefined;
+  const version = requiredPositiveInteger(raw.version, "version");
+  if (!status || !physicalStatus) throw new Error("REMOTE_ORDER_INVALID");
+  return { orderId, assignedTechnicianId: optionalString(raw.assigned_technician_id) ?? "", status, physicalStatus, version, purpose: "CUT", debtorId: requiredString(raw.debtor_id, "debtor_id"), accountId: optionalString(raw.account_id), supplyId: optionalString(raw.supply_id), createdBy: requiredString(raw.created_by, "created_by"), createdAt: requiredString(raw.created_at, "created_at"), origin: "SIMULATED", cuc: optionalString(raw.cuc), context };
 }
 
 function mapAudit(value: unknown): AuditEvent {
   const raw = asRecord(value);
-  return { auditId: stringOr(raw.audit_id), actorId: stringOr(raw.actor_id), actorRole: raw.actor_role === "ADMIN" || raw.actor_role === "TECHNICIAN" ? raw.actor_role : undefined, action: stringOr(raw.action), entityId: optionalString(raw.entity_id), orderId: optionalString(raw.order_id), operationId: optionalString(raw.operation_id), result: raw.result === "rejected" ? "rejected" : "accepted", reason: optionalString(raw.reason), deviceId: optionalString(raw.device_id), occurredAt: stringOr(raw.occurred_at), source: "SIMULATED" };
+  return { auditId: stringOr(raw.audit_id), actorId: stringOr(raw.actor_id), actorRole: raw.actor_role === "ADMIN" || raw.actor_role === "TECHNICIAN" ? raw.actor_role : undefined, action: stringOr(raw.action), entityId: optionalString(raw.entity_id), orderId: optionalString(raw.order_id), operationId: optionalString(raw.operation_id), result: raw.result === "rejected" ? "rejected" : "accepted", reason: optionalString(raw.reason), deviceId: optionalString(raw.device_id), occurredAt: stringOr(raw.occurred_at), transition: asTransition(raw.transition), source: dataSource(raw.source) };
 }
+
+function mapKardex(value: unknown): KardexEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    const raw = asRecord(entry);
+    const entryId = optionalString(raw.entry_id) ?? optionalString(raw.entryId);
+    const period = optionalString(raw.period);
+    const amountCents = requiredNonNegativeInteger(raw.amount_cents ?? raw.amountCents, "kardex.amount_cents");
+    const status = raw.status === "PAID" || raw.status === "C" ? "PAID" : raw.status === "PENDING" || raw.status === "P" ? "PENDING" : undefined;
+    if (!entryId?.trim() || !period?.trim() || !status) throw new Error("REMOTE_FINANCIAL_DATA_INVALID");
+    return { entryId, period, amountCents, status, billingDate: optionalString(raw.billing_date), invoiceOrigin: optionalString(raw.invoice_origin), daysLate: optionalNumber(raw.days_late), paidAt: optionalString(raw.paid_at) };
+  });
+}
+
+function dataSource(value: unknown): DataSource { return value === "PILOT_PROVISIONAL" ? "PILOT_PROVISIONAL" : "SIMULATED"; }
+function optionalNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && value.trim()) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : undefined; }
+  return undefined;
+}
+function optionalBoolean(value: unknown): boolean | undefined { return typeof value === "boolean" ? value : undefined; }
+function asTransition(value: unknown): AuditEvent["transition"] { return typeof value === "object" && value !== null ? value as AuditEvent["transition"] : undefined; }
 
 function provisionalPackageChecksum(workPackage: { packageId: string; technicianId: string; deviceId: string; version: number; downloadedAt: string; orders: WorkOrder[] }): string {
   const canonical = JSON.stringify(workPackage);
@@ -266,6 +314,21 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function stringOr(value: unknown, fallback = ""): string { return typeof value === "string" ? value : fallback; }
 function optionalString(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
-function numberOr(value: unknown, fallback = 0): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
+function numberOr(value: unknown, fallback = 0): number { const parsed = optionalNumber(value); return parsed ?? fallback; }
+function requiredNonNegativeInteger(value: unknown, field: string): number {
+  const parsed = optionalNumber(value);
+  if (parsed === undefined || !Number.isInteger(parsed) || parsed < 0) throw new Error(`REMOTE_FINANCIAL_DATA_INVALID:${field}`);
+  return parsed;
+}
+function requiredPositiveInteger(value: unknown, field: string): number {
+  const parsed = optionalNumber(value);
+  if (parsed === undefined || !Number.isInteger(parsed) || parsed < 1) throw new Error(`REMOTE_ORDER_INVALID:${field}`);
+  return parsed;
+}
+function requiredString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`REMOTE_ORDER_INVALID:${field}`);
+  return value;
+}
+function isValidFutureDate(value?: string): boolean { const timestamp = value ? Date.parse(value) : Number.NaN; return Number.isFinite(timestamp) && timestamp > Date.now(); }
 function errorCode(error: unknown, fallback: string): string { return error instanceof HttpPilotError ? error.code : error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : fallback; }
 function networkUnknown(): Error { const error = new Error("Network availability is unknown."); error.name = "NetworkUnknownError"; Object.defineProperty(error, "code", { value: "NETWORK_UNKNOWN" }); return error; }

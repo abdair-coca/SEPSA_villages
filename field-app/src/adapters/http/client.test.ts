@@ -2,13 +2,36 @@ import { describe, expect, it } from "vitest";
 import { HttpPilotClient } from "./client";
 
 describe("PILOT_PROVISIONAL HTTP client", () => {
+  it("sends all administrative delinquency filters and maps batch creation", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const client = new HttpPilotClient({
+      baseUrl: "http://localhost:8080",
+      fetchImpl: async (input, init = {}) => {
+        requests.push({ url: String(input), init });
+        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
+        if (String(input).endsWith("/orders/batch")) return json({ batch_id: "batch-1", requested_debtor_ids: ["debtor-1"], created: [{ order_id: "order-1", debtor_id: "debtor-1", account_id: "account-1", assigned_technician_id: "", status: "GENERADO", physical_status: "NONE", version: 1, created_by: "admin-1", created_at: "2026-09-13T00:00:00.000Z" }], skipped: [] });
+        return json({ debtors: [] });
+      },
+    });
+    const session = await client.authenticate({ username: "admin", password: "password" });
+
+    await client.findDebtors({ query: "CTA", area: "B", locality: "002", route: "002", minMonthsPending: 2, supplyStatus: "A", session });
+    const batch = await client.createOrdersBatch({ batchId: "batch-1", debtorIds: ["debtor-1"], purpose: "CUT", session });
+
+    expect(requests[1]?.url).toContain("query=CTA");
+    expect(requests[1]?.url).toContain("min_months_pending=2");
+    expect(requests[1]?.url).toContain("supply_status=A");
+    expect(batch).toMatchObject({ batchId: "batch-1", created: [{ orderId: "order-1" }] });
+    expect(JSON.parse(String(requests[2]?.init.body))).toEqual({ batch_id: "batch-1", debtor_ids: ["debtor-1"], purpose: "CUT" });
+  });
+
   it("keeps cut authorization deferred and sends its binding to sync", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const client = new HttpPilotClient({
       baseUrl: "http://localhost:8080",
       fetchImpl: async (input, init = {}) => {
         requests.push({ url: String(input), init });
-        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2026-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } });
+        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } });
         if (String(input).endsWith("/authorizations/cut")) return json({ authorization_id: "auth-1", token: "opaque-1", order_id: "order-1", technician_id: "tech-1", device_id: "device-1", operation_id: "cut-1", version: 2, issued_at: "2026-09-12T09:00:00.000Z", expires_at: "2026-09-12T09:05:00.000Z" });
         return json({ status: "acknowledged", operation_id: "cut-1" });
       },
@@ -29,7 +52,7 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     const client = new HttpPilotClient({
       baseUrl: "http://localhost:8080",
       fetchImpl: async (input) => String(input).endsWith("/auth/login")
-        ? json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2026-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } })
+        ? json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } })
         : json({ package: packageValue, checksum: "tampered" }),
     });
     const session = await client.authenticate({ username: "tech", password: "password" });
