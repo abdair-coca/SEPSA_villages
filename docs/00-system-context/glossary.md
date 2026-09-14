@@ -11,7 +11,9 @@ related:
 
 # Glosario Técnico y Comercial
 
-- **CUC (Código Único de Corte)**: Identificador numérico secuencial único asignado a cada orden de corte generada (ej. `443794`, `443797`). Funciona como clave primaria de la intervención.
+- **CUC**: Identificador numérico de la orden de corte (ej. `443794`, `446920`). El video no desarrolla el acrónimo; "Código Único de Corte" es interpretación provisional. `TODO: VALIDAR CON SEPSA`.
+- **Nro. de registro**: En el ejemplo observado coincide con el CUC (`446920`). Hipótesis: mismo identificador con dos nombres. `TODO: VALIDAR CON SEPSA`.
+- **Correlativo de corte**: Identificador distinto del CUC; en la orden observada figura `Pendiente de corte` mientras el CUC ya existe. Momento de generación pendiente. `TODO: VALIDAR CON SEPSA`.
 - **Cuenta / Suministro**: Código numérico que identifica el contrato y punto de entrega de energía eléctrica del cliente (ej. `306040`, `1702690`).
 - **Título Habilitante**: Clasificación regulatoria del derecho de prestación del servicio eléctrico (ej. valor `R` observado en pantallas).
 - **Tarifa / Categoría**: Código de régimen tarifario aplicado al cliente (ej. `RS` = Residencial / Rural Social).

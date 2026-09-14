@@ -23,3 +23,4 @@ Esta sección compila el respaldo empírico de la ingeniería inversa, detalland
 - [risk-analysis.md](risk-analysis.md): Análisis de riesgos críticos, altos y medios al reconstruir el sistema.
 - [coverage-matrix.md](coverage-matrix.md): Matriz de cobertura que valida que ningún elemento observado quedó fuera.
 - [assumptions.md](assumptions.md): Hipótesis y supuestos documentados.
+- [video-corte-efectivo-3min.md](video-corte-efectivo-3min.md): Análisis del video 3:30 (buscar orden → corte efectivo) con leyenda ✅/🟡/❓, base sólida provisional y 5 respuestas críticas.
