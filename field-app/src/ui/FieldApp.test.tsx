@@ -4,8 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
-import type { WorkPackage } from "../domain";
-import { FieldApp } from "./FieldApp";
+import type { WorkOrder, WorkPackage } from "../domain";
+import { FieldApp, sortOrdersForNext } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -36,10 +36,29 @@ function html(store: AppStore): string {
 }
 
 describe("FieldApp SSR shell", () => {
+  it("prioritizes pending, review, completed, and cancelled orders", () => {
+    const base = createDemoPackage("2026-09-12T10:00:00.000Z").orders[0];
+    const orders: WorkOrder[] = [
+      { ...base, orderId: "cancelled", status: "ANULADO" },
+      { ...base, orderId: "completed", status: "EJECUTADO", physicalStatus: "CONFIRMED" },
+      { ...base, orderId: "review", status: "GENERADO", physicalStatus: "PHYSICAL_UNKNOWN" },
+      { ...base, orderId: "pending", status: "GENERADO", physicalStatus: "NONE" },
+    ];
+
+    expect(sortOrdersForNext(orders).map((order) => order.orderId)).toEqual(["pending", "review", "completed", "cancelled"]);
+  });
+
   it("renders ready shell, assigned list, detail, and action eligibility", async () => {
     const store = await readyStore("ui-ready");
     expect(html(store)).toContain("jornada de campo");
     expect(html(store)).toContain("ord-24017");
+    expect(html(store)).toContain("actualizar bandeja");
+    expect(html(store)).toContain("por ejecutar");
+    expect(html(store)).not.toContain("trabajo de hoy");
+    expect(html(store)).not.toContain("tu jornada");
+    expect(html(store)).not.toContain("primero resuelve la orden actual");
+    expect(html(store)).toContain("ver detalle");
+    expect(html(store)).toContain("marcar incidencia");
 
     store.selectOrder("ORD-24017");
     const generated = html(store);
@@ -79,10 +98,13 @@ describe("FieldApp SSR shell", () => {
     expect(markup).not.toContain("preparar reconexión");
   });
 
-  it("contains no payment, meter-reading, or GPS scope", async () => {
+  it("keeps payment scope out while exposing the desktop map", async () => {
     const store = await readyStore("ui-scope");
     const markup = html(store);
-    expect(markup).not.toMatch(/pago|lectura|gps/);
+    expect(markup).not.toMatch(/pago/);
+    expect(markup).toContain("mapa de órdenes");
+    expect(markup).not.toContain("datos de demostración");
+    expect(markup).not.toContain("operaciones sincronizadas");
   });
 
   it("filters orders by customer name or meter with unified smart search", async () => {
@@ -105,5 +127,23 @@ describe("FieldApp SSR shell", () => {
     expect(detailMarkup).toContain("volver a la bandeja");
     expect(detailMarkup).toContain("detalle de ord-24017");
   });
-});
 
+  it("shows explicit missing-location state without fallback coordinates", async () => {
+    const seedPackage = createDemoPackage("2026-09-12T10:00:00.000Z");
+    const packageWithoutCoordinates: WorkPackage = {
+      ...seedPackage,
+      orders: seedPackage.orders.map((order) => order.context ? {
+        ...order,
+        context: {
+          ...order.context,
+          cadastralLatitude: undefined,
+          cadastralLongitude: undefined,
+        },
+      } : order),
+    };
+    const store = await readyStore("ui-no-coordinates", packageWithoutCoordinates);
+    const markup = html(store);
+    expect(markup).toContain("ubicaciones no disponibles");
+    expect(markup).not.toContain("-19.589366");
+  });
+});

@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
-import type { ActivityEntry, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import type { ActivityEntry, AppMessage, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
 import { selectVisibleOrders } from "../app/index";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
 import { FieldMap } from "./FieldMap";
-import { IconCheck, IconDownload, IconMap, IconPin, IconRefresh, IconSearch } from "./Icons";
+import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconMap, IconPhone, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch } from "./Icons";
 
 export interface FieldAppProps {
   store: AppStore;
@@ -30,8 +30,17 @@ export function FieldApp({
   const [isProbingNetwork, setIsProbingNetwork] = useState(false);
   const [isRefreshingAssigned, setIsRefreshingAssigned] = useState(false);
   const [assignedRefreshError, setAssignedRefreshError] = useState<string>();
+  const [dismissedMessage, setDismissedMessage] = useState<AppMessage>();
   const connectivityRef = useRef<BrowserConnectivity | null>(null);
   const prevModeRef = useRef<ConnectivityMode>(state.mode);
+
+  useEffect(() => {
+    const message = state.message;
+    setDismissedMessage(undefined);
+    if (!message?.transient) return;
+    const timeout = window.setTimeout(() => setDismissedMessage(message), 500);
+    return () => window.clearTimeout(timeout);
+  }, [state.message]);
 
   useEffect(() => {
     void store.init();
@@ -71,11 +80,12 @@ export function FieldApp({
   }, [state.mode, state.syncItems, state.busyAction, store]);
 
   const handleRefreshAssigned = async (): Promise<void> => {
-    if (!onRefreshAssigned || isRefreshingAssigned) return;
+    if (isRefreshingAssigned) return;
     setIsRefreshingAssigned(true);
     setAssignedRefreshError(undefined);
     try {
-      await onRefreshAssigned();
+      if (onRefreshAssigned) await onRefreshAssigned();
+      else await store.refresh();
     } catch (error) {
       setAssignedRefreshError(error instanceof Error ? error.message : "No pudimos actualizar la bandeja.");
     } finally {
@@ -107,16 +117,18 @@ export function FieldApp({
     <div className="field-app">
       <Header
         state={state}
+        store={store}
         isProbingNetwork={isProbingNetwork}
         onRetryConnection={handleRetryConnection}
         isRefreshingAssigned={isRefreshingAssigned}
-        onRefreshAssigned={onRefreshAssigned ? () => void handleRefreshAssigned() : undefined}
+        onRefreshAssigned={() => void handleRefreshAssigned()}
+        onSync={() => void store.sync()}
         technicianId={technicianId}
         technicianName={technicianName}
         deviceId={deviceId}
         onLogout={onLogout}
       />
-      {state.message ? (
+      {state.message && !(state.message.transient && dismissedMessage === state.message) ? (
         <div className={`message message--${state.message.tone}`} role="status">
           {state.message.text}
         </div>
@@ -141,20 +153,24 @@ export function FieldApp({
 
 function Header({
   state,
+  store,
   isProbingNetwork,
   onRetryConnection,
   isRefreshingAssigned,
   onRefreshAssigned,
+  onSync,
   technicianId,
   technicianName,
   deviceId,
   onLogout,
 }: {
   state: AppState;
+  store: AppStore;
   isProbingNetwork: boolean;
   onRetryConnection: () => void;
   isRefreshingAssigned: boolean;
   onRefreshAssigned?: () => void;
+  onSync: () => void;
   technicianId: string;
   technicianName?: string;
   deviceId: string;
@@ -166,21 +182,30 @@ function Header({
   return (
     <header className="app-header">
       <div className="identity-block">
-        <div className="eyebrow">SEPSA · Campo</div>
+        <div className="eyebrow">SEPSA · CAMPO</div>
         <h1>Jornada de campo</h1>
         <p className="identity">Órdenes asignadas, ejecución de cortes y sincronización en terreno.</p>
-        <div className="header-person">
-          <span>Técnico</span>
+        <div className="header-context">
+          <span>Técnico:</span>
           <strong>{technicianName ?? technicianId}</strong>
+          <span className="header-context__separator" aria-hidden="true">|</span>
+          <span>Dispositivo: {shortTechnicalId(deviceId)}</span>
         </div>
-        <div className="technical-id header-device">Dispositivo: {shortTechnicalId(deviceId)}</div>
       </div>
       <div className="header-meta">
-        <div className="header-status-group">
+        <div className="header-top-actions">
           <span className={`network-status-badge network-status-badge--${state.mode}`}>
             <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
             <span className="network-status-text">{modeLabel}</span>
           </span>
+          <LastUpdateDisplay
+            timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
+            isRefreshing={isProbingNetwork || isRefreshingAssigned}
+            onRefresh={onRefreshAssigned ?? onRetryConnection}
+          />
+          {onLogout ? <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button> : null}
+        </div>
+        <div className="header-bottom-actions">
           <button
             type="button"
             className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
@@ -190,17 +215,20 @@ function Header({
             aria-label="Reintentar conexión"
           >
             <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
-            <span className="retry-label">{isProbingNetwork ? "Probando…" : "Reintentar"}</span>
+            <span>{isProbingNetwork ? "Probando…" : "Reintentar"}</span>
           </button>
-          <LastUpdateDisplay
-            timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
-            isRefreshing={isProbingNetwork || isRefreshingAssigned}
-            onRefresh={onRefreshAssigned ?? onRetryConnection}
-          />
-          {onLogout ? <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button> : null}
+          <button type="button" className="header-refresh-button" onClick={onRefreshAssigned} disabled={isRefreshingAssigned}>
+            <IconDownload />
+            <span>{isRefreshingAssigned ? "Actualizando…" : "Actualizar bandeja"}</span>
+          </button>
+          {pendingCount(state.syncItems) ? (
+            <button type="button" className="header-sync-button" onClick={onSync} disabled={!isUsable(state.mode) || Boolean(state.busyAction)}>
+              {state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar ahora"}
+            </button>
+          ) : null}
         </div>
       </div>
-      <div className="simulation-banner">Datos de demostración · fuente pendiente de validación con SEPSA</div>
+      <OperationalStrip state={state} store={store} />
     </header>
   );
 }
@@ -220,23 +248,28 @@ function Workbench({
 }) {
   const visibleOrders = selectVisibleOrders(state);
   const selectedOrder = state.orders.find((order) => order.orderId === state.selectedOrderId);
+  const [pendingAction, setPendingAction] = useState<{ orderId: string; kind: ActionKind } | null>(null);
+
+  const openIncident = (orderId: string) => {
+    setPendingAction({ orderId, kind: "VISIT" });
+    store.selectOrder(orderId);
+  };
 
   return (
     <main className="workbench">
-      <OperationalStrip state={state} store={store} onRefreshAssigned={onRefreshAssigned} />
-
       {state.tab === "orders" ? (
         selectedOrder ? (
-          <OrderDetail
-            order={selectedOrder}
-            state={state}
-            store={store}
-            enableReconnection={enableReconnection}
-            technicianName={technicianName}
-            onBack={() => store.selectOrder(null)}
-          />
-        ) : (
-          <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} />
+            <OrderDetail
+              order={selectedOrder}
+              state={state}
+              store={store}
+              enableReconnection={enableReconnection}
+              technicianName={technicianName}
+              initialAction={pendingAction?.orderId === selectedOrder.orderId ? pendingAction.kind : null}
+              onBack={() => { setPendingAction(null); store.selectOrder(null); }}
+            />
+          ) : (
+          <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} onMarkIncident={openIncident} />
         )
       ) : (
         <QueuePanel state={state} store={store} />
@@ -245,44 +278,35 @@ function Workbench({
   );
 }
 
-function OperationalStrip({ state, store, onRefreshAssigned }: { state: AppState; store: AppStore; onRefreshAssigned?: () => void }) {
+function OperationalStrip({ state, store }: { state: AppState; store: AppStore }) {
   const pending = pendingCount(state.syncItems);
+  if (!pending) return null;
   return (
-    <section className="operational-strip" aria-label="Estado operativo">
-      <div className="operational-strip__status">
-        <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
+    <section className="operational-strip sync-banner sync-banner--pending" aria-label="Estado de sincronización">
+      <button type="button" className="sync-banner__summary" aria-label="Ver cola de sincronización" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>
+        <span className="queue-count queue-count--pending">{pending}</span>
         <div>
-          <strong>{state.mode === "online" ? "Conectada" : state.mode === "weak" ? "Señal débil" : "Sin conexión"}</strong>
-          <span>Última actualización: <LastUpdateText timestamp={state.lastRefreshAt ?? state.package?.downloadedAt} /></span>
+          <strong>{`${pending} operación${pending === 1 ? "" : "es"} pendiente${pending === 1 ? "" : "s"}`}</strong>
+          <span>Guardadas en este dispositivo hasta recibir confirmación.</span>
         </div>
-      </div>
-      <div className="operational-strip__queue">
-        <span className={pending ? "queue-count queue-count--pending" : "queue-count"}>{pending}</span>
-        <div>
-          <strong>{pending ? `${pending} operación${pending === 1 ? "" : "es"} en cola` : "Cola despejada"}</strong>
-          <span>{pending ? "Guardadas en este dispositivo" : "Sin pendientes de sincronización"}</span>
-        </div>
-      </div>
-      <div className="operational-strip__actions">
-        <button type="button" className="toolbar-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button>
-        {pending ? (
-          <button type="button" className="sync-button sync-button--compact" disabled={!isUsable(state.mode) || Boolean(state.busyAction)} onClick={() => void store.sync()}>
-            {state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar ahora"}
-          </button>
-        ) : null}
-        <button type="button" className="queue-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>
-          Ver cola
-        </button>
-      </div>
+      </button>
     </section>
   );
 }
 
-function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void }) {
+function OrdersPanel({ state, orders, store, onRefreshAssigned, onMarkIncident }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void; onMarkIncident: (orderId: string) => void }) {
   const [showMap, setShowMap] = useState(false);
+  const [nextOrderId, setNextOrderId] = useState<string>();
   const [isMapCachedState, setIsMapCachedState] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<CacheProgress | null>(null);
   const [isDownloadingMap, setIsDownloadingMap] = useState(false);
+  const [mapDownloadError, setMapDownloadError] = useState<string>();
+  const hasMapCoordinates = state.orders.some((order) => (
+    typeof order.context?.cadastralLatitude === "number" &&
+    typeof order.context?.cadastralLongitude === "number" &&
+    Number.isFinite(order.context.cadastralLatitude) &&
+    Number.isFinite(order.context.cadastralLongitude)
+  ));
 
   useEffect(() => {
     let active = true;
@@ -296,13 +320,14 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppSt
 
   const handleDownloadMap = async () => {
     setIsDownloadingMap(true);
+    setMapDownloadError(undefined);
     try {
       await downloadRouteMap(state.orders, (progress) => {
         setDownloadProgress(progress);
       });
       setIsMapCachedState(true);
-    } catch {
-      // Manejo silencioso en UI para no interrumpir la jornada
+    } catch (error) {
+      setMapDownloadError(error instanceof Error ? error.message : "No pudimos descargar el mapa para trabajo offline.");
     } finally {
       setIsDownloadingMap(false);
       setDownloadProgress(null);
@@ -313,7 +338,19 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppSt
   const executedCount = state.orders.filter((o) => o.status === "EJECUTADO").length;
   const cancelledCount = state.orders.filter((o) => o.status === "ANULADO").length;
   const reviewCount = state.orders.filter((o) => o.physicalStatus === "PHYSICAL_UNKNOWN").length;
-  const nextOrder = orders.find((order) => order.status === "GENERADO" && order.physicalStatus === "NONE") ?? orders[0];
+  const prioritizedOrders = sortOrdersForNext(orders);
+  const nextOrder = prioritizedOrders.find((order) => order.orderId === nextOrderId) ?? prioritizedOrders[0];
+  const nextOrderIndex = nextOrder ? prioritizedOrders.findIndex((order) => order.orderId === nextOrder.orderId) : -1;
+
+  useEffect(() => {
+    setNextOrderId((current) => current && prioritizedOrders.some((order) => order.orderId === current) ? current : prioritizedOrders[0]?.orderId);
+  }, [state.orders, state.query, state.filter]);
+
+  function moveNextOrder(direction: -1 | 1): void {
+    if (nextOrderIndex < 0) return;
+    const target = prioritizedOrders[nextOrderIndex + direction];
+    if (target) setNextOrderId(target.orderId);
+  }
 
   const filters: Array<{ value: OrderFilter; label: string; count?: number }> = [
     { value: "ALL", label: "Todas", count: state.orders.length },
@@ -325,47 +362,41 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppSt
 
   return (
     <section className="orders-panel" aria-label="Órdenes asignadas">
-      <div className="workbench-heading">
-        <div>
-          <div className="eyebrow">TRABAJO DE HOY</div>
-          <h2>Tu jornada</h2>
-          <p>Primero resuelve la orden actual. El resto queda debajo.</p>
-        </div>
-        <span className="package-label">Paquete v{state.package?.version ?? "—"}</span>
-      </div>
-
       <div className="metric-row" aria-label="Resumen de órdenes">
-        <MetricCard value={generatedCount} label="Por ejecutar" tone="attention" />
-        <MetricCard value={reviewCount} label="En revisión" tone="review" />
-        <MetricCard value={executedCount} label="Ejecutadas" tone="success" />
-        <MetricCard value={cancelledCount} label="Anuladas" tone="muted" />
-        <MetricCard value={pendingCount(state.syncItems)} label="En cola" tone="queue" />
+        <MetricCard value={generatedCount} label="Por ejecutar" tone="attention" icon={<IconClock />} />
+        <MetricCard value={reviewCount} label="En revisión" tone="review" icon={<IconDocument />} />
+        <MetricCard value={executedCount} label="Ejecutadas" tone="success" icon={<IconCheckCircle />} />
+        <MetricCard value={cancelledCount} label="Anuladas" tone="muted" icon={<IconBan />} />
+        <MetricCard value={pendingCount(state.syncItems)} label="En cola" tone="queue" icon={<IconDatabase />} />
       </div>
 
       {nextOrder ? (
         <div className="orders-dashboard">
-          <CurrentOrderCard order={nextOrder} mode={state.mode} onOpen={() => store.selectOrder(nextOrder.orderId)} onShowMap={() => { store.selectOrder(nextOrder.orderId); setShowMap(true); }} />
-          <section className="my-orders-section" aria-label="Mis órdenes">
-            <div className="section-heading-inline">
-              <div>
-                <span className="eyebrow">BANDEJA ASIGNADA</span>
-                <h2>Mis órdenes</h2>
+          <div className="orders-dashboard__primary">
+            <CurrentOrderCard order={nextOrder} position={nextOrderIndex + 1} total={prioritizedOrders.length} onPrevious={() => moveNextOrder(-1)} onNext={() => moveNextOrder(1)} onOpen={() => store.selectOrder(nextOrder.orderId)} onShowMap={() => { store.selectOrder(nextOrder.orderId); setShowMap(true); }} onMarkIncident={() => onMarkIncident(nextOrder.orderId)} />
+            <section className="my-orders-section" aria-label="Mis órdenes">
+              <div className="section-heading-inline">
+                <div>
+                  <span className="eyebrow">BANDEJA ASIGNADA</span>
+                  <h2>Mis órdenes</h2>
+                </div>
+                <span className="section-count">{orders.length}</span>
               </div>
-              <span className="section-count">{orders.length}</span>
-            </div>
-            <OrderFilters state={state} store={store} filters={filters} />
-            <div className="order-cards-list">
-              {orders.map((order) => (
-                <OrderCard
-                  key={order.orderId}
-                  order={order}
-                  selected={state.selectedOrderId === order.orderId}
-                  onSelect={() => store.selectOrder(order.orderId)}
-                  onShowMap={() => { store.selectOrder(order.orderId); setShowMap(true); }}
-                />
-              ))}
-            </div>
-          </section>
+              <OrderFilters state={state} store={store} filters={filters} />
+              <div className="order-cards-list">
+                {orders.map((order) => (
+                  <OrderCard
+                    key={order.orderId}
+                    order={order}
+                    selected={state.selectedOrderId === order.orderId}
+                    onSelect={() => store.selectOrder(order.orderId)}
+                    onShowMap={() => { store.selectOrder(order.orderId); setShowMap(true); }}
+                  />
+                ))}
+              </div>
+            </section>
+          </div>
+          <DesktopRightRail state={state} orders={orders} selectedOrderId={nextOrder.orderId} store={store} />
         </div>
       ) : (
         <EmptyOrders hasAnyOrders={state.orders.length > 0} onRefresh={onRefreshAssigned ?? (() => void store.refresh())} onShowMap={() => setShowMap(true)} />
@@ -377,19 +408,98 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppSt
           <span>{showMap ? "Ocultar mapa de órdenes" : "Ver mapa de órdenes"}</span>
         </button>
         {!isMapCachedState ? (
-          <button type="button" className="map-download-link" disabled={isDownloadingMap} onClick={handleDownloadMap}>
+          <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} onClick={handleDownloadMap}>
             <IconDownload className="btn-icon" />
-            {isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : "Descargar zona para trabajar offline"}
+            {isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona para trabajar offline" : "No hay coordenadas para descargar"}
           </button>
         ) : <span className="map-cached-tag"><IconCheck className="cached-icon" /> Mapa descargado</span>}
       </div>
+      {mapDownloadError ? <div className="map-warning-banner" role="alert">{mapDownloadError}</div> : null}
       {showMap ? <FieldMap orders={orders} selectedOrderId={nextOrder?.orderId ?? null} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} /> : null}
     </section>
   );
 }
 
-function MetricCard({ value, label, tone }: { value: number; label: string; tone: string }) {
-  return <div className={`metric-card metric-card--${tone}`}><strong>{value}</strong><span>{label}</span></div>;
+function DesktopRightRail({
+  state,
+  orders,
+  selectedOrderId,
+  store,
+}: {
+  state: AppState;
+  orders: WorkOrder[];
+  selectedOrderId: string | null;
+  store: AppStore;
+}) {
+  const pendingItems = state.syncItems.filter((item) => item.status !== "synced");
+  const recentItems = pendingItems.slice(0, 3);
+  const recentActivity = state.activity.slice(0, 3);
+
+  return (
+    <aside className="desktop-right-rail" aria-label="Resumen operativo">
+      <section className="desktop-rail-panel desktop-map-panel" aria-label="Mapa de órdenes">
+        <div className="desktop-rail-heading">
+          <div>
+            <span className="eyebrow">UBICACIONES</span>
+            <h2>Mapa de órdenes</h2>
+          </div>
+          <span className="section-count">{orders.length}</span>
+        </div>
+        <FieldMap orders={orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} />
+      </section>
+
+      <section className="desktop-rail-panel desktop-sync-summary" aria-label="Cola resumida de sincronización">
+        <div className="desktop-rail-heading">
+          <div>
+            <span className="eyebrow">PENDIENTES</span>
+            <h2>Cola de sincronización</h2>
+          </div>
+          <span className={pendingItems.length ? "queue-count queue-count--pending" : "queue-count"}>{pendingItems.length}</span>
+        </div>
+        {recentItems.length ? (
+          <div className="desktop-sync-list">
+            {recentItems.map((item) => (
+              <div className="desktop-sync-item" key={item.operationId}>
+                <div>
+                  <strong>{queueActionLabel(item.action)}</strong>
+                  <span>{state.orders.find((order) => order.orderId === item.orderId)?.context?.customerName ?? "Orden no disponible"}</span>
+                </div>
+                <span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span>
+              </div>
+            ))}
+          </div>
+        ) : <p className="desktop-rail-empty">Cola despejada.</p>}
+        <button type="button" className="desktop-rail-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>Ver cola completa <span>→</span></button>
+      </section>
+
+      <section className="desktop-rail-panel desktop-activity-summary" aria-label="Actividad reciente">
+        <div className="desktop-rail-heading">
+          <div>
+            <span className="eyebrow">TRAZABILIDAD LOCAL</span>
+            <h2>Actividad reciente</h2>
+          </div>
+        </div>
+        {recentActivity.length ? (
+          <div className="desktop-activity-list">
+            {recentActivity.map((entry) => (
+              <button type="button" className="desktop-activity-item" key={entry.record.operationId} onClick={() => { store.setTab("orders"); store.selectOrder(entry.record.orderId); }}>
+                <span className="desktop-activity-dot" aria-hidden="true" />
+                <span>
+                  <strong>{activityLabel(entry.record.kind)}</strong>
+                  <small>{formatDate(entry.record.recordedAt)} · {syncStatusLabel(entry.record.syncStatus)}</small>
+                </span>
+                <span aria-hidden="true">→</span>
+              </button>
+            ))}
+          </div>
+        ) : <p className="desktop-rail-empty">Sin actividad local registrada.</p>}
+      </section>
+    </aside>
+  );
+}
+
+function MetricCard({ value, label, tone, icon }: { value: number; label: string; tone: string; icon: ReactNode }) {
+  return <div className={`metric-card metric-card--${tone}`}><span className="metric-card__icon">{icon}</span><span className="metric-card__content"><strong>{value}</strong><span>{label}</span></span></div>;
 }
 
 function OrderFilters({ state, store, filters }: { state: AppState; store: AppStore; filters: Array<{ value: OrderFilter; label: string; count?: number }> }) {
@@ -412,34 +522,70 @@ function OrderFilters({ state, store, filters }: { state: AppState; store: AppSt
   );
 }
 
-function CurrentOrderCard({ order, mode, onOpen, onShowMap }: { order: WorkOrder; mode: ConnectivityMode; onOpen: () => void; onShowMap: () => void }) {
+function CurrentOrderCard({ order, position, total, onPrevious, onNext, onOpen, onShowMap, onMarkIncident }: { order: WorkOrder; position: number; total: number; onPrevious: () => void; onNext: () => void; onOpen: () => void; onShowMap: () => void; onMarkIncident: () => void }) {
   const context = order.context;
   const isReady = order.status === "GENERADO" && order.physicalStatus === "NONE";
-  const debtBs = context ? (context.debtCents / 100).toFixed(2) : "0.00";
+  const hasCoordinates = hasCadastralCoordinates(context);
+  const customerStatus = context?.supplyStatus === "A" ? "Activo" : context?.supplyStatus;
   return (
     <article className="current-order-card">
-      <div className="current-order-card__topline"><span className="current-label"><span className="current-pulse" aria-hidden="true" />Siguiente orden</span><span className={`status-badge status-badge--${orderStatusTone(order)}`}>{orderStatusLabel(order.status)}</span></div>
+      <div className="current-order-card__header">
+        <div className="current-order-card__heading">
+          <span className="current-order-card__icon"><IconDocument /></span>
+          <div><strong>Siguiente orden</strong><span>Esta es tu próxima orden para ejecutar.</span></div>
+        </div>
+        <div className="current-order-card__navigation" aria-label="Navegación de órdenes">
+          <button type="button" aria-label="Orden anterior" onClick={onPrevious} disabled={position <= 1}>‹</button>
+          <span>{position} de {total}</span>
+          <button type="button" aria-label="Orden siguiente" onClick={onNext} disabled={position >= total}>›</button>
+        </div>
+      </div>
       <div className="current-order-card__identity">
         <div>
-          <h2>{context?.customerName || order.orderId}</h2>
-          <p>{context?.accountId || order.accountId || "Cuenta no disponible"} · {context?.meterId || "Medidor no disponible"}</p>
+          <h2>{displayValue(context?.customerName || order.orderId)}</h2>
+          <p>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)} · CUC: {displayValue(order.cuc ? shortTechnicalId(order.cuc) : undefined)}</p>
         </div>
-        {order.cuc ? <span className="technical-id">CUC: {shortTechnicalId(order.cuc)}</span> : null}
+        <span className={`status-badge status-badge--${orderStatusTone(order)}`}>{isReady ? "Por ejecutar" : orderStatusLabel(order.status)}</span>
       </div>
-      <div className="current-order-card__location"><IconPin /><div><span>Ubicación</span><strong>{context?.address || "Dirección no especificada"}</strong><small>{context?.locality || "Localidad no disponible"} · {context?.route || "Ruta no disponible"}{context?.references ? ` · ${context.references}` : ""}</small></div></div>
-      <div className="current-order-card__financial"><div><span>Deuda</span><strong>Bs {debtBs}</strong></div><div><span>Facturas pendientes</span><strong>{context?.monthsPending ?? "—"}</strong></div><div><span>Estado</span><strong>{context?.supplyStatus || "No disponible"}</strong></div></div>
-      <div className="readiness-list" aria-label="Estado para registrar corte">
-        <span className={context?.address ? "readiness readiness--ready" : "readiness readiness--missing"}><b aria-hidden="true">{context?.address ? "✓" : "!"}</b>{context?.address ? "Suministro ubicado" : "Falta dirección"}</span>
-        <span className="readiness readiness--pending"><b aria-hidden="true">•</b>Ubicación se captura al registrar</span>
-        <span className="readiness readiness--pending"><b aria-hidden="true">•</b>Evidencia fotográfica pendiente</span>
-        <span className="readiness readiness--pending"><b aria-hidden="true">•</b>Medición final pendiente</span>
-        <span className={isReady ? "readiness readiness--pending" : "readiness readiness--ready"}><b aria-hidden="true">{isReady ? "•" : "✓"}</b>{isReady ? "Corte pendiente de registrar" : "Sin acción de corte pendiente"}</span>
-        <span className={`readiness readiness--${mode === "offline" ? "missing" : "ready"}`}><b aria-hidden="true">{mode === "offline" ? "!" : "✓"}</b>{mode === "offline" ? "Sin conexión" : "Conectividad disponible"}</span>
+      <div className="current-order-card__data-grid">
+        <div className="current-order-card__data-column">
+          <OrderDataRow icon={<IconPin />} label="Dirección" value={context?.address} emphasis />
+          <OrderDataRow icon={<IconRoute />} label="Ruta" value={context?.route} />
+          <OrderDataRow icon={<IconDocument />} label="Referencia" value={context?.references} />
+          <OrderDataRow icon={<IconPhone />} label="Teléfono" value={context?.contactPhone} />
+        </div>
+        <div className="current-order-card__data-column">
+          <OrderDataRow icon={<IconDatabase />} label="Deuda" value={formatDebt(context?.debtCents)} emphasis="debt" />
+          <OrderDataRow icon={<IconDocument />} label="Facturas pendientes" value={context?.monthsPending} />
+          <OrderDataRow icon={<IconCheckCircle />} label="Estado del cliente" value={customerStatus} status={customerStatus === "Activo" ? "ready" : undefined} />
+        </div>
+        <div className="current-order-card__data-column">
+          <OrderDataRow icon={<IconPin />} label="Distancia aproximada" value={undefined} />
+          <OrderDataRow icon={<IconCrosshair />} label="GPS" value={hasCoordinates ? "Listo" : undefined} status={hasCoordinates ? "ready" : undefined} />
+        </div>
       </div>
-      <div className="current-order-card__actions"><button type="button" className="primary-action" onClick={onOpen}>{isReady ? "Registrar corte" : "Abrir orden"}<span>→</span></button><button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver ubicación</button></div>
-      <div className="technical-id current-order-card__technical">Orden: {shortTechnicalId(order.orderId)} · actualizado {formatDate(context?.updatedAt)}</div>
+      <div className="current-order-card__readiness" aria-label="Estado para registrar corte">
+        <ReadinessItem ready={hasCoordinates} label={hasCoordinates ? "GPS listo" : "GPS no disponible"} detail={hasCoordinates ? "Coordenadas cargadas" : "Dato no disponible"} />
+        <ReadinessItem ready={hasCoordinates} label={hasCoordinates ? "Ubicación disponible" : "Ubicación no disponible"} detail={hasCoordinates ? "Punto de suministro identificado" : "Dato no disponible"} />
+        <ReadinessItem ready={!isReady} label={isReady ? "Pendiente registrar corte" : "Corte registrado"} detail={isReady ? "Ejecuta el corte y registra la evidencia" : "No hay acción pendiente"} warning={isReady} />
+      </div>
+      <div className="current-order-card__actions">
+        <button type="button" className="primary-action" onClick={onOpen}><IconScissors />{isReady ? "Registrar corte" : "Abrir orden"}<span>→</span></button>
+        <button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver ubicación</button>
+        <button type="button" className="secondary-action" onClick={onOpen}><IconDocument /> Ver detalle <span>→</span></button>
+        <button type="button" className="secondary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button>
+      </div>
     </article>
   );
+}
+
+function OrderDataRow({ icon, label, value, emphasis, status }: { icon: ReactNode; label: string; value?: string | number; emphasis?: boolean | "debt"; status?: "ready" }) {
+  const renderedValue = value === undefined || value === "" ? "Dato no disponible" : value;
+  return <div className="current-order-card__data-row"><span className="current-order-card__data-icon">{icon}</span><div><span>{label}</span>{status === "ready" ? <strong className="current-order-card__data-status">{renderedValue}</strong> : <strong className={emphasis ? `current-order-card__data-value--${emphasis === "debt" ? "debt" : "primary"}` : undefined}>{renderedValue}</strong>}</div></div>;
+}
+
+function ReadinessItem({ ready, label, detail, warning = false }: { ready: boolean; label: string; detail: string; warning?: boolean }) {
+  return <div className={`current-order-card__readiness-item ${ready ? "current-order-card__readiness-item--ready" : "current-order-card__readiness-item--pending"}`}><span className={warning ? "current-order-card__readiness-icon current-order-card__readiness-icon--warning" : "current-order-card__readiness-icon"} aria-hidden="true">{ready ? "✓" : "!"}</span><div><strong>{label}</strong><span>{detail}</span></div></div>;
 }
 
 function OrderCard({
@@ -513,6 +659,7 @@ function OrderDetail({
   store,
   enableReconnection,
   technicianName,
+  initialAction,
   onBack,
 }: {
   order: WorkOrder;
@@ -520,10 +667,15 @@ function OrderDetail({
   store: AppStore;
   enableReconnection: boolean;
   technicianName?: string;
+  initialAction?: ActionKind | null;
   onBack: () => void;
 }) {
-  const [draft, setDraft] = useState<ActionKind | null>(null);
+  const [draft, setDraft] = useState<ActionKind | null>(initialAction ?? null);
   const isCancelled = order.status === "ANULADO";
+
+  useEffect(() => {
+    if (initialAction) setDraft(initialAction);
+  }, [initialAction]);
 
   return (
     <section className="detail-panel panel detail-panel--fullscreen" aria-label={`Detalle de ${order.orderId}`}>
@@ -718,7 +870,7 @@ function ActionForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (kind !== "VISIT" && !file && !useException) return setFormError("Adjunte un archivo JPEG/PNG o marque excepción.");
+    if (!file && !useException) return setFormError("Adjunte un archivo JPEG/PNG o marque excepción.");
     if (useException && !exceptionReason.trim()) return setFormError("Escriba una justificación para la excepción.");
     if (kind === "CUT") {
       const parsedReading = Number(reading);
@@ -1042,6 +1194,27 @@ function activityException(record: import("../ports").StoredRecord): string | un
 function shortHash(hash?: string): string {
   return hash ? `${hash.slice(0, 10)}…` : "disponible";
 }
+export function sortOrdersForNext(orders: readonly WorkOrder[]): WorkOrder[] {
+  return [...orders].sort((left, right) => orderPriority(left) - orderPriority(right));
+}
+function orderPriority(order: WorkOrder): number {
+  if (order.status === "GENERADO" && order.physicalStatus === "NONE") return 0;
+  if (order.physicalStatus === "PHYSICAL_UNKNOWN") return 1;
+  if (order.status === "EJECUTADO" || order.status === "RECONEXIÓN") return 2;
+  return 3;
+}
+function hasCadastralCoordinates(context?: WorkOrder["context"]): boolean {
+  return typeof context?.cadastralLatitude === "number"
+    && Number.isFinite(context.cadastralLatitude)
+    && typeof context.cadastralLongitude === "number"
+    && Number.isFinite(context.cadastralLongitude);
+}
+function displayValue(value?: string | number): string | number {
+  return value === undefined || value === "" ? "Dato no disponible" : value;
+}
+function formatDebt(cents?: number): string | undefined {
+  return cents === undefined ? undefined : `Bs ${(cents / 100).toFixed(2)}`;
+}
 function orderStatusLabel(status: WorkOrder["status"]): string {
   return status === "GENERADO"
     ? "Por ejecutar"
@@ -1176,7 +1349,7 @@ function formatLastUpdate(value?: string, nowMs = Date.now()): { relative: strin
 
   const diffSec = Math.floor(Math.max(0, nowMs - time) / 1000);
   if (diffSec < 45) {
-    return { relative: "Hace instantes", exact };
+    return { relative: "hace instantes", exact };
   }
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 60) {
