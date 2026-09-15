@@ -7169,9 +7169,53 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
 .field-app .map-page__tools {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid #eadfce;
+  border-radius: var(--radius-8);
+  background: #fffdf9;
+}
+
+.field-app .map-page__download {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: var(--space-12);
-  flex-wrap: wrap;
+}
+
+.field-app .map-page__download-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.field-app .map-page__tools .map-download-link {
+  display: inline-flex;
+  min-height: 40px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 0 var(--space-12);
+  border: 1px solid #e5ab7c;
+  border-radius: var(--radius-8);
+  color: #9a4d17;
+  background: #fff8ee;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
+.field-app .map-page__tools .map-download-link:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: #7e421c;
+  background: #fff0e4;
+}
+
+.field-app .map-page__tools .map-download-link:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .field-app .map-page__error {
@@ -7187,6 +7231,19 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   border-radius: var(--radius-full);
   color: #2f8056;
   background: #edf8ef;
+}
+
+.field-app .map-page__surface .field-map-legend {
+  top: var(--space-16);
+  right: var(--space-16);
+  bottom: auto;
+  z-index: 400;
+}
+
+.field-app .map-page__surface .field-map-container--fullscreen .field-map-legend {
+  top: auto;
+  right: var(--space-24);
+  bottom: 80px;
 }
 
 .field-app .bottom-navigation__item:focus-visible,
@@ -7385,6 +7442,41 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
   .field-app .map-page__surface .field-map-canvas {
     height: 400px;
+  }
+
+  .field-app .map-page__tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .field-app .map-page__download {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .field-app .map-page__tools .map-download-link,
+  .field-app .map-page__download-hint {
+    width: 100%;
+  }
+
+  .field-app .map-page__tools .map-download-link {
+    justify-content: center;
+  }
+
+  .field-app .map-page__surface .field-map-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .field-app .map-page__surface .field-map-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .field-app .map-page__surface .field-map-buttons > button {
+    width: 100%;
+    min-width: 0;
   }
 }
 
@@ -7942,9 +8034,15 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 
   .field-app .header-top-actions {
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-8);
-    flex-wrap: nowrap;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .field-app .header-top-actions > * {
+    width: auto;
   }
 
   .field-app .header-top-actions .logout-button {
@@ -7952,12 +8050,18 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 
   .field-app .network-status-badge {
+    display: inline-flex;
+    width: max-content;
+    flex: 0 0 auto;
     min-height: 28px;
     padding: 0 var(--space-8);
+    border-radius: var(--radius-6);
     font-size: 11px;
   }
 
   .field-app .header-top-actions .last-update {
+    min-width: 0;
+    flex: 1 1 auto;
     width: auto;
     font-size: 10px;
   }

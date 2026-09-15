@@ -305,8 +305,14 @@ function Workbench({
 function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; store: AppStore; orders: WorkOrder[]; onOpenIncident: (orderId: string) => void }) {
   const filteredOrders = selectVisibleOrders(state);
   const focusOrders = state.query.trim() || state.filter !== "ALL" ? sortOrdersForNext(filteredOrders) : orders;
-  const currentOrder = focusOrders[0];
-  const currentIndex = currentOrder ? orders.findIndex((order) => order.orderId === currentOrder.orderId) : -1;
+  const [focusedOrderId, setFocusedOrderId] = useState<string>();
+  const currentOrder = focusOrders.find((order) => order.orderId === focusedOrderId) ?? focusOrders[0];
+  const currentIndex = currentOrder ? focusOrders.findIndex((order) => order.orderId === currentOrder.orderId) : -1;
+
+  useEffect(() => {
+    const nextFocusedOrderId = currentOrder?.orderId;
+    if (focusedOrderId !== nextFocusedOrderId) setFocusedOrderId(nextFocusedOrderId);
+  }, [currentOrder, focusedOrderId]);
 
   const openOrder = (orderId: string) => {
     store.setTab("orders");
@@ -327,9 +333,9 @@ function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; 
           orders={orders}
           mode={state.mode}
           position={currentIndex + 1}
-          total={orders.length}
-          onPrevious={() => openOrder(orders[Math.max(0, currentIndex - 1)].orderId)}
-          onNext={() => openOrder(orders[Math.min(orders.length - 1, currentIndex + 1)].orderId)}
+          total={focusOrders.length}
+          onPrevious={() => setFocusedOrderId(focusOrders[currentIndex - 1]?.orderId)}
+          onNext={() => setFocusedOrderId(focusOrders[currentIndex + 1]?.orderId)}
           onOpen={() => openOrder(currentOrder.orderId)}
           onShowMap={() => openMap(currentOrder.orderId)}
           onMarkIncident={() => onOpenIncident(currentOrder.orderId)}
@@ -445,7 +451,7 @@ function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
     catch (error) { setMapDownloadError(error instanceof Error ? error.message : "No pudimos descargar el mapa para trabajo offline."); }
     finally { setIsDownloadingMap(false); setDownloadProgress(null); }
   };
-  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
+  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools"><div className="map-page__download">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} aria-busy={isDownloadingMap} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}<span className="map-page__download-hint">{isMapCachedState ? "Disponible sin conexión en este dispositivo." : "Guarda esta zona antes de salir a terreno."}</span></div>{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
 }
 
 function DesktopRightRail({

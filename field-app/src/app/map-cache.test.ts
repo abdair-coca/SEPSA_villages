@@ -1,12 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   computeTilesForBox,
+  downloadRouteMap,
   getOrdersBoundingBox,
+  getRouteStorageKey,
   lat2tile,
   lon2tile,
   type RouteBoundingBox,
 } from "./map-cache";
+import { createDemoPackage } from "./runtime";
 import type { WorkOrder } from "../domain";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("map-cache utilities", () => {
   it("computes tile coordinates from lon/lat accurately", () => {
@@ -191,5 +198,24 @@ describe("map-cache utilities", () => {
     }];
 
     expect(getOrdersBoundingBox(orders)).toBeNull();
+  });
+
+  it("does not mark route cached when tile download is incomplete", async () => {
+    const orders = createDemoPackage("2026-09-12T10:00:00.000Z").orders;
+    const storage = new Map<string, string>();
+    const cache = {
+      match: async () => undefined,
+      put: async () => undefined,
+    };
+
+    vi.stubGlobal("caches", { open: async () => cache });
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false })));
+
+    await expect(downloadRouteMap(orders)).rejects.toThrow("Solo se descargaron");
+    expect(storage.get(getRouteStorageKey(orders))).toBeUndefined();
   });
 });

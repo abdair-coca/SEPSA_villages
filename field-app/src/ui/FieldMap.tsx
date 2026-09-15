@@ -66,6 +66,8 @@ export function FieldMap({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstanceRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leafletRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const techMarkerRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
   const fullscreenCloseRef = useRef<HTMLButtonElement>(null);
@@ -83,6 +85,7 @@ export function FieldMap({
       const L = LModule.default ?? LModule;
       await import("leaflet/dist/leaflet.css");
       if (!active || !mapContainerRef.current) return;
+      leafletRef.current = L;
 
       // Extraer coordenadas de las órdenes asignadas
       const orderPoints: Array<{ lat: number; lng: number; order: WorkOrder }> = [];
@@ -248,6 +251,7 @@ export function FieldMap({
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
+      leafletRef.current = null;
     };
   }, [orders, selectedOrderId, onSelectOrder, mode, technicianLocation, Boolean(liveLocation)]);
 
@@ -358,8 +362,7 @@ export function FieldMap({
     });
 
     if (points.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const L = (window as any).L;
+      const L = leafletRef.current;
       if (L) {
         const bounds = L.latLngBounds(points);
         mapInstanceRef.current.fitBounds(bounds.pad(0.18), { maxZoom: 16 });

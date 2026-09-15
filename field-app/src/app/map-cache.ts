@@ -137,6 +137,7 @@ export async function downloadRouteMap(
 
   const tiles = computeTilesForBox(box, 14, 16);
   const cache = await caches.open(MAP_CACHE_NAME);
+  let processed = 0;
   let downloaded = 0;
   const total = tiles.length;
 
@@ -153,17 +154,24 @@ export async function downloadRouteMap(
             const res = await fetch(tile.url, { mode: "cors" });
             if (res.ok) {
               await cache.put(tile.url, res);
+              downloaded++;
             }
+          } else {
+            downloaded++;
           }
         } catch {
           // Ignorar fallas individuales de tiles no encontrados o de red
         } finally {
-          downloaded++;
-          const percent = Math.round((downloaded / total) * 100);
+          processed++;
+          const percent = Math.round((processed / total) * 100);
           onProgress?.({ downloaded, total, percent });
         }
       })
     );
+  }
+
+  if (downloaded < total) {
+    throw new Error(`Solo se descargaron ${downloaded} de ${total} mapas. Reintentá con conexión estable.`);
   }
 
   const key = getRouteStorageKey(orders);

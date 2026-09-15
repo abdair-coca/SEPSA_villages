@@ -101,6 +101,7 @@ describe("FieldApp SSR shell", () => {
 
     store.setTab("map");
     expect(html(store)).toContain("ruta de campo");
+    expect(html(store)).toContain("descargar zona offline");
     store.setTab("orders");
     expect(html(store)).toContain("bandeja asignada");
   });
