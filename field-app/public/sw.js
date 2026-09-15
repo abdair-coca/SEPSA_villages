@@ -1,4 +1,4 @@
-const CACHE_PREFIX = "sepsa-field-shell-v2-";
+const CACHE_PREFIX = "sepsa-field-shell-v3-";
 const LEGACY_CACHE_PREFIX = "sepsa-field-shell-";
 const META_CACHE = `${CACHE_PREFIX}meta`;
 const ACTIVE_CACHE_KEY = "/__sepsa_active_cache__";
@@ -15,7 +15,8 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+  if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/v1/") || url.pathname === "/healthz") return;
   event.respondWith(request.mode === "navigate" ? serveNavigation(request) : serveStatic(request));
 });
 
