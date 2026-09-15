@@ -125,12 +125,10 @@ export function FieldApp({
     <div className="field-app">
       <Header
         state={state}
-        store={store}
         isProbingNetwork={isProbingNetwork}
         onRetryConnection={handleRetryConnection}
         isRefreshingAssigned={isRefreshingAssigned}
         onRefreshAssigned={() => void handleRefreshAssigned()}
-        onSync={() => void store.sync()}
         technicianId={technicianId}
         technicianName={technicianName}
         deviceId={deviceId}
@@ -164,24 +162,20 @@ export function FieldApp({
 
 function Header({
   state,
-  store,
   isProbingNetwork,
   onRetryConnection,
   isRefreshingAssigned,
   onRefreshAssigned,
-  onSync,
   technicianId,
   technicianName,
   deviceId,
   onLogout,
 }: {
   state: AppState;
-  store: AppStore;
   isProbingNetwork: boolean;
   onRetryConnection: () => void;
   isRefreshingAssigned: boolean;
   onRefreshAssigned?: () => void;
-  onSync: () => void;
   technicianId: string;
   technicianName?: string;
   deviceId: string;
@@ -193,14 +187,14 @@ function Header({
   return (
     <header className="app-header">
       <div className="identity-block">
-        <div className="eyebrow">SEPSA · CAMPO</div>
+        <div className="field-brand"><strong>SEPSA</strong><span>CAMPO</span></div>
         <h1>Jornada de campo</h1>
         <p className="identity">Órdenes asignadas, ejecución de cortes y sincronización en terreno.</p>
         <div className="header-context">
           <span>Técnico:</span>
           <strong>{technicianName ?? technicianId}</strong>
-          <span className="header-context__separator" aria-hidden="true">|</span>
-          <span>Dispositivo: {shortTechnicalId(deviceId)}</span>
+           <span className="header-context__separator" aria-hidden="true">|</span>
+           <span className="header-device">Dispositivo: {shortTechnicalId(deviceId)}</span>
         </div>
       </div>
       <div className="header-meta">
@@ -232,14 +226,8 @@ function Header({
             <IconDownload />
             <span>{isRefreshingAssigned ? "Actualizando…" : "Actualizar bandeja"}</span>
           </button>
-          {pendingCount(state.syncItems) ? (
-            <button type="button" className="header-sync-button" onClick={onSync} disabled={!isUsable(state.mode) || Boolean(state.busyAction)}>
-              {state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar ahora"}
-            </button>
-          ) : null}
         </div>
       </div>
-      <OperationalStrip state={state} store={store} />
     </header>
   );
 }
@@ -268,140 +256,195 @@ function Workbench({
     store.selectOrder(orderId);
   };
 
+  const prioritizedOrders = sortOrdersForNext(state.orders);
+  const navigate = (tab: "home" | "orders" | "map" | "queue") => {
+    setPendingAction(null);
+    store.selectOrder(null);
+    store.setTab(tab);
+  };
+  const content = state.tab === "orders"
+    ? selectedOrder ? (
+      <OrderDetail
+        order={selectedOrder}
+        state={state}
+        store={store}
+        enableReconnection={enableReconnection}
+        technicianName={technicianName}
+        initialAction={pendingAction?.orderId === selectedOrder.orderId ? pendingAction.kind : null}
+        onBack={() => { setPendingAction(null); store.selectOrder(null); }}
+      />
+    ) : (
+      <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} />
+    )
+    : state.tab === "map"
+      ? <MapPanel state={state} store={store} />
+      : state.tab === "queue"
+        ? <QueuePanel state={state} store={store} />
+        : <FieldHome state={state} store={store} orders={prioritizedOrders} onOpenIncident={openIncident} />;
+
   return (
     <main className="workbench">
-      {state.tab === "orders" ? (
-        selectedOrder ? (
-            <OrderDetail
-              order={selectedOrder}
-              state={state}
-              store={store}
-              enableReconnection={enableReconnection}
-              technicianName={technicianName}
-              initialAction={pendingAction?.orderId === selectedOrder.orderId ? pendingAction.kind : null}
-              onBack={() => { setPendingAction(null); store.selectOrder(null); }}
-            />
-          ) : (
-          <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} onMarkIncident={openIncident} />
-        )
-      ) : (
-        <QueuePanel state={state} store={store} />
-      )}
+      {content}
+      <BottomNavigation activeTab={state.tab} onNavigate={navigate} pending={pendingCount(state.syncItems)} />
     </main>
   );
 }
 
-function OperationalStrip({ state, store }: { state: AppState; store: AppStore }) {
-  const pending = pendingCount(state.syncItems);
-  if (!pending) return null;
+function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; store: AppStore; orders: WorkOrder[]; onOpenIncident: (orderId: string) => void }) {
+  const filteredOrders = selectVisibleOrders(state);
+  const focusOrders = state.query.trim() || state.filter !== "ALL" ? sortOrdersForNext(filteredOrders) : orders;
+  const currentOrder = focusOrders[0];
+  const currentIndex = currentOrder ? orders.findIndex((order) => order.orderId === currentOrder.orderId) : -1;
+  const nextOrder = currentIndex >= 0 ? orders[currentIndex + 1] : undefined;
+
+  const openOrder = (orderId: string) => {
+    store.setTab("orders");
+    store.selectOrder(orderId);
+  };
+  const openMap = (orderId?: string) => {
+    if (orderId) store.selectOrder(null);
+    store.setTab("map");
+  };
+
   return (
-    <section className="operational-strip sync-banner sync-banner--pending" aria-label="Estado de sincronización">
-      <button type="button" className="sync-banner__summary" aria-label="Ver cola de sincronización" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>
-        <span className="queue-count queue-count--pending">{pending}</span>
+    <section className="field-home" aria-label="Inicio de jornada">
+      <div className="home-intro">
         <div>
-          <strong>{`${pending} operación${pending === 1 ? "" : "es"} pendiente${pending === 1 ? "" : "s"}`}</strong>
-          <span>Guardadas en este dispositivo hasta recibir confirmación.</span>
+          <span className="eyebrow">JORNADA EN TERRENO</span>
+          <h2>Tu siguiente visita, clara desde el primer vistazo.</h2>
         </div>
-      </button>
+        <span className="home-date">Hoy · {orders.length} {orders.length === 1 ? "orden" : "órdenes"}</span>
+      </div>
+
+      <OperationalSummary state={state} />
+
+      {currentOrder ? (
+        <div className="home-layout">
+          <div className="home-primary-column">
+            <CurrentOrderCard
+              order={currentOrder}
+              position={currentIndex + 1}
+              total={orders.length}
+              onPrevious={() => openOrder(orders[Math.max(0, currentIndex - 1)].orderId)}
+              onNext={() => openOrder(orders[Math.min(orders.length - 1, currentIndex + 1)].orderId)}
+              onOpen={() => openOrder(currentOrder.orderId)}
+              onShowMap={() => openMap(currentOrder.orderId)}
+              onMarkIncident={() => onOpenIncident(currentOrder.orderId)}
+            />
+            <NextOrderCard order={nextOrder} onOpen={nextOrder ? () => openOrder(nextOrder.orderId) : undefined} />
+          </div>
+          <HomeMapPreview state={state} order={currentOrder} orders={orders} onOpenMap={() => openMap(currentOrder.orderId)} />
+        </div>
+      ) : (
+        <EmptyOrders hasAnyOrders={state.orders.length > 0} onRefresh={() => void store.refresh()} onShowMap={() => openMap()} />
+      )}
+
+      <HomeSecondaryCards state={state} store={store} />
+      {currentOrder ? <StickyActions order={currentOrder} onOpen={() => openOrder(currentOrder.orderId)} onShowMap={() => openMap(currentOrder.orderId)} /> : null}
     </section>
   );
 }
 
-function OrdersPanel({ state, orders, store, onRefreshAssigned, onMarkIncident }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void; onMarkIncident: (orderId: string) => void }) {
+function OperationalSummary({ state }: { state: AppState }) {
+  const summary = [
+    { label: "Por ejecutar", value: state.orders.filter((order) => order.status === "GENERADO" && order.physicalStatus === "NONE"), tone: "attention" },
+    { label: "En revisión", value: state.orders.filter((order) => order.physicalStatus === "PHYSICAL_UNKNOWN"), tone: "review" },
+    { label: "Ejecutadas", value: state.orders.filter((order) => order.status === "EJECUTADO"), tone: "success" },
+    { label: "Anuladas", value: state.orders.filter((order) => order.status === "ANULADO"), tone: "muted" },
+    { label: "En cola", value: state.syncItems.filter((item) => item.status !== "synced"), tone: "queue" },
+  ];
+  return (
+    <section className="operational-summary" aria-label="Resumen operativo">
+      <div className="operational-summary__heading"><span>Resumen de jornada</span><span className="operational-summary__live"><i /> Actualizado</span></div>
+      <div className="operational-summary__grid">
+        {summary.map((item) => <div className={`operational-summary__item operational-summary__item--${item.tone}`} key={item.label}><strong>{item.value.length}</strong><span>{item.label}</span></div>)}
+      </div>
+    </section>
+  );
+}
+
+function HomeMapPreview({ state, order, orders, onOpenMap }: { state: AppState; order: WorkOrder; orders: WorkOrder[]; onOpenMap: () => void }) {
+  return (
+    <section className="home-map-card" aria-label="Mapa de la orden actual">
+      <div className="home-map-card__heading">
+        <div><span className="eyebrow">UBICACIÓN</span><h2>Encuentra el suministro</h2><p>Vista rápida de tu zona de trabajo.</p></div>
+        <span className="home-map-card__count">{orders.length} {orders.length === 1 ? "punto" : "puntos"}</span>
+      </div>
+      <FieldMap orders={orders} selectedOrderId={order.orderId} onSelectOrder={() => undefined} mode={state.mode} compact />
+      <div className="home-map-card__footer"><span><IconPin /> {order.context?.address || "Dirección no disponible"}</span><button type="button" onClick={onOpenMap}>Abrir mapa <span aria-hidden="true">→</span></button></div>
+    </section>
+  );
+}
+
+function NextOrderCard({ order, onOpen }: { order?: WorkOrder; onOpen?: () => void }) {
+  return (
+    <section className="next-order-card" aria-label="Siguiente orden">
+      <div className="next-order-card__icon"><IconRoute /></div>
+      <div className="next-order-card__content">
+        <span className="eyebrow">SIGUIENTE ORDEN</span>
+        <strong>{order?.context?.customerName || "No hay más órdenes en tu jornada."}</strong>
+        <span>{order ? `${order.context?.address || "Dirección no disponible"} · ${fieldOrderStatusLabel(order)}` : "Puedes revisar la bandeja completa cuando lo necesites."}</span>
+      </div>
+      {order && onOpen ? <button type="button" onClick={onOpen} aria-label={`Abrir orden de ${order.context?.customerName || order.orderId}`}>Abrir <span aria-hidden="true">→</span></button> : null}
+    </section>
+  );
+}
+
+function HomeSecondaryCards({ state, store }: { state: AppState; store: AppStore }) {
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const pendingItems = state.syncItems.filter((item) => item.status !== "synced");
+  const recentActivity = activityOpen ? state.activity : state.activity.slice(0, 3);
+  return (
+    <section className="home-secondary-grid desktop-sync-activity-panel" aria-label="Actividad y sincronización">
+      <CollapsibleCard open={syncOpen} onToggle={() => setSyncOpen((value) => !value)} icon={<IconRefresh />} title="Cola de sincronización" meta={`${pendingItems.length} pendientes`} hint={pendingItems.length ? "Operaciones guardadas en este dispositivo." : "No hay operaciones pendientes."}>
+        <p>{pendingItems.length ? "Operaciones guardadas en este dispositivo." : "No hay operaciones pendientes."}</p>
+        {pendingItems.length ? <button type="button" className="home-secondary-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>Ver cola completa <span aria-hidden="true">→</span></button> : null}
+      </CollapsibleCard>
+      <CollapsibleCard open={activityOpen} onToggle={() => setActivityOpen((value) => !value)} icon={<IconClock />} title="Actividad reciente" meta={`${state.activity.length} eventos`} hint="Sin actividad local registrada.">
+        {recentActivity.length ? <div className="home-activity-list">{recentActivity.map((entry) => <button type="button" className="home-activity-item" key={entry.record.operationId} onClick={() => { store.setTab("orders"); store.selectOrder(entry.record.orderId); }}><i /><span><strong>{activityLabel(entry.record.kind)}</strong><small>{formatActivityTime(entry.record.recordedAt)}</small></span></button>)}</div> : <p>Sin actividad local registrada.</p>}
+        <button type="button" className="home-secondary-link" onClick={() => setActivityOpen(true)}>Ver todas <span aria-hidden="true">→</span></button>
+      </CollapsibleCard>
+    </section>
+  );
+}
+
+function CollapsibleCard({ open, onToggle, icon, title, meta, hint, children }: { open: boolean; onToggle: () => void; icon: ReactNode; title: string; meta: string; hint: string; children: ReactNode }) {
+  return (
+    <section className={`collapsible-card${open ? " collapsible-card--open" : ""}`}>
+      <button type="button" className="collapsible-card__summary" onClick={onToggle} aria-expanded={open}>
+        <span className="collapsible-card__icon">{icon}</span><span className="collapsible-card__title"><strong>{title}</strong><small>{hint}</small><em>{meta}</em></span><span className="collapsible-card__chevron" aria-hidden="true">⌄</span>
+      </button>
+      {open ? <div className="collapsible-card__body">{children}</div> : null}
+    </section>
+  );
+}
+
+function StickyActions({ order, onOpen, onShowMap }: { order: WorkOrder; onOpen: () => void; onShowMap: () => void }) {
+  const canCut = order.status === "GENERADO" && order.physicalStatus === "NONE";
+  return <div className="sticky-actions" aria-label="Acciones de la orden actual"><button type="button" className="sticky-actions__primary" onClick={onOpen} disabled={!canCut}><IconScissors />{canCut ? "Registrar corte" : "Orden sin acción"}<span aria-hidden="true">→</span></button><button type="button" className="sticky-actions__secondary" onClick={onShowMap}><IconMap /><span>Ubicación</span></button><button type="button" className="sticky-actions__secondary" onClick={onOpen}><IconDocument /><span>Detalle</span></button></div>;
+}
+
+function BottomNavigation({ activeTab, onNavigate, pending }: { activeTab: AppState["tab"]; onNavigate: (tab: "home" | "orders" | "map" | "queue") => void; pending: number }) {
+  const items = [
+    { tab: "home" as const, label: "Inicio", icon: <IconRoute /> },
+    { tab: "orders" as const, label: "Mis órdenes", icon: <IconDocument /> },
+    { tab: "map" as const, label: "Mapa", icon: <IconMap /> },
+  ];
+  return <nav className="bottom-navigation" aria-label="Navegación principal">{items.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "bottom-navigation__item bottom-navigation__item--active" : "bottom-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "orders" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</nav>;
+}
+
+function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void }) {
   const ordersPerPage = 5;
-  const [showMap, setShowMap] = useState(false);
-  const [mapFullscreenTarget, setMapFullscreenTarget] = useState<"rail" | "inline" | null>(null);
   const [ordersPage, setOrdersPage] = useState(1);
-  const [nextOrderId, setNextOrderId] = useState<string>();
-  const [isMapCachedState, setIsMapCachedState] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<CacheProgress | null>(null);
-  const [isDownloadingMap, setIsDownloadingMap] = useState(false);
-  const [mapDownloadError, setMapDownloadError] = useState<string>();
-  const isMapFullscreen = mapFullscreenTarget !== null;
-  const hasMapCoordinates = state.orders.some((order) => (
-    typeof order.context?.cadastralLatitude === "number" &&
-    typeof order.context?.cadastralLongitude === "number" &&
-    Number.isFinite(order.context.cadastralLatitude) &&
-    Number.isFinite(order.context.cadastralLongitude)
-  ));
-
-  useEffect(() => {
-    let active = true;
-    void isRouteMapCached(state.orders).then((cached) => {
-      if (active) setIsMapCachedState(cached);
-    });
-    return () => {
-      active = false;
-    };
-  }, [state.orders]);
-
-  const handleDownloadMap = async () => {
-    setIsDownloadingMap(true);
-    setMapDownloadError(undefined);
-    try {
-      await downloadRouteMap(state.orders, (progress) => {
-        setDownloadProgress(progress);
-      });
-      setIsMapCachedState(true);
-    } catch (error) {
-      setMapDownloadError(error instanceof Error ? error.message : "No pudimos descargar el mapa para trabajo offline.");
-    } finally {
-      setIsDownloadingMap(false);
-      setDownloadProgress(null);
-    }
-  };
-
-  const generatedCount = state.orders.filter((o) => o.status === "GENERADO").length;
-  const executedCount = state.orders.filter((o) => o.status === "EJECUTADO").length;
-  const cancelledCount = state.orders.filter((o) => o.status === "ANULADO").length;
-  const reviewCount = state.orders.filter((o) => o.physicalStatus === "PHYSICAL_UNKNOWN").length;
-  const prioritizedOrders = sortOrdersForNext(orders);
+  const generatedCount = state.orders.filter((order) => order.status === "GENERADO").length;
+  const executedCount = state.orders.filter((order) => order.status === "EJECUTADO").length;
+  const cancelledCount = state.orders.filter((order) => order.status === "ANULADO").length;
+  const reviewCount = state.orders.filter((order) => order.physicalStatus === "PHYSICAL_UNKNOWN").length;
   const ordersPageCount = Math.max(1, Math.ceil(orders.length / ordersPerPage));
-  const ordersPageStart = (ordersPage - 1) * ordersPerPage;
-  const pageOrders = orders.slice(ordersPageStart, ordersPageStart + ordersPerPage);
-  const firstVisibleOrder = orders.length ? ordersPageStart + 1 : 0;
-  const lastVisibleOrder = Math.min(ordersPageStart + pageOrders.length, orders.length);
-  const nextOrder = prioritizedOrders.find((order) => order.orderId === nextOrderId) ?? prioritizedOrders[0];
-  const nextOrderIndex = nextOrder ? prioritizedOrders.findIndex((order) => order.orderId === nextOrder.orderId) : -1;
-
-  useEffect(() => {
-    setNextOrderId((current) => current && prioritizedOrders.some((order) => order.orderId === current) ? current : prioritizedOrders[0]?.orderId);
-  }, [state.orders, state.query, state.filter]);
-
-  useEffect(() => {
-    setOrdersPage(1);
-  }, [state.query, state.filter]);
-
-  useEffect(() => {
-    setOrdersPage((page) => Math.min(page, ordersPageCount));
-  }, [orders.length, ordersPageCount]);
-
-  useEffect(() => {
-    if (!mapFullscreenTarget || typeof document === "undefined") return;
-    const previousOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMapFullscreenTarget(null);
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [mapFullscreenTarget]);
-
-  const openMapFullscreen = (target: "rail" | "inline") => {
-    setShowMap(true);
-    setMapFullscreenTarget(target);
-  };
-
-  function moveNextOrder(direction: -1 | 1): void {
-    if (nextOrderIndex < 0) return;
-    const target = prioritizedOrders[nextOrderIndex + direction];
-    if (target) setNextOrderId(target.orderId);
-  }
-
+  const pageOrders = orders.slice((ordersPage - 1) * ordersPerPage, ordersPage * ordersPerPage);
+  const firstVisibleOrder = orders.length ? (ordersPage - 1) * ordersPerPage + 1 : 0;
+  const lastVisibleOrder = Math.min(ordersPage * ordersPerPage, orders.length);
   const filters: Array<{ value: OrderFilter; label: string; count?: number }> = [
     { value: "ALL", label: "Todas", count: state.orders.length },
     { value: "GENERADO", label: "Por ejecutar", count: generatedCount },
@@ -409,92 +452,36 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned, onMarkIncident }
     { value: "ANULADO", label: "Anuladas", count: cancelledCount },
     { value: "REVIEW", label: "Revisión", count: reviewCount },
   ];
+  useEffect(() => { setOrdersPage(1); }, [state.query, state.filter]);
+  useEffect(() => { setOrdersPage((page) => Math.min(page, ordersPageCount)); }, [orders.length, ordersPageCount]);
+  return <section className="orders-panel orders-tray" aria-label="Mis órdenes"><div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div><OrderFilters state={state} store={store} filters={filters} /><div className="order-cards-list">{pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => store.selectOrder(order.orderId)} />)}{!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}</div><div className="order-pagination" aria-label="Paginación de órdenes"><span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span><div className="order-pagination__controls"><button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button><span>Página {ordersPage} de {ordersPageCount}</span><button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button></div></div>{!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}</section>;
+}
 
-  return (
-    <section className="orders-panel" aria-label="Órdenes asignadas">
-      <div className="metric-row" aria-label="Resumen de órdenes">
-        <MetricCard value={generatedCount} label="Por ejecutar" tone="attention" icon={<IconClock />} />
-        <MetricCard value={reviewCount} label="En revisión" tone="review" icon={<IconDocument />} />
-        <MetricCard value={executedCount} label="Ejecutadas" tone="success" icon={<IconCheckCircle />} />
-        <MetricCard value={cancelledCount} label="Anuladas" tone="muted" icon={<IconBan />} />
-        <MetricCard value={pendingCount(state.syncItems)} label="En cola" tone="queue" icon={<IconDatabase />} />
-      </div>
-
-      {nextOrder ? (
-        <div className="orders-dashboard">
-          <div className="orders-dashboard__primary">
-            <CurrentOrderCard order={nextOrder} position={nextOrderIndex + 1} total={prioritizedOrders.length} onPrevious={() => moveNextOrder(-1)} onNext={() => moveNextOrder(1)} onOpen={() => store.selectOrder(nextOrder.orderId)} onShowMap={() => { store.selectOrder(nextOrder.orderId); setShowMap(true); }} onMarkIncident={() => onMarkIncident(nextOrder.orderId)} />
-            <section className="my-orders-section" aria-label="Mis órdenes">
-              <div className="section-heading-inline">
-                <div>
-                  <span className="eyebrow">BANDEJA ASIGNADA</span>
-                  <h2>Mis órdenes</h2>
-                  <p className="section-subtitle">Todas tus órdenes asignadas para hoy.</p>
-                </div>
-                <span className="section-count">{orders.length}</span>
-              </div>
-              <OrderFilters state={state} store={store} filters={filters} />
-              <div className="order-cards-list">
-                {pageOrders.map((order) => (
-                  <OrderCard
-                    key={order.orderId}
-                    order={order}
-                    selected={state.selectedOrderId === order.orderId}
-                    onSelect={() => store.selectOrder(order.orderId)}
-                  />
-                ))}
-                {!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}
-              </div>
-              <div className="order-pagination" aria-label="Paginación de órdenes">
-                <span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span>
-                <div className="order-pagination__controls">
-                  <button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button>
-                  <span>Página {ordersPage} de {ordersPageCount}</span>
-                  <button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button>
-                </div>
-              </div>
-            </section>
-          </div>
-          <DesktopRightRail
-            state={state}
-            orders={orders}
-            selectedOrderId={nextOrder.orderId}
-            store={store}
-            isMapFullscreen={mapFullscreenTarget === "rail"}
-            onExpandMap={() => openMapFullscreen("rail")}
-            onCloseFullscreen={() => setMapFullscreenTarget(null)}
-          />
-        </div>
-      ) : (
-        <EmptyOrders hasAnyOrders={state.orders.length > 0} onRefresh={onRefreshAssigned ?? (() => void store.refresh())} onShowMap={() => setShowMap(true)} />
-      )}
-
-      <div className="map-tools">
-        <button type="button" className={showMap ? "map-reveal map-reveal--active" : "map-reveal"} onClick={() => setShowMap(!showMap)}>
-          <IconMap className="btn-icon" />
-          <span>{showMap ? "Ocultar mapa de órdenes" : "Ver mapa de órdenes"}</span>
-        </button>
-        {!isMapCachedState ? (
-          <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} onClick={handleDownloadMap}>
-            <IconDownload className="btn-icon" />
-            {isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona para trabajar offline" : "No hay coordenadas para descargar"}
-          </button>
-        ) : <span className="map-cached-tag"><IconCheck className="cached-icon" /> Mapa descargado</span>}
-      </div>
-      {mapDownloadError ? <div className="map-warning-banner" role="alert">{mapDownloadError}</div> : null}
-      {showMap ? (
-        <FieldMap
-          orders={orders}
-          selectedOrderId={nextOrder?.orderId ?? null}
-          onSelectOrder={(orderId) => store.selectOrder(orderId)}
-          mode={state.mode}
-          isFullscreen={mapFullscreenTarget === "inline"}
-          onExpandMap={() => openMapFullscreen("inline")}
-          onCloseFullscreen={() => setMapFullscreenTarget(null)}
-        />
-      ) : null}
-    </section>
-  );
+function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
+  const [isMapCachedState, setIsMapCachedState] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<CacheProgress | null>(null);
+  const [isDownloadingMap, setIsDownloadingMap] = useState(false);
+  const [mapDownloadError, setMapDownloadError] = useState<string>();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const selectedOrderId = state.selectedOrderId ?? sortOrdersForNext(state.orders)[0]?.orderId ?? null;
+  const hasMapCoordinates = state.orders.some((order) => hasCadastralCoordinates(order.context));
+  useEffect(() => { let active = true; void isRouteMapCached(state.orders).then((cached) => { if (active) setIsMapCachedState(cached); }); return () => { active = false; }; }, [state.orders]);
+  useEffect(() => {
+    if (!isFullscreen || typeof document === "undefined") return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setIsFullscreen(false); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", closeOnEscape); };
+  }, [isFullscreen]);
+  const handleDownloadMap = async () => {
+    setIsDownloadingMap(true);
+    setMapDownloadError(undefined);
+    try { await downloadRouteMap(state.orders, setDownloadProgress); setIsMapCachedState(true); }
+    catch (error) { setMapDownloadError(error instanceof Error ? error.message : "No pudimos descargar el mapa para trabajo offline."); }
+    finally { setIsDownloadingMap(false); setDownloadProgress(null); }
+  };
+  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
 }
 
 function DesktopRightRail({
@@ -629,15 +616,13 @@ function OrderFilters({ state, store, filters }: { state: AppState; store: AppSt
 
 function CurrentOrderCard({ order, position, total, onPrevious, onNext, onOpen, onShowMap, onMarkIncident }: { order: WorkOrder; position: number; total: number; onPrevious: () => void; onNext: () => void; onOpen: () => void; onShowMap: () => void; onMarkIncident: () => void }) {
   const context = order.context;
-  const isReady = order.status === "GENERADO" && order.physicalStatus === "NONE";
-  const hasCoordinates = hasCadastralCoordinates(context);
   const customerStatus = context?.supplyStatus === "A" ? "Activo" : context?.supplyStatus;
   return (
     <article className="current-order-card">
       <div className="current-order-card__header">
         <div className="current-order-card__heading">
-          <span className="current-order-card__icon"><IconDocument /></span>
-          <div><strong>Siguiente orden</strong><span>Esta es tu próxima orden para ejecutar.</span></div>
+          <span className="current-order-card__icon"><IconScissors /></span>
+          <div><span className="eyebrow">ORDEN ACTUAL</span><strong>Trabajo asignado</strong><span>Revisa contexto antes de registrar el corte.</span></div>
         </div>
         <div className="current-order-card__navigation" aria-label="Navegación de órdenes">
           <button type="button" aria-label="Orden anterior" onClick={onPrevious} disabled={position <= 1}>‹</button>
@@ -649,46 +634,37 @@ function CurrentOrderCard({ order, position, total, onPrevious, onNext, onOpen, 
         <div>
           <h2>{displayValue(context?.customerName || order.orderId)}</h2>
           <p>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)} · CUC: {displayValue(order.cuc ? shortTechnicalId(order.cuc) : undefined)}</p>
+          <span className="current-order-card__technical">Orden {shortTechnicalId(order.orderId)}</span>
         </div>
-        <span className={`status-badge status-badge--${orderStatusTone(order)}`}>{isReady ? "Por ejecutar" : orderStatusLabel(order.status)}</span>
+        <span className={`status-badge status-badge--${orderStatusTone(order)}`}>{fieldOrderStatusLabel(order)}</span>
       </div>
-      <div className="current-order-card__data-grid">
-        <div className="current-order-card__data-column">
-          <OrderDataRow icon={<IconPin />} label="Dirección" value={context?.address} emphasis />
-          <OrderDataRow icon={<IconRoute />} label="Ruta" value={context?.route} />
-          <OrderDataRow icon={<IconDocument />} label="Referencia" value={context?.references} />
-          <OrderDataRow icon={<IconPhone />} label="Teléfono" value={context?.contactPhone} />
-        </div>
-        <div className="current-order-card__data-column">
-          <OrderDataRow icon={<IconDatabase />} label="Deuda" value={formatDebt(context?.debtCents)} emphasis="debt" />
-          <OrderDataRow icon={<IconDocument />} label="Facturas pendientes" value={context?.monthsPending} />
-          <OrderDataRow icon={<IconCheckCircle />} label="Estado del cliente" value={customerStatus} status={customerStatus === "Activo" ? "ready" : undefined} />
-        </div>
-        <div className="current-order-card__data-column">
-          <OrderDataRow icon={<IconPin />} label="Distancia aproximada" value={undefined} />
-          <OrderDataRow icon={<IconCrosshair />} label="GPS" value={hasCoordinates ? "Listo" : undefined} status={hasCoordinates ? "ready" : undefined} />
-        </div>
+      <div className="current-order-card__groups">
+        <section className="order-info-group order-info-group--location">
+          <div className="order-info-group__heading"><span className="order-info-group__icon"><IconPin /></span><span>Ubicación</span></div>
+          <OrderDataRow label="Dirección" value={context?.address} emphasis />
+          <div className="order-info-inline"><span>Ruta {displayValue(context?.route)}</span><span>Referencia: {displayValue(context?.references)}</span></div>
+        </section>
+        <section className="order-info-group order-info-group--financial">
+          <div className="order-info-group__heading"><span className="order-info-group__icon"><IconDatabase /></span><span>Situación económica</span></div>
+          <div className="debt-highlight"><span>Deuda de referencia</span><strong>{formatDebt(context?.debtCents) ?? "Dato no disponible"}</strong><small>{context?.monthsPending === undefined ? "Dato no disponible" : `${context.monthsPending} facturas pendientes`}</small></div>
+        </section>
+        <section className="order-info-group order-info-group--support">
+          <div className="order-info-group__heading"><span className="order-info-group__icon"><IconCheckCircle /></span><span>Datos de apoyo</span></div>
+          <div className="support-grid"><OrderDataRow label="Estado del cliente" value={customerStatus} status={customerStatus === "Activo" ? "ready" : undefined} /><OrderDataRow label="Teléfono" value={context?.contactPhone} /><OrderDataRow label="Distancia aproximada" value={undefined} /><OrderDataRow label="GPS" value={undefined} /></div>
+        </section>
       </div>
-      {isReady ? <div className="current-order-card__readiness" aria-label="Estado para registrar corte">
-        <ReadinessItem ready={false} label="Pendiente registrar corte" detail="Ejecuta el corte y registra la evidencia" warning />
-      </div> : null}
       <div className="current-order-card__actions">
-        <button type="button" className="primary-action" onClick={onOpen}><IconScissors />{isReady ? "Registrar corte" : "Abrir orden"}<span>→</span></button>
-        <button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver ubicación</button>
         <button type="button" className="secondary-action" onClick={onOpen}><IconDocument /> Ver detalle <span>→</span></button>
-        {isReady ? <button type="button" className="secondary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button> : null}
+        <button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver ubicación</button>
+        {order.status === "GENERADO" && order.physicalStatus === "NONE" ? <button type="button" className="tertiary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button> : null}
       </div>
     </article>
   );
 }
 
-function OrderDataRow({ icon, label, value, emphasis, status }: { icon: ReactNode; label: string; value?: string | number; emphasis?: boolean | "debt"; status?: "ready" }) {
+function OrderDataRow({ icon, label, value, emphasis, status }: { icon?: ReactNode; label: string; value?: string | number; emphasis?: boolean | "debt"; status?: "ready" }) {
   const renderedValue = value === undefined || value === "" ? "Dato no disponible" : value;
-  return <div className="current-order-card__data-row"><span className="current-order-card__data-icon">{icon}</span><div><span>{label}</span>{status === "ready" ? <strong className="current-order-card__data-status">{renderedValue}</strong> : <strong className={emphasis ? `current-order-card__data-value--${emphasis === "debt" ? "debt" : "primary"}` : undefined}>{renderedValue}</strong>}</div></div>;
-}
-
-function ReadinessItem({ ready, label, detail, warning = false }: { ready: boolean; label: string; detail: string; warning?: boolean }) {
-  return <div className={`current-order-card__readiness-item ${ready ? "current-order-card__readiness-item--ready" : "current-order-card__readiness-item--pending"}`}><span className={warning ? "current-order-card__readiness-icon current-order-card__readiness-icon--warning" : "current-order-card__readiness-icon"} aria-hidden="true">{ready ? "✓" : "!"}</span><div><strong>{label}</strong><span>{detail}</span></div></div>;
+  return <div className="current-order-card__data-row">{icon ? <span className="current-order-card__data-icon">{icon}</span> : null}<div><span>{label}</span>{status === "ready" ? <strong className="current-order-card__data-status">{renderedValue}</strong> : <strong className={emphasis ? `current-order-card__data-value--${emphasis === "debt" ? "debt" : "primary"}` : undefined}>{renderedValue}</strong>}</div></div>;
 }
 
 function OrderCard({ order, selected, onSelect }: {

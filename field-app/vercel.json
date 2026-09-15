@@ -11,6 +11,8 @@
       "source": "/v1/:path*",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" },
+        { "key": "CDN-Cache-Control", "value": "no-store" },
+        { "key": "Vercel-CDN-Cache-Control", "value": "no-store" },
         { "key": "x-vercel-enable-rewrite-caching", "value": "0" }
       ]
     }

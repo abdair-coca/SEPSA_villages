@@ -23,14 +23,22 @@ export function sendJson(response: ServerResponse, status: number, body: unknown
   const serialized = JSON.stringify(body);
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
+    ...noStoreHeaders(),
   });
   response.end(serialized);
 }
 
 export function sendNoContent(response: ServerResponse): void {
-  response.writeHead(204, { "cache-control": "no-store" });
+  response.writeHead(204, noStoreHeaders());
   response.end();
+}
+
+function noStoreHeaders(): Record<string, string> {
+  return {
+    "cache-control": "no-store, no-cache, max-age=0, must-revalidate",
+    "cdn-cache-control": "no-store",
+    "vercel-cdn-cache-control": "no-store",
+  };
 }
 
 export async function parseJsonBody(request: AsyncIterable<Uint8Array | string>, maxBytes: number): Promise<Record<string, unknown>> {

@@ -20,7 +20,7 @@ export const DEMO_PACKAGE_ID = "demo-field-package-v1";
 export const DEMO_SIMULATION_LABEL = "Simulación, sin conexión a SEPSA";
 
 export type OrderFilter = "ALL" | WorkOrder["status"] | "REVIEW";
-export type AppTab = "orders" | "queue";
+export type AppTab = "home" | "orders" | "map" | "queue";
 export type ActionKind = "VISIT" | "CUT" | "RECONNECTION";
 
 export interface ActionInput {
@@ -109,7 +109,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     selectedOrderId: null,
     query: "",
     filter: "ALL",
-    tab: "orders",
+    tab: "home",
     mode: dependencies.connectivity.getMode(),
   };
   let initPromise: Promise<void> | undefined;
@@ -192,7 +192,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     },
     selectOrder(orderId) {
       if (orderId !== null && !snapshot.orders.some((candidate) => candidate.orderId === orderId)) return;
-      update({ selectedOrderId: orderId, message: undefined });
+      update({ selectedOrderId: orderId, tab: orderId ? "orders" : snapshot.tab, message: undefined });
     },
     setMode(mode) {
       const wasOffline = snapshot.mode === "offline";
@@ -345,7 +345,7 @@ export function formatSyncMessage(synced: number): string {
 }
 
 export function createUnavailableAppStore(): AppStore {
-  const snapshot: AppState = { status: "error", error: "IndexedDB no está disponible en este dispositivo.", orders: [], syncItems: [], activity: [], selectedOrderId: null, query: "", filter: "ALL", tab: "orders", mode: "offline" };
+  const snapshot: AppState = { status: "error", error: "IndexedDB no está disponible en este dispositivo.", orders: [], syncItems: [], activity: [], selectedOrderId: null, query: "", filter: "ALL", tab: "home", mode: "offline" };
   return {
     subscribe: () => () => undefined,
     getSnapshot: () => snapshot,

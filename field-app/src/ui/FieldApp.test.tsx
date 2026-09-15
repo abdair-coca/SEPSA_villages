@@ -56,7 +56,7 @@ describe("FieldApp SSR shell", () => {
     expect(html(store)).toContain("por ejecutar");
     expect(html(store)).toContain("desktop-sync-activity-panel");
     expect(html(store)).toContain("no hay operaciones pendientes.");
-    expect(html(store)).toContain("ver todas");
+    expect(html(store)).toContain("actividad reciente");
     expect(html(store)).not.toContain("trabajo de hoy");
     expect(html(store)).not.toContain("tu jornada");
     expect(html(store)).not.toContain("primero resuelve la orden actual");
@@ -115,14 +115,15 @@ describe("FieldApp SSR shell", () => {
     const store = await readyStore("ui-scope");
     const markup = html(store);
     expect(markup).not.toMatch(/pago/);
-    expect(markup).toContain("mapa de órdenes");
-    expect(markup).toContain("expandir mapa a pantalla completa");
+    expect(markup).toContain("encuentra el suministro");
+    expect(markup).toContain("field-map-container");
     expect(markup).not.toContain("datos de demostración");
     expect(markup).not.toContain("operaciones sincronizadas");
   });
 
   it("filters orders by customer name or meter with unified smart search", async () => {
     const store = await readyStore("ui-search");
+    store.setTab("orders");
     store.setQuery("Quispe");
     const markup = html(store);
     expect(markup).toContain("josé quispe");
@@ -147,6 +148,7 @@ describe("FieldApp SSR shell", () => {
       })),
     };
     const store = await readyStore("ui-pagination", pagedPackage);
+    store.setTab("orders");
 
     const firstPage = html(store);
     expect(firstPage).toContain("mostrando 1-5 de 7 órdenes");

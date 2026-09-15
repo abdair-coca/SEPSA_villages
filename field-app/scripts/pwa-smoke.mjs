@@ -54,10 +54,10 @@ try {
   await evaluate(cdp, `[...document.querySelectorAll("button")].find((button) => button.textContent.includes("Cerrar sesión"))?.click()`);
   await login(cdp, "camila.simulated", "SIMULATED-camila-003");
   await waitForExpression(cdp, `document.body.innerText.includes("Jornada de campo")`);
-  await waitForExpression(cdp, `document.querySelector(".order-card") !== null`);
+  await waitForExpression(cdp, `document.querySelector(".current-order-card") !== null`);
 
   await evaluate(cdp, `
-    document.querySelector(".order-card")?.click()
+    [...document.querySelectorAll("button")].find((button) => button.textContent.includes("Ver detalle"))?.click()
   `);
   await waitForExpression(cdp, `document.body.innerText.includes("Registrar visita")`);
   await evaluate(cdp, `
@@ -87,8 +87,8 @@ try {
       .find((button) => button.textContent.trim() === "Confirmar")
       ?.click()
   `);
-  await waitForExpression(cdp, `document.querySelector(".sync-banner__summary") !== null`);
-  await evaluate(cdp, `document.querySelector(".sync-banner__summary")?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".notification__action") !== null`);
+  await evaluate(cdp, `document.querySelector(".notification__action")?.click()`);
   await waitForExpression(cdp, `document.querySelector(".queue-panel") !== null`);
 
   const serviceWorker = await evaluate(cdp, `
@@ -119,8 +119,10 @@ try {
   await cdp.send("Page.navigate", { url: appUrl });
   await waitForExpression(cdp, `document.documentElement.dataset.pwaSmokeDocument !== ${JSON.stringify(documentToken)}`);
   await waitForExpression(cdp, `document.body.innerText.includes("Mis órdenes")`);
-  await waitForExpression(cdp, `document.querySelector(".order-card") !== null`);
-  await evaluate(cdp, `document.querySelector(".sync-banner__summary")?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".current-order-card") !== null`);
+  await evaluate(cdp, `document.querySelector(".collapsible-card__summary")?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".home-secondary-link") !== null`);
+  await evaluate(cdp, `document.querySelector(".home-secondary-link")?.click()`);
   await waitForExpression(cdp, `document.body.innerText.includes("Cola de sincronización")`);
 
   const offlineState = await evaluate(cdp, `({
