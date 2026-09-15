@@ -120,6 +120,7 @@ export class Application {
       session_id: sessionId,
       expires_at: expiresAt,
       user: { user_id: user.user_id, username: user.username, display_name: user.display_name, role: user.role },
+      session_token: token,
       source: PROVISIONAL_SOURCE,
     });
   }

@@ -57,6 +57,29 @@ test("technician cannot read administrative technician catalog", async () => {
   }
 });
 
+test("login returns bearer token for switching technicians behind a proxy", async () => {
+  const pool = new LoginPool();
+  const server = createServer((request, response) => {
+    void new Application(pool as unknown as Pool, config).handle(request, response);
+  });
+  await listen(server);
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "admin", password: "password123" }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json() as { session_token?: string };
+    assert.equal(typeof body.session_token, "string");
+    assert.ok(body.session_token);
+  } finally {
+    await close(server);
+  }
+});
+
 test("admin assignment locks only order and debtor rows with nullable technician join", async () => {
   const pool = new AssignmentPool();
   const server = createServer((request, response) => {
@@ -103,6 +126,31 @@ class CatalogPool {
     }
     throw new Error(`Unexpected query: ${text}`);
   }
+}
+
+class LoginPool {
+  async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
+    if (text.includes("SELECT user_id, username, display_name, role, password_hash")) {
+      return {
+        rows: [{ user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", password_hash: "scrypt$16384$8$1$DGPitTZ--gEW7HtAcRpHdg$coTqCTgT-b8lAaNmr53P6w2clR4WDBcACmGWjCN6FpR0fT1FQ1oMosbxIkdtkNu3eTtMn_waaRZsR35nyZvFLA", enabled: true } as unknown as T],
+        rowCount: 1,
+      };
+    }
+    throw new Error(`Unexpected pool query: ${text}`);
+  }
+
+  async connect(): Promise<LoginClient> {
+    return new LoginClient();
+  }
+}
+
+class LoginClient {
+  async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
+    if (text === "BEGIN" || text === "COMMIT" || text.includes("INSERT INTO sessions") || text.includes("INSERT INTO audit_events")) return { rows: [], rowCount: 1 };
+    throw new Error(`Unexpected client query: ${text}`);
+  }
+
+  release(): void {}
 }
 
 class AssignmentPool {
