@@ -1,4 +1,5 @@
-const CACHE_PREFIX = "sepsa-field-shell-";
+const CACHE_PREFIX = "sepsa-field-shell-v2-";
+const LEGACY_CACHE_PREFIX = "sepsa-field-shell-";
 const META_CACHE = `${CACHE_PREFIX}meta`;
 const ACTIVE_CACHE_KEY = "/__sepsa_active_cache__";
 const CANDIDATE_CACHE_KEY = "/__sepsa_candidate_cache__";
@@ -50,7 +51,7 @@ async function activateStagedShell() {
   await writeCachePointer(ACTIVE_CACHE_KEY, candidateName);
   const keys = await caches.keys();
   await Promise.all(keys
-    .filter((key) => key.startsWith(CACHE_PREFIX) && key !== META_CACHE && key !== candidateName)
+    .filter((key) => (key.startsWith(CACHE_PREFIX) || key.startsWith(LEGACY_CACHE_PREFIX)) && key !== META_CACHE && key !== candidateName)
     .map((key) => caches.delete(key)));
 }
 
