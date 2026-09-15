@@ -5,7 +5,7 @@ import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/m
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
 import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconExpand, IconMap, IconPhone, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch } from "./Icons";
+import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconExpand, IconMap, IconPhone, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch, IconUser } from "./Icons";
 import { Notification } from "./Notification";
 
 export interface FieldAppProps {
@@ -17,6 +17,14 @@ export interface FieldAppProps {
   onRefreshAssigned?: () => Promise<void>;
   onLogout?: () => void;
 }
+
+type NavigationTab = "home" | "orders" | "map";
+
+const navigationItems: Array<{ tab: NavigationTab; label: string; icon: ReactNode }> = [
+  { tab: "home", label: "Inicio", icon: <IconRoute /> },
+  { tab: "orders", label: "Mis órdenes", icon: <IconDocument /> },
+  { tab: "map", label: "Mapa", icon: <IconMap /> },
+];
 
 export function FieldApp({
   store,
@@ -187,7 +195,10 @@ function Header({
   return (
     <header className="app-header">
       <div className="identity-block">
-        <div className="field-brand"><strong>SEPSA</strong><span>CAMPO</span></div>
+        <div className="identity-brand-row">
+          <div className="field-brand"><strong>SEPSA</strong><span>CAMPO</span></div>
+          {onLogout ? <button type="button" className="header-profile-button" onClick={onLogout} aria-label="Cerrar sesión"><IconUser /></button> : null}
+        </div>
         <h1>Jornada de campo</h1>
         <p className="identity">Órdenes asignadas, ejecución de cortes y sincronización en terreno.</p>
         <div className="header-context">
@@ -284,6 +295,7 @@ function Workbench({
 
   return (
     <main className="workbench">
+      <DesktopNavigation activeTab={state.tab} onNavigate={navigate} pending={pendingCount(state.syncItems)} />
       {content}
       <BottomNavigation activeTab={state.tab} onNavigate={navigate} pending={pendingCount(state.syncItems)} />
     </main>
@@ -295,7 +307,6 @@ function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; 
   const focusOrders = state.query.trim() || state.filter !== "ALL" ? sortOrdersForNext(filteredOrders) : orders;
   const currentOrder = focusOrders[0];
   const currentIndex = currentOrder ? orders.findIndex((order) => order.orderId === currentOrder.orderId) : -1;
-  const nextOrder = currentIndex >= 0 ? orders[currentIndex + 1] : undefined;
 
   const openOrder = (orderId: string) => {
     store.setTab("orders");
@@ -308,84 +319,43 @@ function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; 
 
   return (
     <section className="field-home" aria-label="Inicio de jornada">
-      <div className="home-intro">
-        <div>
-          <span className="eyebrow">JORNADA EN TERRENO</span>
-          <h2>Tu siguiente visita, clara desde el primer vistazo.</h2>
-        </div>
-        <span className="home-date">Hoy · {orders.length} {orders.length === 1 ? "orden" : "órdenes"}</span>
-      </div>
-
       <OperationalSummary state={state} />
 
       {currentOrder ? (
-        <div className="home-layout">
-          <div className="home-primary-column">
-            <CurrentOrderCard
-              order={currentOrder}
-              position={currentIndex + 1}
-              total={orders.length}
-              onPrevious={() => openOrder(orders[Math.max(0, currentIndex - 1)].orderId)}
-              onNext={() => openOrder(orders[Math.min(orders.length - 1, currentIndex + 1)].orderId)}
-              onOpen={() => openOrder(currentOrder.orderId)}
-              onShowMap={() => openMap(currentOrder.orderId)}
-              onMarkIncident={() => onOpenIncident(currentOrder.orderId)}
-            />
-            <NextOrderCard order={nextOrder} onOpen={nextOrder ? () => openOrder(nextOrder.orderId) : undefined} />
-          </div>
-          <HomeMapPreview state={state} order={currentOrder} orders={orders} onOpenMap={() => openMap(currentOrder.orderId)} />
-        </div>
+        <CurrentOrderCard
+          order={currentOrder}
+          orders={orders}
+          mode={state.mode}
+          position={currentIndex + 1}
+          total={orders.length}
+          onPrevious={() => openOrder(orders[Math.max(0, currentIndex - 1)].orderId)}
+          onNext={() => openOrder(orders[Math.min(orders.length - 1, currentIndex + 1)].orderId)}
+          onOpen={() => openOrder(currentOrder.orderId)}
+          onShowMap={() => openMap(currentOrder.orderId)}
+          onMarkIncident={() => onOpenIncident(currentOrder.orderId)}
+        />
       ) : (
         <EmptyOrders hasAnyOrders={state.orders.length > 0} onRefresh={() => void store.refresh()} onShowMap={() => openMap()} />
       )}
 
       <HomeSecondaryCards state={state} store={store} />
-      {currentOrder ? <StickyActions order={currentOrder} onOpen={() => openOrder(currentOrder.orderId)} onShowMap={() => openMap(currentOrder.orderId)} /> : null}
     </section>
   );
 }
 
 function OperationalSummary({ state }: { state: AppState }) {
   const summary = [
-    { label: "Por ejecutar", value: state.orders.filter((order) => order.status === "GENERADO" && order.physicalStatus === "NONE"), tone: "attention" },
-    { label: "En revisión", value: state.orders.filter((order) => order.physicalStatus === "PHYSICAL_UNKNOWN"), tone: "review" },
-    { label: "Ejecutadas", value: state.orders.filter((order) => order.status === "EJECUTADO"), tone: "success" },
-    { label: "Anuladas", value: state.orders.filter((order) => order.status === "ANULADO"), tone: "muted" },
-    { label: "En cola", value: state.syncItems.filter((item) => item.status !== "synced"), tone: "queue" },
+    { label: "Por ejecutar", value: state.orders.filter((order) => order.status === "GENERADO" && order.physicalStatus === "NONE"), tone: "attention", icon: <IconClock /> },
+    { label: "En revisión", value: state.orders.filter((order) => order.physicalStatus === "PHYSICAL_UNKNOWN"), tone: "review", icon: <IconDocument /> },
+    { label: "Ejecutadas", value: state.orders.filter((order) => order.status === "EJECUTADO"), tone: "success", icon: <IconCheckCircle /> },
+    { label: "Anuladas", value: state.orders.filter((order) => order.status === "ANULADO"), tone: "muted", icon: <IconBan /> },
+    { label: "En cola", value: state.syncItems.filter((item) => item.status !== "synced"), tone: "queue", icon: <IconDatabase /> },
   ];
   return (
     <section className="operational-summary" aria-label="Resumen operativo">
-      <div className="operational-summary__heading"><span>Resumen de jornada</span><span className="operational-summary__live"><i /> Actualizado</span></div>
       <div className="operational-summary__grid">
-        {summary.map((item) => <div className={`operational-summary__item operational-summary__item--${item.tone}`} key={item.label}><strong>{item.value.length}</strong><span>{item.label}</span></div>)}
+        {summary.map((item) => <div className={`operational-summary__item operational-summary__item--${item.tone}`} key={item.label}><span className="operational-summary__icon">{item.icon}</span><div><strong>{item.value.length}</strong><span>{item.label}</span></div></div>)}
       </div>
-    </section>
-  );
-}
-
-function HomeMapPreview({ state, order, orders, onOpenMap }: { state: AppState; order: WorkOrder; orders: WorkOrder[]; onOpenMap: () => void }) {
-  return (
-    <section className="home-map-card" aria-label="Mapa de la orden actual">
-      <div className="home-map-card__heading">
-        <div><span className="eyebrow">UBICACIÓN</span><h2>Encuentra el suministro</h2><p>Vista rápida de tu zona de trabajo.</p></div>
-        <span className="home-map-card__count">{orders.length} {orders.length === 1 ? "punto" : "puntos"}</span>
-      </div>
-      <FieldMap orders={orders} selectedOrderId={order.orderId} onSelectOrder={() => undefined} mode={state.mode} compact />
-      <div className="home-map-card__footer"><span><IconPin /> {order.context?.address || "Dirección no disponible"}</span><button type="button" onClick={onOpenMap}>Abrir mapa <span aria-hidden="true">→</span></button></div>
-    </section>
-  );
-}
-
-function NextOrderCard({ order, onOpen }: { order?: WorkOrder; onOpen?: () => void }) {
-  return (
-    <section className="next-order-card" aria-label="Siguiente orden">
-      <div className="next-order-card__icon"><IconRoute /></div>
-      <div className="next-order-card__content">
-        <span className="eyebrow">SIGUIENTE ORDEN</span>
-        <strong>{order?.context?.customerName || "No hay más órdenes en tu jornada."}</strong>
-        <span>{order ? `${order.context?.address || "Dirección no disponible"} · ${fieldOrderStatusLabel(order)}` : "Puedes revisar la bandeja completa cuando lo necesites."}</span>
-      </div>
-      {order && onOpen ? <button type="button" onClick={onOpen} aria-label={`Abrir orden de ${order.context?.customerName || order.orderId}`}>Abrir <span aria-hidden="true">→</span></button> : null}
     </section>
   );
 }
@@ -420,18 +390,12 @@ function CollapsibleCard({ open, onToggle, icon, title, meta, hint, children }: 
   );
 }
 
-function StickyActions({ order, onOpen, onShowMap }: { order: WorkOrder; onOpen: () => void; onShowMap: () => void }) {
-  const canCut = order.status === "GENERADO" && order.physicalStatus === "NONE";
-  return <div className="sticky-actions" aria-label="Acciones de la orden actual"><button type="button" className="sticky-actions__primary" onClick={onOpen} disabled={!canCut}><IconScissors />{canCut ? "Registrar corte" : "Orden sin acción"}<span aria-hidden="true">→</span></button><button type="button" className="sticky-actions__secondary" onClick={onShowMap}><IconMap /><span>Ubicación</span></button><button type="button" className="sticky-actions__secondary" onClick={onOpen}><IconDocument /><span>Detalle</span></button></div>;
+function DesktopNavigation({ activeTab, onNavigate, pending }: { activeTab: AppState["tab"]; onNavigate: (tab: NavigationTab) => void; pending: number }) {
+  return <nav className="desktop-navigation" aria-label="Navegación principal de escritorio"><span className="desktop-navigation__context">Jornada técnica</span><div className="desktop-navigation__items">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "desktop-navigation__item desktop-navigation__item--active" : "desktop-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "orders" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</div></nav>;
 }
 
 function BottomNavigation({ activeTab, onNavigate, pending }: { activeTab: AppState["tab"]; onNavigate: (tab: "home" | "orders" | "map" | "queue") => void; pending: number }) {
-  const items = [
-    { tab: "home" as const, label: "Inicio", icon: <IconRoute /> },
-    { tab: "orders" as const, label: "Mis órdenes", icon: <IconDocument /> },
-    { tab: "map" as const, label: "Mapa", icon: <IconMap /> },
-  ];
-  return <nav className="bottom-navigation" aria-label="Navegación principal">{items.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "bottom-navigation__item bottom-navigation__item--active" : "bottom-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "orders" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</nav>;
+  return <nav className="bottom-navigation" aria-label="Navegación principal">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "bottom-navigation__item bottom-navigation__item--active" : "bottom-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "orders" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</nav>;
 }
 
 function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void }) {
@@ -614,15 +578,16 @@ function OrderFilters({ state, store, filters }: { state: AppState; store: AppSt
   );
 }
 
-function CurrentOrderCard({ order, position, total, onPrevious, onNext, onOpen, onShowMap, onMarkIncident }: { order: WorkOrder; position: number; total: number; onPrevious: () => void; onNext: () => void; onOpen: () => void; onShowMap: () => void; onMarkIncident: () => void }) {
+function CurrentOrderCard({ order, orders, mode, position, total, onPrevious, onNext, onOpen, onShowMap, onMarkIncident }: { order: WorkOrder; orders: WorkOrder[]; mode: ConnectivityMode; position: number; total: number; onPrevious: () => void; onNext: () => void; onOpen: () => void; onShowMap: () => void; onMarkIncident: () => void }) {
   const context = order.context;
   const customerStatus = context?.supplyStatus === "A" ? "Activo" : context?.supplyStatus;
+  const canCut = order.status === "GENERADO" && order.physicalStatus === "NONE";
   return (
     <article className="current-order-card">
       <div className="current-order-card__header">
         <div className="current-order-card__heading">
-          <span className="current-order-card__icon"><IconScissors /></span>
-          <div><span className="eyebrow">ORDEN ACTUAL</span><strong>Trabajo asignado</strong><span>Revisa contexto antes de registrar el corte.</span></div>
+          <span className="current-order-card__icon"><IconDocument /></span>
+          <strong>Orden actual</strong>
         </div>
         <div className="current-order-card__navigation" aria-label="Navegación de órdenes">
           <button type="button" aria-label="Orden anterior" onClick={onPrevious} disabled={position <= 1}>‹</button>
@@ -633,38 +598,38 @@ function CurrentOrderCard({ order, position, total, onPrevious, onNext, onOpen, 
       <div className="current-order-card__identity">
         <div>
           <h2>{displayValue(context?.customerName || order.orderId)}</h2>
-          <p>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)} · CUC: {displayValue(order.cuc ? shortTechnicalId(order.cuc) : undefined)}</p>
-          <span className="current-order-card__technical">Orden {shortTechnicalId(order.orderId)}</span>
+          <p>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)}</p>
+          <span className="current-order-card__technical">CUC: {displayValue(order.cuc ? shortTechnicalId(order.cuc) : undefined)}</span>
         </div>
         <span className={`status-badge status-badge--${orderStatusTone(order)}`}>{fieldOrderStatusLabel(order)}</span>
       </div>
-      <div className="current-order-card__groups">
-        <section className="order-info-group order-info-group--location">
-          <div className="order-info-group__heading"><span className="order-info-group__icon"><IconPin /></span><span>Ubicación</span></div>
-          <OrderDataRow label="Dirección" value={context?.address} emphasis />
-          <div className="order-info-inline"><span>Ruta {displayValue(context?.route)}</span><span>Referencia: {displayValue(context?.references)}</span></div>
-        </section>
-        <section className="order-info-group order-info-group--financial">
-          <div className="order-info-group__heading"><span className="order-info-group__icon"><IconDatabase /></span><span>Situación económica</span></div>
-          <div className="debt-highlight"><span>Deuda de referencia</span><strong>{formatDebt(context?.debtCents) ?? "Dato no disponible"}</strong><small>{context?.monthsPending === undefined ? "Dato no disponible" : `${context.monthsPending} facturas pendientes`}</small></div>
-        </section>
-        <section className="order-info-group order-info-group--support">
-          <div className="order-info-group__heading"><span className="order-info-group__icon"><IconCheckCircle /></span><span>Datos de apoyo</span></div>
-          <div className="support-grid"><OrderDataRow label="Estado del cliente" value={customerStatus} status={customerStatus === "Activo" ? "ready" : undefined} /><OrderDataRow label="Teléfono" value={context?.contactPhone} /><OrderDataRow label="Distancia aproximada" value={undefined} /><OrderDataRow label="GPS" value={undefined} /></div>
-        </section>
+      <div className="current-order-card__data-grid">
+        <OrderDataRow icon={<IconPin />} label="Dirección" value={context?.address} emphasis />
+        <OrderDataRow icon={<IconDatabase />} label="Deuda" value={formatDebt(context?.debtCents)} emphasis="debt" meta={context?.monthsPending === undefined ? "Dato no disponible" : `${context.monthsPending} facturas`} />
+        <OrderDataRow icon={<IconRoute />} label="Ruta" value={context?.route} emphasis />
+        <OrderDataRow icon={<IconUser />} label="Estado del cliente" value={customerStatus} status={customerStatus === "Activo" ? "ready" : undefined} />
+        <OrderDataRow icon={<IconDocument />} label="Referencia" value={context?.references} />
+      </div>
+      <div className="current-order-card__readiness">
+        <OrderDataRow icon={<IconRoute />} label="Distancia aproximada" value={undefined} />
+        <OrderDataRow icon={<IconCrosshair />} label="GPS" value={undefined} />
+      </div>
+      <div className="current-order-card__map">
+        <FieldMap orders={orders} selectedOrderId={order.orderId} onSelectOrder={() => onShowMap()} mode={mode} compact />
+        <button type="button" className="current-order-card__map-action" onClick={onShowMap}><IconExpand /> Abrir mapa</button>
       </div>
       <div className="current-order-card__actions">
-        <button type="button" className="secondary-action" onClick={onOpen}><IconDocument /> Ver detalle <span>→</span></button>
-        <button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver ubicación</button>
-        {order.status === "GENERADO" && order.physicalStatus === "NONE" ? <button type="button" className="tertiary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button> : null}
+        <button type="button" className="primary-action" onClick={onOpen} disabled={!canCut}><IconScissors />{canCut ? "Registrar corte" : "Orden sin acción"}<span aria-hidden="true">→</span></button>
+        <button type="button" className="secondary-action" onClick={onOpen}><IconDocument /> Ver detalle</button>
+        {canCut ? <button type="button" className="tertiary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button> : null}
       </div>
     </article>
   );
 }
 
-function OrderDataRow({ icon, label, value, emphasis, status }: { icon?: ReactNode; label: string; value?: string | number; emphasis?: boolean | "debt"; status?: "ready" }) {
+function OrderDataRow({ icon, label, value, emphasis, status, meta }: { icon?: ReactNode; label: string; value?: string | number; emphasis?: boolean | "debt"; status?: "ready"; meta?: string }) {
   const renderedValue = value === undefined || value === "" ? "Dato no disponible" : value;
-  return <div className="current-order-card__data-row">{icon ? <span className="current-order-card__data-icon">{icon}</span> : null}<div><span>{label}</span>{status === "ready" ? <strong className="current-order-card__data-status">{renderedValue}</strong> : <strong className={emphasis ? `current-order-card__data-value--${emphasis === "debt" ? "debt" : "primary"}` : undefined}>{renderedValue}</strong>}</div></div>;
+  return <div className="current-order-card__data-row">{icon ? <span className="current-order-card__data-icon">{icon}</span> : null}<div><span>{label}</span>{status === "ready" ? <strong className="current-order-card__data-status">{renderedValue}</strong> : <strong className={emphasis ? `current-order-card__data-value--${emphasis === "debt" ? "debt" : "primary"}` : undefined}>{renderedValue}</strong>}{meta ? <small>{meta}</small> : null}</div></div>;
 }
 
 function OrderCard({ order, selected, onSelect }: {

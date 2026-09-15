@@ -278,6 +278,15 @@ export function IconPhone({ className = "icon", ...props }: SVGProps<SVGSVGEleme
   );
 }
 
+export function IconUser({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>
+      <circle cx="12" cy="8" r="3" />
+      <path d="M5 20c.7-3.2 3.1-5 7-5s6.3 1.8 7 5" />
+    </svg>
+  );
+}
+
 export function IconScissors({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>

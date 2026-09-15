@@ -50,19 +50,21 @@ describe("FieldApp SSR shell", () => {
 
   it("renders ready shell, assigned list, detail, and action eligibility", async () => {
     const store = await readyStore("ui-ready");
-    expect(html(store)).toContain("jornada de campo");
-    expect(html(store)).toContain("ord-24017");
-    expect(html(store)).toContain("actualizar bandeja");
-    expect(html(store)).toContain("por ejecutar");
-    expect(html(store)).toContain("desktop-sync-activity-panel");
-    expect(html(store)).toContain("no hay operaciones pendientes.");
-    expect(html(store)).toContain("actividad reciente");
-    expect(html(store)).not.toContain("trabajo de hoy");
-    expect(html(store)).not.toContain("tu jornada");
-    expect(html(store)).not.toContain("primero resuelve la orden actual");
-    expect(html(store)).toContain("ver detalle");
-    expect(html(store)).toContain("marcar incidencia");
+    const home = html(store);
+    expect(home).toContain("jornada de campo");
+    expect(home).toContain("actualizar bandeja");
+    expect(home).toContain("por ejecutar");
+    expect(home).toContain("desktop-sync-activity-panel");
+    expect(home).toContain("no hay operaciones pendientes.");
+    expect(home).toContain("actividad reciente");
+    expect(home).not.toContain("trabajo de hoy");
+    expect(home).not.toContain("tu jornada");
+    expect(home).not.toContain("primero resuelve la orden actual");
+    expect(home).toContain("ver detalle");
+    expect(home).toContain("marcar incidencia");
 
+    store.setTab("orders");
+    expect(html(store)).toContain("ord-24017");
     store.selectOrder("ORD-24017");
     const generated = html(store);
     expect(generated).toContain("detalle de ord-24017");
@@ -74,6 +76,33 @@ describe("FieldApp SSR shell", () => {
     expect(executed).toContain("preparar reconexión");
     expect(executed).not.toContain("preparar corte");
     expect(executed).not.toContain("registrar visita");
+  });
+
+  it("renders home first with dedicated mobile navigation and compact secondary cards", async () => {
+    const store = await readyStore("ui-home-navigation");
+    const markup = html(store);
+
+    expect(store.getSnapshot().tab).toBe("home");
+    expect(markup).toContain("current-order-card");
+    expect(markup).toContain("operational-summary");
+    expect(markup).toContain("current-order-card__map");
+    expect(markup).toContain("current-order-card__map-action");
+    expect(markup).toContain("desktop-navigation");
+    expect(markup).toContain("navegación principal de escritorio");
+    expect(markup).toContain("bottom-navigation");
+    expect(markup).toContain("inicio");
+    expect(markup).toContain("mis órdenes");
+    expect(markup).toContain("mapa");
+    expect(markup).toContain("no hay operaciones pendientes.");
+    expect(markup).not.toContain("pendiente registrar corte");
+    expect(markup).not.toContain("home-intro");
+    expect(markup).not.toContain("next-order-card");
+    expect(markup).not.toContain("sticky-actions");
+
+    store.setTab("map");
+    expect(html(store)).toContain("ruta de campo");
+    store.setTab("orders");
+    expect(html(store)).toContain("bandeja asignada");
   });
 
   it("renders durable queue state after local visit", async () => {
@@ -115,7 +144,7 @@ describe("FieldApp SSR shell", () => {
     const store = await readyStore("ui-scope");
     const markup = html(store);
     expect(markup).not.toMatch(/pago/);
-    expect(markup).toContain("encuentra el suministro");
+    expect(markup).toContain("current-order-card__map");
     expect(markup).toContain("field-map-container");
     expect(markup).not.toContain("datos de demostración");
     expect(markup).not.toContain("operaciones sincronizadas");

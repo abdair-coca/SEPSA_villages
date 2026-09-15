@@ -70,7 +70,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
   const orderDetailRef = useRef<HTMLDivElement>(null);
   filtersRef.current = filters;
 
-  async function refresh(nextFilters = filters) {
+  async function refresh(nextFilters = filters): Promise<WorkOrder[]> {
     const sequence = ++refreshSequence.current;
     const [nextDebtors, nextFilterRecords, nextOrders, nextAudit, nextTechnicians] = await Promise.all([
       authority.findDebtors({ query: nextFilters.query, area: nextFilters.area, locality: nextFilters.locality, route: nextFilters.route, minMonthsPending: parseMinMonths(nextFilters.minMonthsPending), supplyStatus: nextFilters.supplyStatus, session }),
@@ -79,7 +79,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
       authority.listAudit({ session, includeRejected: true }),
       authority.listTechnicians(session),
     ]);
-    if (sequence !== refreshSequence.current) return;
+    if (sequence !== refreshSequence.current) return nextOrders;
     setDebtors(nextDebtors);
     setFilterRecords(nextFilterRecords);
     setTechnicians(nextTechnicians);
@@ -91,6 +91,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
     if (selectedDebtor && !nextDebtors.some((debtor) => debtor.debtorId === selectedDebtor)) setSelectedDebtor("");
     setSelectedDebtorIds((current) => current.filter((debtorId) => nextDebtors.some((debtor) => debtor.debtorId === debtorId)));
     if (selectedOrder && !nextOrders.some((order) => order.orderId === selectedOrder)) setSelectedOrder("");
+    return nextOrders;
   }
 
   function notify(text: string, tone: MessageTone = "info"): void {
@@ -191,6 +192,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
 
   async function confirmOrderCreation(): Promise<void> {
     if (!orderCreationDialog) return;
+    const creationDialog = orderCreationDialog;
     if (!selectedTechnician) {
       notify("No hay técnicos habilitados para asignar esta orden.", "error");
       return;
@@ -198,15 +200,15 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
     let createdOrders: WorkOrder[] = [];
     setBusy(true);
     try {
-      if (orderCreationDialog.mode === "single") {
-        const order = await authority.createOrder({ operationId: generateOperationId("create-order"), debtorId: orderCreationDialog.debtorIds[0], purpose: "CUT", session });
+      if (creationDialog.mode === "single") {
+        const order = await authority.createOrder({ operationId: generateOperationId("create-order"), debtorId: creationDialog.debtorIds[0], purpose: "CUT", session });
         createdOrders = [order];
         setOrderCreationDialog(undefined);
         await assignCreatedOrders([order]);
         setSelectedOrder(order.orderId);
         notify("Orden creada y asignada al técnico seleccionado.", "success");
       } else {
-        const result = await authority.createOrdersBatch({ batchId: generateOperationId("create-order-batch"), debtorIds: orderCreationDialog.debtorIds, purpose: "CUT", session });
+        const result = await authority.createOrdersBatch({ batchId: generateOperationId("create-order-batch"), debtorIds: creationDialog.debtorIds, purpose: "CUT", session });
         createdOrders = result.created;
         setOrderCreationDialog(undefined);
         await assignCreatedOrders(result.created);
@@ -225,6 +227,20 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
         notify(`Se crearon ${createdOrders.length} órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.`, "error");
         await refresh();
       } else {
+        if (isActiveOrderConflict(error)) {
+          try {
+            const refreshedOrders = await refresh();
+            const debtor = debtors.find((candidate) => candidate.debtorId === creationDialog.debtorIds[0]);
+            const activeOrder = findActiveOrderForSupply(refreshedOrders, creationDialog.debtorIds[0], debtor?.accountId);
+            if (activeOrder) {
+              setSelectedOrder(activeOrder.orderId);
+              notify("Este suministro ya tiene una orden activa. Revise su ficha para asignarla.", "info");
+              return;
+            }
+          } catch {
+            // Preserve original conflict message when refresh cannot complete.
+          }
+        }
         notify(readableError(error), "error");
       }
     } finally { setBusy(false); }
@@ -270,7 +286,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
 
   const selectedDebtorRecord = debtors.find((debtor) => debtor.debtorId === selectedDebtor);
   const selectedOrderRecord = orders.find((order) => order.orderId === selectedOrder);
-  const activeOrderForSupply = selectedDebtorRecord ? orders.find((order) => isActiveOrder(order) && (order.debtorId === selectedDebtorRecord.debtorId || order.accountId === selectedDebtorRecord.accountId)) : undefined;
+  const activeOrderForSupply = selectedDebtorRecord ? findActiveOrderForSupply(orders, selectedDebtorRecord.debtorId, selectedDebtorRecord.accountId) : undefined;
   const generated = orders.filter((order) => order.status === "GENERADO").length;
   const executed = orders.filter((order) => order.status === "EJECUTADO").length;
   const cancelled = orders.filter((order) => order.status === "ANULADO").length;
@@ -493,10 +509,22 @@ function formatDate(value?: string): string { if (!value) return "Dato no dispon
 function formatOrderHeaderDate(value?: string): string { if (!value) return "fecha no disponible"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "fecha no disponible" : new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "numeric", year: "2-digit", hour: "numeric", minute: "2-digit" }).format(date); }
 function formatRelativeDate(value?: string): string { if (!value) return "en fecha no disponible"; const date = new Date(value); if (Number.isNaN(date.getTime())) return "en fecha no disponible"; return new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(date).replace(",", " ·"); }
 function isActiveOrder(order: WorkOrder): boolean { return order.status === "GENERADO"; }
+export function findActiveOrderForSupply(orders: readonly WorkOrder[], debtorId: string, accountId?: string): WorkOrder | undefined {
+  return orders.find((order) => isActiveOrder(order) && (order.debtorId === debtorId || (Boolean(accountId) && order.accountId === accountId)));
+}
 function orderStatusLabel(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "Físico incierto"; return order.status === "GENERADO" ? "Generada" : order.status === "EJECUTADO" ? "Ejecutada" : order.status === "RECONEXIÓN" ? "Reconectada" : "Anulada"; }
 function statusTone(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "review"; return order.status === "GENERADO" ? "ready" : order.status === "EJECUTADO" ? "done" : order.status === "ANULADO" ? "muted" : "active"; }
 function technicianOptionLabel(technician: TechnicianRecord): string { return technician.displayName || technician.username; }
-function readableError(error: unknown): string { return error instanceof Error ? error.message : "No pudimos completar la operación administrativa."; }
+function isActiveOrderConflict(error: unknown): boolean {
+  return errorCode(error) === "DUPLICATE_ORDER" || errorCode(error) === "ACTIVE_ORDER_EXISTS";
+}
+function errorCode(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
+}
+function readableError(error: unknown): string {
+  if (isActiveOrderConflict(error)) return "Este suministro ya tiene una orden activa. Revise su ficha para asignarla.";
+  return error instanceof Error ? error.message : "No pudimos completar la operación administrativa.";
+}
 export interface AdminFilterOption { value: string; label: string; }
 export interface AdminFilterOptions { areas: AdminFilterOption[]; localities: AdminFilterOption[]; routes: AdminFilterOption[]; statuses: AdminFilterOption[]; }
 export function getAdminFilterOptions(records: readonly DebtorRecord[], selectedArea = "", selectedLocality = "", selectedRoute = "", selectedStatus = ""): AdminFilterOptions {

@@ -118,7 +118,7 @@ try {
   await evaluate(cdp, `document.documentElement.dataset.pwaSmokeDocument = ${JSON.stringify(documentToken)}`);
   await cdp.send("Page.navigate", { url: appUrl });
   await waitForExpression(cdp, `document.documentElement.dataset.pwaSmokeDocument !== ${JSON.stringify(documentToken)}`);
-  await waitForExpression(cdp, `document.body.innerText.includes("Mis órdenes")`);
+  await waitForExpression(cdp, `document.querySelector(".bottom-navigation") !== null`);
   await waitForExpression(cdp, `document.querySelector(".current-order-card") !== null`);
   await evaluate(cdp, `document.querySelector(".collapsible-card__summary")?.click()`);
   await waitForExpression(cdp, `document.querySelector(".home-secondary-link") !== null`);
