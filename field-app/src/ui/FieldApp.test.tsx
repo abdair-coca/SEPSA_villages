@@ -54,6 +54,9 @@ describe("FieldApp SSR shell", () => {
     expect(html(store)).toContain("ord-24017");
     expect(html(store)).toContain("actualizar bandeja");
     expect(html(store)).toContain("por ejecutar");
+    expect(html(store)).toContain("desktop-sync-activity-panel");
+    expect(html(store)).toContain("no hay operaciones pendientes.");
+    expect(html(store)).toContain("ver todas");
     expect(html(store)).not.toContain("trabajo de hoy");
     expect(html(store)).not.toContain("tu jornada");
     expect(html(store)).not.toContain("primero resuelve la orden actual");
@@ -103,6 +106,7 @@ describe("FieldApp SSR shell", () => {
     const markup = html(store);
     expect(markup).not.toMatch(/pago/);
     expect(markup).toContain("mapa de órdenes");
+    expect(markup).toContain("expandir mapa a pantalla completa");
     expect(markup).not.toContain("datos de demostración");
     expect(markup).not.toContain("operaciones sincronizadas");
   });
@@ -120,12 +124,46 @@ describe("FieldApp SSR shell", () => {
     expect(meterMarkup).not.toContain("josé quispe");
   });
 
+  it("paginates filtered field orders and keeps only the open action", async () => {
+    const seedPackage = createDemoPackage("2026-09-12T10:00:00.000Z");
+    const baseOrder = seedPackage.orders[0];
+    if (!baseOrder.context) throw new Error("Demo order needs operational context");
+    const pagedPackage: WorkPackage = {
+      ...seedPackage,
+      orders: Array.from({ length: 7 }, (_, index) => ({
+        ...baseOrder,
+        orderId: `ORD-PAGE-${index + 1}`,
+        context: { ...baseOrder.context, customerName: `Cliente página ${index + 1}` } as NonNullable<WorkOrder["context"]>,
+      })),
+    };
+    const store = await readyStore("ui-pagination", pagedPackage);
+
+    const firstPage = html(store);
+    expect(firstPage).toContain("mostrando 1-5 de 7 órdenes");
+    expect(firstPage).toContain("cliente página 1");
+    expect(firstPage).toContain("cliente página 5");
+    expect(firstPage).not.toContain("cliente página 6");
+    expect(firstPage).not.toContain("order-card__map-btn");
+
+    store.setQuery("Cliente página 6");
+    const filtered = html(store);
+    expect(filtered).toContain("mostrando 1-1 de 1 órdenes");
+    expect(filtered).toContain("cliente página 6");
+    expect(filtered).not.toContain("cliente página 1");
+  });
+
   it("renders back button to tray in fullscreen order detail", async () => {
     const store = await readyStore("ui-fullscreen");
     store.selectOrder("ORD-24017");
     const detailMarkup = html(store);
     expect(detailMarkup).toContain("volver a la bandeja");
     expect(detailMarkup).toContain("detalle de ord-24017");
+
+    store.selectOrder(null);
+    const trayMarkup = html(store);
+    expect(store.getSnapshot().selectedOrderId).toBeNull();
+    expect(trayMarkup).toContain("mis órdenes");
+    expect(trayMarkup).not.toContain("detalle de ord-24017");
   });
 
   it("shows explicit missing-location state without fallback coordinates", async () => {

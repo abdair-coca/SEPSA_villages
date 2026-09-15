@@ -8,6 +8,7 @@ export type AuthorizedAction =
   | "FIND_DEBTORS"
   | "CREATE_ORDER"
   | "ASSIGN_ORDER"
+  | "VIEW_TECHNICIANS"
   | "DOWNLOAD_ASSIGNED"
   | "VIEW_AUDIT"
   | "SYNC_OPERATION"
@@ -41,6 +42,15 @@ export interface SimulatedUser {
   source: "SIMULATED";
 }
 
+export interface TechnicianRecord {
+  userId: string;
+  username: string;
+  displayName: string;
+  role: "TECHNICIAN";
+  enabled: boolean;
+  source: DataSource;
+}
+
 export type OrderPurpose = "CUT";
 
 export interface KardexEntry {
@@ -63,8 +73,10 @@ export interface OperationalContext {
   references: string;
   meterId: string;
   area: string;
+  areaName?: string;
   locality: string;
   route: string;
+  routeName?: string;
   debtCents: number;
   monthsPending: number;
   updatedAt: string;

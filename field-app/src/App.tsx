@@ -46,7 +46,7 @@ export function App() {
 function ConnectedApp({ authority, session, onAuthenticated, onLogout }: { authority: IdentityPort & OperationsAuthorityPort & HttpPilotClient; session?: Session; onAuthenticated: (session: Session) => void; onLogout: () => void }) {
   if (!session) return <LoginScreen authority={authority} onAuthenticated={onAuthenticated} />;
   const logout = () => { void authority.logout(session).catch(() => undefined); onLogout(); };
-  if (session.role === "ADMIN") return <OperationsApp authority={authority} session={session} onLogout={logout} technicianId="10000000-0000-4000-8000-000000000002" />;
+  if (session.role === "ADMIN") return <OperationsApp authority={authority} session={session} onLogout={logout} />;
   return <TechnicianRuntime authority={authority} session={session} onLogout={logout} remote />;
 }
 

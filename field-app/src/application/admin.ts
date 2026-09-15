@@ -1,4 +1,4 @@
-import type { AssignOrderCommand, CreateOrderCommand, CreateOrdersBatchCommand, CreateOrdersBatchResult, DebtorQuery, DebtorRecord, Session, WorkOrder } from "../domain";
+import type { AssignOrderCommand, CreateOrderCommand, CreateOrdersBatchCommand, CreateOrdersBatchResult, DebtorQuery, DebtorRecord, Session, TechnicianRecord, WorkOrder } from "../domain";
 import type { IdentityPort, OperationsAuthorityPort } from "../ports";
 
 type AdminAuthority = OperationsAuthorityPort & IdentityPort;
@@ -6,6 +6,11 @@ type AdminAuthority = OperationsAuthorityPort & IdentityPort;
 export async function findDebtors(authority: AdminAuthority, session: Session, query: Omit<DebtorQuery, "session"> = {}): Promise<DebtorRecord[]> {
   await authority.authorize(session, "FIND_DEBTORS");
   return authority.findDebtors({ ...query, session });
+}
+
+export async function listTechnicians(authority: AdminAuthority, session: Session): Promise<TechnicianRecord[]> {
+  await authority.authorize(session, "VIEW_TECHNICIANS");
+  return authority.listTechnicians(session);
 }
 
 export async function createOrder(authority: AdminAuthority, session: Session, input: Omit<CreateOrderCommand, "session">): Promise<WorkOrder> {
@@ -26,6 +31,7 @@ export async function assignOrder(authority: AdminAuthority, session: Session, i
 export function createAdminCases(authority: AdminAuthority, identity: IdentityPort) {
   return {
     findDebtors: (session: Session, query: Omit<DebtorQuery, "session"> = {}) => findDebtors(authority, session, query),
+    listTechnicians: (session: Session) => listTechnicians(authority, session),
     createOrder: (session: Session, input: Omit<CreateOrderCommand, "session">) => createOrder(authority, session, input),
     createOrdersBatch: (session: Session, input: Omit<CreateOrdersBatchCommand, "session">) => createOrdersBatch(authority, session, input),
     assignOrder: (session: Session, input: Omit<AssignOrderCommand, "session">) => assignOrder(authority, session, input),

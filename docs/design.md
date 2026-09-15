@@ -30,8 +30,9 @@ Cada sección debe tener una acción principal claramente dominante.
 | Contexto | Acción principal |
 |---|---|
 | Buscar suministros | **Buscar** |
-| Suministro seleccionado | **Crear orden de corte** |
-| Orden creada | **Asignar técnico** |
+| Suministro seleccionado sin orden activa | **Crear orden de corte** |
+| Suministros seleccionados para lote | **Crear y asignar órdenes** |
+| Suministro con orden activa | **Ver orden de corte** |
 | Técnico en campo | **Registrar corte** |
 | Cola con fallos | **Sincronizar ahora** |
 | Sin órdenes | **Actualizar bandeja** |
@@ -153,20 +154,15 @@ Evitar sombras fuertes.
 
 # 5. Tipografía
 
-Fuente preferida:
+Fuente implementada:
 
 ```css
 font-family:
-  Inter,
-  ui-sans-serif,
-  system-ui,
-  -apple-system,
-  BlinkMacSystemFont,
-  "Segoe UI",
+  "Manrope",
   sans-serif;
 ```
 
-Si `Inter` no está disponible, utilizar el stack del sistema.
+`Manrope` se carga desde `@fontsource/manrope` en la aplicación.
 
 | Elemento | Tamaño | Peso |
 |---|---:|---:|
@@ -312,50 +308,43 @@ No mostrar métricas técnicas como `98 trazas` junto a métricas operativas.
 
 ---
 
-# 11. Stepper
+# 11. Flujo administrativo
 
-### Administración
+### Flujo conceptual
 
 ```text
-1 Buscar suministro
-2 Crear orden
-3 Asignar técnico
-4 Revisar orden
+buscar → seleccionar → revisar → crear y asignar → revisar orden
 ```
 
-Estados:
-- activo: naranja;
-- completado: verde o naranja suave;
-- pendiente: gris;
-- bloqueado: gris claro.
+La pantalla actual no muestra un stepper numérico. Cada bloque utiliza nombres funcionales:
 
-El usuario siempre debe saber en qué paso se encuentra.
+- `Buscar morosos`;
+- `Crear y asignar orden de corte`;
+- `Órdenes recientes`;
+- `Revisar orden`.
+
+El estado se comunica por selección, contexto visible, badges y acciones disponibles; no por numeración decorativa.
 
 ---
 
-# 12. Cards de suministro
+# 12. Filas de suministro
 
-Evitar tablas densas para selección de clientes/suministros.
+Usar filas horizontales compactas para selección administrativa. No utilizar cards verticales densas ni tablas técnicas para esta tarea.
 
 Orden de información:
-1. Nombre del cliente.
-2. Deuda.
-3. Estado.
+1. Posición de resultado.
+2. Checkbox de selección por lote.
+3. Nombre del cliente.
 4. Cuenta / medidor.
-5. Localidad / ruta.
-6. Acción.
+5. Dirección / ruta.
+6. Deuda / facturas pendientes.
+7. Estado.
 
 Ejemplo:
 
 ```text
-Elena Poma                         [Seleccionado]
-
-Cuenta CTA-1007 · Medidor MED-1007
-
-Bs 425.00
-8 facturas pendientes
-
-San Pedro · Ruta 004
+1  □  Elena Poma       CTA-1007 · MED-1007   Bs 425.00   A
+          Barrio Nuevo 56, San Pedro · Ruta 004
 ```
 
 Seleccionado:
@@ -364,6 +353,16 @@ Seleccionado:
 border-color: var(--sepsa-orange);
 background: #FFF9F4;
 ```
+
+Reglas de interacción:
+
+- el checkbox selecciona únicamente para lote;
+- el resto de la fila selecciona el suministro y actualiza el panel actual;
+- la fila admite `Enter` y `Espacio` con foco de teclado;
+- no mostrar botón `Abrir` dentro de la fila;
+- la posición continúa entre páginas;
+- mostrar 7 suministros por página;
+- conservar selección de lote al cambiar de página.
 
 ---
 
@@ -502,20 +501,23 @@ Evitar listar UUID, CUC y otros criterios técnicos si el buscador ya los soport
 
 # 18. Filtros
 
-Mostrar únicamente los filtros frecuentes.
-
-Los secundarios bajo:
-
-```text
-Más filtros
-```
+Mostrar filtros frecuentes directamente en la fila principal. No esconder el estado del suministro bajo un toggle `Más filtros`.
 
 ### Administración
 - Área
 - Localidad
 - Ruta
 - Facturas vencidas
-- Estado
+- Estado del suministro
+
+Acciones de filtros:
+
+- `Buscar morosos`;
+- `Limpiar`;
+- `Seleccionar todos` / `Quitar selección`;
+- `Crear y asignar (n)` cuando existe selección.
+
+Las acciones deben permanecer dentro del contenedor. En desktop se distribuyen con grid controlado; en mobile se apilan sin cortar texto.
 
 ### Técnico
 - Todas
@@ -971,7 +973,8 @@ WorkflowStepper
 SearchInput
 FilterBar
 StatusChip
-SupplyCard
+SupplyRow
+SupplyPagination
 OrderCard
 OrderSummary
 DataField
@@ -987,6 +990,7 @@ ActivityFeed
 EmptyState
 AlertBanner
 ConfirmDialog
+OrderCreationModal
 Toast
 Skeleton
 ```
@@ -1015,8 +1019,10 @@ Ambos roles comparten el mismo sistema visual.
 Prioridad:
 
 ```text
-buscar → seleccionar → crear → asignar → revisar
+buscar → seleccionar → revisar → crear y asignar → revisar orden
 ```
+
+La designación de técnico ocurre dentro del modal de creación individual o masiva. No duplicar selector ni botón `Confirmar asignación` debajo del suministro.
 
 ## Campo
 Prioridad:
@@ -1090,3 +1096,170 @@ INFO
 Para SEPSA:
 
 > **Cliente → ubicación → situación → acción → detalle técnico.**
+
+---
+
+# 44. Decisiones confirmadas de la pantalla administrativa
+
+Esta sección registra decisiones validadas durante la adaptación de la pantalla real en `field-app`. Tiene prioridad sobre ejemplos antiguos de este documento cuando exista contradicción.
+
+## 44.1 Composición
+
+- No usar sidebar.
+- Mantener header institucional, resumen operativo, búsqueda de morosos, suministro seleccionado, órdenes recientes y detalle de orden.
+- Usar nombres funcionales: `Buscar morosos`, `Crear y asignar orden de corte`, `Órdenes recientes` y `Revisar orden`.
+- No mostrar progreso numérico decorativo.
+- Mantener datos dinámicos provenientes de la autoridad existente.
+
+## 44.2 Suministro seleccionado
+
+El panel siempre conserva estructura visible, incluso sin selección:
+
+- encabezado de creación y asignación;
+- tarjeta `Datos del suministro seleccionado`;
+- campos operativos con iconos minimalistas;
+- valor `-` cuando no existe dato;
+- acción deshabilitada cuando no hay suministro seleccionado.
+
+No mostrar un bloque separado de `Deuda pendiente` en este panel. La deuda sigue disponible en el contexto de la orden y en su tabla de deuda.
+
+## 44.3 Filas de suministros
+
+Cada resultado se muestra como fila horizontal compacta:
+
+```text
+posición · checkbox de lote · cliente · cuenta/medidor · dirección/ruta · deuda · estado
+```
+
+Reglas confirmadas:
+
+- `Seleccionar todos` está junto a `Limpiar` dentro de filtros.
+- `Crear y asignar (n)` aparece solo cuando existe selección.
+- La fila selecciona suministro; checkbox solo selecciona lote.
+- No mostrar botón `Abrir`.
+- La fila es accesible con teclado mediante `Enter` y `Espacio`.
+- Paginar en bloques de 7 resultados.
+- Mantener selección de lote entre páginas.
+- Mantener posición global, no reiniciar numeración en cada página.
+
+## 44.4 Filtros
+
+Todos los filtros administrativos frecuentes aparecen en la fila principal:
+
+- Área;
+- Localidad;
+- Ruta;
+- Facturas vencidas;
+- Estado del suministro.
+
+No usar toggle `Más filtros` para ocultar Estado. Las acciones deben quedar dentro del panel; si falta espacio, se reorganizan como bloques completos y nunca cortan sus etiquetas.
+
+## 44.5 Creación y designación
+
+La designación ocurre únicamente dentro del modal:
+
+### Individual
+
+- resumen breve del suministro;
+- selector de técnico;
+- `Aceptar y crear orden`;
+- `Cancelar`.
+
+### Múltiple
+
+- lista de suministros seleccionados;
+- selector de un técnico común;
+- `Aceptar y crear órdenes`;
+- `Cancelar`.
+
+No duplicar selector ni botón `Confirmar asignación` debajo del panel de suministro.
+
+El contrato batch existente no recibe técnico. La implementación crea el lote y luego asigna cada orden con `assignOrder`, usando la versión retornada por creación.
+
+## 44.6 Orden activa y detalle
+
+Cuando un suministro ya tiene una orden activa:
+
+- no mostrar `Crear orden de corte`;
+- mostrar CTA verde `Ver orden de corte`;
+- al activarlo, seleccionar la orden;
+- desplazar suavemente al detalle inferior;
+- mostrar contexto, deuda, técnico, estado y trazabilidad.
+
+La orden creada desde modal queda asignada automáticamente al técnico elegido. Si la asignación falla después de crear, cerrar modal, conservar orden creada y pedir revisión; nunca repetir creación automáticamente.
+
+## 44.7 Estado visual
+
+| Estado | Tratamiento |
+|---|---|
+| Orden generada | badge de estado operativo |
+| Orden activa | acción verde `Ver orden de corte` |
+| Selección de fila | borde naranja y fondo cálido suave |
+| Suministro seleccionado para lote | checkbox marcado |
+| Dato ausente | `-` o `Dato no disponible` según contexto |
+| Error | mensaje accionable sin ocultar datos guardados |
+
+No usar color como único indicador. Combinar texto, estado y foco visible.
+
+## 44.8 Responsive
+
+### Desktop
+
+- filas de suministro en columnas;
+- filtros en una fila cuando el ancho lo permite;
+- acciones distribuidas con grid controlado;
+- panel de búsqueda y panel de contexto visibles en paralelo.
+
+### Mobile
+
+- fila de suministro apilada;
+- checkbox, estado y contenido siguen accesibles;
+- filtros y acciones ocupan ancho completo;
+- modal limita su altura y permite scroll interno;
+- ningún texto de acción debe salir de su contenedor.
+
+---
+
+# 45. Aprendizajes de implementación
+
+## 45.1 No duplicar responsabilidades
+
+Si modal confirma creación y técnico, no debe existir un segundo flujo de asignación en el panel. Dos controles para la misma transición crean ambigüedad y estados inconsistentes.
+
+## 45.2 Los contratos existentes limitan la UI
+
+La interfaz puede mostrar una asignación común para un lote, pero el contrato actual crea primero y asigna después. No inventar un endpoint batch con técnico hasta que exista contrato oficial.
+
+## 45.3 La selección debe vivir fuera de la página visible
+
+`selectedDebtorIds` conserva IDs de todas las páginas. La página visible solo controla render; no debe borrar selección al cambiar de página.
+
+## 45.4 La fila necesita interacción accesible
+
+Al eliminar botón `Abrir`, la fila pasó a ser superficie interactiva con rol, foco, `Enter` y `Espacio`. El checkbox permanece separado para no abrir suministro al seleccionar lote.
+
+## 45.5 El layout debe controlar ancho
+
+Los botones con texto largo no deben depender de anchos naturales de flexbox. Usar `minmax(0, 1fr)`, `min-width: 0`, `width: 100%` y `white-space: nowrap`; en mobile, apilar bloques completos.
+
+## 45.6 Verificación
+
+La cobertura específica de `OperationsApp` valida:
+
+- paginación de órdenes recientes;
+- paginación de suministros a 7 por página;
+- numeración y clamp de páginas;
+- formato y ausencia de coordenadas.
+
+La prueba específica actual pasa con 5 casos. La verificación global puede quedar bloqueada por cambios concurrentes ajenos en `FieldApp.tsx` e `Icons.tsx`; esos errores deben resolverse separadamente y no corregirse dentro del rediseño administrativo.
+
+## 45.7 Archivos principales
+
+| Archivo | Responsabilidad |
+|---|---|
+| `field-app/src/ui/OperationsApp.tsx` | Flujo admin, filas, filtros, modal, paginación y detalle |
+| `field-app/src/ui/styles.css` | Sistema visual, responsive, estados y layout |
+| `field-app/src/ui/OperationsApp.test.tsx` | Pruebas de paginación y presentación administrativa |
+| `field-app/src/application/admin.ts` | Casos de uso autoritativos de búsqueda, creación y asignación |
+| `docs/constitution.md` | Fuente principal de reglas de producto, seguridad y offline-first |
+| `docs/specs/006-rediseño-pantalla-admin/spec.md` | Alcance y criterios del rediseño administrativo |

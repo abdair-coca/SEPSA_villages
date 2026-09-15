@@ -8,6 +8,7 @@ import type { Role, SessionUser, SyncPayload } from "./types.js";
 import type { Config } from "./config.js";
 
 interface UserRow { user_id: string; username: string; display_name: string; role: Role; password_hash: string; enabled: boolean; }
+interface TechnicianRow { user_id: string; username: string; display_name: string; role: "TECHNICIAN"; enabled: boolean; }
 interface SessionRow { session_id: string; user_id: string; username: string; display_name: string; role: Role; }
 interface DebtorRow {
   debtor_id: string; account_id: string; supply_id: string; customer_name: string; address: string;
@@ -17,17 +18,18 @@ interface DebtorRow {
   route_order: number | null; cadastral_latitude: number | null; cadastral_longitude: number | null;
   meter_brand: string | null; meter_index: string | null; meter_multiplier: number | null;
   claims: boolean | null; payment_plan: boolean | null; suspension_date: string | null;
-  reconnection_manual: boolean | null; reconnection_date: string | null; reconnection_technician: string | null;
+  reconnection_manual: boolean | null; reconnection_date: string | null; reconnection_technician: string | null; context: unknown;
 }
 interface OrderRow {
   order_id: string; debtor_id: string; account_id: string; supply_id: string; purpose: "CUT";
   status: string; physical_status: string; version: number; created_by: string; assigned_technician_id: string | null;
-  created_at: string; context: unknown; cuc: string | null;
+  created_at: string; context: unknown; cuc: string | null; assigned_technician_name: string | null;
 }
 interface StoredOperationRow { operation_id: string; technician_id: string; device_id: string; status: string; payload_hash: string; }
 interface CommandRow { operation_type: string; actor_id: string; request_hash: string; response: unknown; }
 
 const PROVISIONAL_SOURCE = "PILOT_PROVISIONAL";
+const NO_DATA_FILTER_VALUE = "__NO_DATA__";
 
 export class Application {
   constructor(private readonly pool: Pool, private readonly config: Config) {}
@@ -66,6 +68,7 @@ export class Application {
     if (request.method === "POST" && path === "/v1/auth/logout") return await this.logout(request, response);
 
     const user = await this.requireSession(request);
+    if (request.method === "GET" && path === "/v1/technicians") return await this.listTechnicians(response, user);
     if (request.method === "GET" && path === "/v1/debtors") return await this.listDebtors(response, user, url);
     if (request.method === "GET" && path === "/v1/orders") return await this.listOrders(response, user);
     if (request.method === "POST" && path === "/v1/orders/batch") return await this.createOrdersBatch(request, response, user);
@@ -160,18 +163,34 @@ export class Application {
     if (!Number.isSafeInteger(minMonthsPending) || minMonthsPending < 0) throw new HttpError(400, "INVALID_REQUEST", "min_months_pending must be a non-negative integer.");
     const supplyStatus = (url.searchParams.get("supply_status") ?? "").trim();
     const result = await this.pool.query<DebtorRow>(
-      `SELECT debtor_id, account_id, supply_id, customer_name, address, reference_text, meter_id, area, locality,
+       `SELECT debtor_id, account_id, supply_id, customer_name, address, reference_text, meter_id, area, locality,
                route, debt_cents, months_pending, updated_at, kardex, circuit, customer_ci, contact_phone, tariff,
-               supply_status, enabling_title, route_order, cadastral_latitude, cadastral_longitude, meter_brand,
-               meter_index, meter_multiplier, claims, payment_plan, suspension_date, reconnection_manual,
-               reconnection_date, reconnection_technician
-       FROM debtors WHERE source = $1 AND ($2 = '' OR debtor_id ILIKE '%' || $2 || '%' OR account_id ILIKE '%' || $2 || '%' OR supply_id ILIKE '%' || $2 || '%' OR customer_name ILIKE '%' || $2 || '%' OR meter_id ILIKE '%' || $2 || '%')
-          AND ($3 = '' OR area = $3) AND ($4 = '' OR locality = $4) AND ($5 = '' OR route = $5)
-          AND ($6 = 0 OR months_pending >= $6) AND ($7 = '' OR supply_status = $7)
+                supply_status, enabling_title, route_order, cadastral_latitude, cadastral_longitude, meter_brand,
+                meter_index, meter_multiplier, claims, payment_plan, suspension_date, reconnection_manual,
+                reconnection_date, reconnection_technician, context
+        FROM debtors WHERE source = $1 AND ($2 = '' OR concat_ws(' ', debtor_id, account_id, supply_id, customer_name, address, reference_text,
+               meter_id, area, locality, route, debt_cents::text, months_pending::text, updated_at::text, kardex::text, circuit,
+               customer_ci, contact_phone, tariff, supply_status, enabling_title, route_order::text, cadastral_latitude::text,
+               cadastral_longitude::text, meter_brand, meter_index, meter_multiplier::text, claims::text, payment_plan::text,
+               suspension_date::text, reconnection_manual::text, reconnection_date::text, reconnection_technician) ILIKE '%' || $2 || '%')
+            AND ($3 = '' OR ($3 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(area), '') IS NULL) OR regexp_replace(LOWER(BTRIM(area)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($3)), '\\s+', ' ', 'g'))
+           AND ($4 = '' OR ($4 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(locality), '') IS NULL) OR regexp_replace(LOWER(BTRIM(locality)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($4)), '\\s+', ' ', 'g'))
+           AND ($5 = '' OR ($5 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(route), '') IS NULL) OR regexp_replace(LOWER(BTRIM(route)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($5)), '\\s+', ' ', 'g'))
+           AND ($6 = 0 OR months_pending >= $6)
+           AND ($7 = '' OR ($7 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(supply_status), '') IS NULL) OR regexp_replace(LOWER(BTRIM(supply_status)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($7)), '\\s+', ' ', 'g'))
         ORDER BY updated_at DESC LIMIT 100`,
        [PROVISIONAL_SOURCE, search, area, locality, route, minMonthsPending, supplyStatus],
     );
     sendJson(response, 200, { source: PROVISIONAL_SOURCE, debtors: result.rows.map(toDebtor) });
+  }
+
+  private async listTechnicians(response: ServerResponse, user: SessionUser): Promise<void> {
+    this.requireRole(user, "ADMIN");
+    const result = await this.pool.query<TechnicianRow>(
+      "SELECT user_id, username, display_name, role, enabled FROM users WHERE source = $1 AND role = 'TECHNICIAN' AND enabled = true ORDER BY display_name ASC, username ASC",
+      [PROVISIONAL_SOURCE],
+    );
+    sendJson(response, 200, { source: PROVISIONAL_SOURCE, technicians: result.rows.map((technician) => ({ user_id: technician.user_id, username: technician.username, display_name: technician.display_name, role: technician.role, enabled: technician.enabled, source: PROVISIONAL_SOURCE })) });
   }
 
   private async listOrders(response: ServerResponse, user: SessionUser): Promise<void> {
@@ -271,7 +290,7 @@ export class Application {
       if (!command.claimed) return command.replay;
       const technician = await client.query("SELECT user_id FROM users WHERE user_id = $1 AND role = 'TECHNICIAN' AND enabled = true AND source = $2", [technicianId, PROVISIONAL_SOURCE]);
       if (!technician.rows[0]) throw new HttpError(404, "TECHNICIAN_NOT_FOUND", "Technician was not found.");
-      const current = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE`, [orderId, PROVISIONAL_SOURCE]);
+      const current = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE OF o, d`, [orderId, PROVISIONAL_SOURCE]);
       const order = current.rows[0];
       if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found.");
       if (order.version !== expectedVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
@@ -324,7 +343,7 @@ export class Application {
         if (existing.rows[0].technician_id !== user.userId) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another technician.");
         throw new HttpError(409, "AUTHORIZATION_OPERATION_REPLAY", "Authorization operation already has a reservation; use saved response.");
       }
-      const orderResult = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE`, [orderId, PROVISIONAL_SOURCE]);
+      const orderResult = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE OF o, d`, [orderId, PROVISIONAL_SOURCE]);
       const order = orderResult.rows[0];
       if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found.");
       if (order.assigned_technician_id !== user.userId) throw new HttpError(403, "ORDER_NOT_ASSIGNED", "Order is not assigned to current technician.");
@@ -371,7 +390,7 @@ export class Application {
       const concurrent = await client.query<StoredOperationRow>("SELECT operation_id, technician_id, device_id, status, payload_hash FROM sync_operations WHERE operation_id = $1 FOR UPDATE", [payload.operation_id]);
       return concurrent.rows[0] ? syncReplay(concurrent.rows[0], user.userId, payload) ?? { status: "conflict", message: "Operation is already in progress." } : { status: "conflict", message: "Operation is already in progress." };
     }
-    const orderResult = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE`, [payload.order_id, PROVISIONAL_SOURCE]);
+    const orderResult = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE OF o, d`, [payload.order_id, PROVISIONAL_SOURCE]);
     const order = orderResult.rows[0];
     if (!order) return await rejectSync(client, user, payload, "Order was not found.");
     if (order.assigned_technician_id !== user.userId) return await rejectSync(client, user, payload, "Order is not assigned to current technician.");
@@ -524,20 +543,25 @@ function validateCaptureMeter(rawCapture: unknown, rawContext: unknown): void {
 }
 
 function orderColumns(alias: string): string {
-  return `${alias}.order_id, ${alias}.cuc, ${alias}.debtor_id, d.account_id, d.supply_id, ${alias}.purpose, ${alias}.status, ${alias}.physical_status, ${alias}.version, ${alias}.created_by, ${alias}.assigned_technician_id, ${alias}.created_at,
-    jsonb_build_object('debtor_id', d.debtor_id, 'account_id', d.account_id, 'supply_id', d.supply_id, 'customer_name', d.customer_name, 'address', d.address, 'references', d.reference_text, 'meter_id', d.meter_id, 'area', d.area, 'locality', d.locality, 'route', d.route, 'debt_cents', d.debt_cents, 'months_pending', d.months_pending, 'updated_at', d.updated_at, 'kardex', d.kardex, 'source', d.source, 'circuit', d.circuit, 'customer_ci', d.customer_ci, 'contact_phone', d.contact_phone, 'tariff', d.tariff, 'supply_status', d.supply_status, 'enabling_title', d.enabling_title, 'route_order', d.route_order, 'cadastral_latitude', d.cadastral_latitude, 'cadastral_longitude', d.cadastral_longitude, 'meter_brand', d.meter_brand, 'meter_index', d.meter_index, 'meter_multiplier', d.meter_multiplier, 'claims', d.claims, 'payment_plan', d.payment_plan, 'suspension_date', d.suspension_date, 'reconnection_manual', d.reconnection_manual, 'reconnection_date', d.reconnection_date, 'reconnection_technician', d.reconnection_technician, 'provisional_metadata', d.context) AS context`;
+  return `${alias}.order_id, ${alias}.cuc, ${alias}.debtor_id, d.account_id, d.supply_id, ${alias}.purpose, ${alias}.status, ${alias}.physical_status, ${alias}.version, ${alias}.created_by, ${alias}.assigned_technician_id, assigned_technician.display_name AS assigned_technician_name, ${alias}.created_at,
+    jsonb_build_object('debtor_id', d.debtor_id, 'account_id', d.account_id, 'supply_id', d.supply_id, 'customer_name', d.customer_name, 'address', d.address, 'references', d.reference_text, 'meter_id', d.meter_id, 'area', d.area, 'area_name', NULLIF(BTRIM(d.context->>'area_name'), ''), 'locality', d.locality, 'route', d.route, 'route_name', NULLIF(BTRIM(d.context->>'ruta_name'), ''), 'debt_cents', d.debt_cents, 'months_pending', d.months_pending, 'updated_at', d.updated_at, 'kardex', d.kardex, 'source', d.source, 'circuit', d.circuit, 'customer_ci', d.customer_ci, 'contact_phone', d.contact_phone, 'tariff', d.tariff, 'supply_status', d.supply_status, 'enabling_title', d.enabling_title, 'route_order', d.route_order, 'cadastral_latitude', d.cadastral_latitude, 'cadastral_longitude', d.cadastral_longitude, 'meter_brand', d.meter_brand, 'meter_index', d.meter_index, 'meter_multiplier', d.meter_multiplier, 'claims', d.claims, 'payment_plan', d.payment_plan, 'suspension_date', d.suspension_date, 'reconnection_manual', d.reconnection_manual, 'reconnection_date', d.reconnection_date, 'reconnection_technician', d.reconnection_technician, 'provisional_metadata', d.context) AS context`;
 }
 
 function orderSelect(where: string, order: string): string {
-  return `SELECT ${orderColumns("o")} FROM orders o JOIN debtors d ON d.debtor_id = o.debtor_id WHERE ${where} ORDER BY ${order}`;
+  return `SELECT ${orderColumns("o")} FROM orders o JOIN debtors d ON d.debtor_id = o.debtor_id LEFT JOIN users assigned_technician ON assigned_technician.user_id = o.assigned_technician_id AND assigned_technician.role = 'TECHNICIAN' WHERE ${where} ORDER BY ${order}`;
 }
 
 function toDebtor(row: DebtorRow): Record<string, unknown> {
-  return { debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, customer_name: row.customer_name, address: row.address, references: row.reference_text, meter_id: row.meter_id, area: row.area, locality: row.locality, route: row.route, debt_cents: row.debt_cents, months_pending: row.months_pending, updated_at: row.updated_at, kardex: row.kardex, source: PROVISIONAL_SOURCE, circuit: row.circuit, customer_ci: row.customer_ci, contact_phone: row.contact_phone, tariff: row.tariff, supply_status: row.supply_status, enabling_title: row.enabling_title, route_order: row.route_order, cadastral_latitude: row.cadastral_latitude, cadastral_longitude: row.cadastral_longitude, meter_brand: row.meter_brand, meter_index: row.meter_index, meter_multiplier: row.meter_multiplier, claims: row.claims, payment_plan: row.payment_plan, suspension_date: row.suspension_date, reconnection_manual: row.reconnection_manual, reconnection_date: row.reconnection_date, reconnection_technician: row.reconnection_technician };
+  return { debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, customer_name: row.customer_name, address: row.address, references: row.reference_text, meter_id: row.meter_id, area: row.area, area_name: contextString(row.context, "area_name"), locality: row.locality, route: row.route, route_name: contextString(row.context, "ruta_name"), debt_cents: row.debt_cents, months_pending: row.months_pending, updated_at: row.updated_at, kardex: row.kardex, source: PROVISIONAL_SOURCE, circuit: row.circuit, customer_ci: row.customer_ci, contact_phone: row.contact_phone, tariff: row.tariff, supply_status: row.supply_status, enabling_title: row.enabling_title, route_order: row.route_order, cadastral_latitude: row.cadastral_latitude, cadastral_longitude: row.cadastral_longitude, meter_brand: row.meter_brand, meter_index: row.meter_index, meter_multiplier: row.meter_multiplier, claims: row.claims, payment_plan: row.payment_plan, suspension_date: row.suspension_date, reconnection_manual: row.reconnection_manual, reconnection_date: row.reconnection_date, reconnection_technician: row.reconnection_technician };
+}
+
+function contextString(context: unknown, key: string): string | undefined {
+  const value = isRecord(context) ? context[key] : undefined;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function toOrder(row: OrderRow): Record<string, unknown> {
-  return { order_id: row.order_id, cuc: row.cuc, debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, purpose: row.purpose, status: row.status, physical_status: row.physical_status, version: row.version, created_by: row.created_by, assigned_technician_id: row.assigned_technician_id, created_at: row.created_at, context: row.context, source: PROVISIONAL_SOURCE };
+  return { order_id: row.order_id, cuc: row.cuc, debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, purpose: row.purpose, status: row.status, physical_status: row.physical_status, version: row.version, created_by: row.created_by, assigned_technician_id: row.assigned_technician_id, assigned_technician_name: row.assigned_technician_name, created_at: row.created_at, context: row.context, source: PROVISIONAL_SOURCE };
 }
 
 function digest(value: unknown): string {

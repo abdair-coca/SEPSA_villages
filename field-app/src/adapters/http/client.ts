@@ -1,4 +1,4 @@
-import { assertCan, permissionsForRole, type AuditEvent, type BatchOrderSkip, type ConnectivityMode, type CreateOrdersBatchResult, type DataSource, type DebtorQuery, type DebtorRecord, type DemoCredentials, type KardexEntry, type OperationRecord, type Session, type VisitRecord, type WorkOrder, type WorkPackageEnvelope } from "../../domain";
+import { assertCan, permissionsForRole, type AuditEvent, type BatchOrderSkip, type ConnectivityMode, type CreateOrdersBatchResult, type DataSource, type DebtorQuery, type DebtorRecord, type DemoCredentials, type KardexEntry, type OperationRecord, type Session, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackageEnvelope } from "../../domain";
 import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, RemoteResult } from "../../ports/authorization";
 import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
@@ -13,6 +13,7 @@ interface LoginResponse { session_id: string; session_token?: string; expires_at
 interface BatchOrderResponse { batch_id: string; requested_debtor_ids: string[]; created: unknown[]; skipped: Array<{ debtor_id: string; reason: BatchOrderSkip["reason"]; message: string }>; }
 interface AuthorizationResponse { authorization_id: string; token: string; order_id: string; technician_id: string; device_id: string; operation_id: string; version: number; issued_at: string; expires_at: string; }
 interface PackageResponse { package: { package_id: string; technician_id: string; device_id: string; version: number; downloaded_at: string; orders: unknown[] }; checksum: string; }
+interface TechnicianResponse { technicians: unknown[]; }
 
 export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, AuthorizationAdapter, SyncTransport {
   readonly simulation = "PILOT_PROVISIONAL" as const;
@@ -75,6 +76,12 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     if (query.supplyStatus?.trim()) params.set("supply_status", query.supplyStatus.trim());
     const response = await this.request<{ debtors: unknown[] }>(`/v1/debtors?${params}`, { method: "GET" }, session);
     return response.debtors.map(mapDebtor);
+  }
+
+  async listTechnicians(session: Session): Promise<TechnicianRecord[]> {
+    const authorized = this.requireSession(session);
+    const response = await this.request<TechnicianResponse>("/v1/technicians", { method: "GET" }, authorized);
+    return response.technicians.map(mapTechnician);
   }
 
   async createOrder(input: { operationId: string; debtorId: string; purpose: "CUT"; session?: Session }): Promise<WorkOrder> {
@@ -253,7 +260,7 @@ function mapDebtor(value: unknown): DebtorRecord {
   const debtCents = requiredNonNegativeInteger(raw.debt_cents, "debt_cents");
   const monthsPending = requiredNonNegativeInteger(raw.months_pending, "months_pending");
   return {
-    debtorId: stringOr(raw.debtor_id), accountId: stringOr(raw.account_id), supplyId: stringOr(raw.supply_id), customerName: stringOr(raw.customer_name), address: stringOr(raw.address), references: stringOr(raw.references), meterId: stringOr(raw.meter_id), area: stringOr(raw.area), locality: stringOr(raw.locality), route: stringOr(raw.route), debtCents, monthsPending, updatedAt: stringOr(raw.updated_at), kardex: mapKardex(raw.kardex), source: dataSource(raw.source), circuit: stringOr(raw.circuit), customerCi: optionalString(raw.customer_ci), contactPhone: optionalString(raw.contact_phone), tariff: optionalString(raw.tariff), supplyStatus: optionalString(raw.supply_status), enablingTitle: optionalString(raw.enabling_title), routeOrder: optionalNumber(raw.route_order), cadastralLatitude: optionalNumber(raw.cadastral_latitude), cadastralLongitude: optionalNumber(raw.cadastral_longitude), meterBrand: optionalString(raw.meter_brand), meterIndex: optionalString(raw.meter_index), meterMultiplier: optionalNumber(raw.meter_multiplier), claims: optionalBoolean(raw.claims), paymentPlan: optionalBoolean(raw.payment_plan), suspensionDate: optionalString(raw.suspension_date), reconnectionManual: optionalBoolean(raw.reconnection_manual), reconnectionDate: optionalString(raw.reconnection_date), reconnectionTechnician: optionalString(raw.reconnection_technician),
+    debtorId: stringOr(raw.debtor_id), accountId: stringOr(raw.account_id), supplyId: stringOr(raw.supply_id), customerName: stringOr(raw.customer_name), address: stringOr(raw.address), references: stringOr(raw.references), meterId: stringOr(raw.meter_id), area: stringOr(raw.area), areaName: optionalString(raw.area_name), locality: stringOr(raw.locality), route: stringOr(raw.route), routeName: optionalString(raw.route_name), debtCents, monthsPending, updatedAt: stringOr(raw.updated_at), kardex: mapKardex(raw.kardex), source: dataSource(raw.source), circuit: stringOr(raw.circuit), customerCi: optionalString(raw.customer_ci), contactPhone: optionalString(raw.contact_phone), tariff: optionalString(raw.tariff), supplyStatus: optionalString(raw.supply_status), enablingTitle: optionalString(raw.enabling_title), routeOrder: optionalNumber(raw.route_order), cadastralLatitude: optionalNumber(raw.cadastral_latitude), cadastralLongitude: optionalNumber(raw.cadastral_longitude), meterBrand: optionalString(raw.meter_brand), meterIndex: optionalString(raw.meter_index), meterMultiplier: optionalNumber(raw.meter_multiplier), claims: optionalBoolean(raw.claims), paymentPlan: optionalBoolean(raw.payment_plan), suspensionDate: optionalString(raw.suspension_date), reconnectionManual: optionalBoolean(raw.reconnection_manual), reconnectionDate: optionalString(raw.reconnection_date), reconnectionTechnician: optionalString(raw.reconnection_technician),
   };
 }
 
@@ -265,7 +272,13 @@ function mapOrder(value: unknown): WorkOrder {
   const physicalStatus = raw.physical_status === "NONE" || raw.physical_status === "CLAIMED" || raw.physical_status === "CONFIRMED" || raw.physical_status === "PHYSICAL_UNKNOWN" ? raw.physical_status : undefined;
   const version = requiredPositiveInteger(raw.version, "version");
   if (!status || !physicalStatus) throw new Error("REMOTE_ORDER_INVALID");
-  return { orderId, assignedTechnicianId: optionalString(raw.assigned_technician_id) ?? "", status, physicalStatus, version, purpose: "CUT", debtorId: requiredString(raw.debtor_id, "debtor_id"), accountId: optionalString(raw.account_id), supplyId: optionalString(raw.supply_id), createdBy: requiredString(raw.created_by, "created_by"), createdAt: requiredString(raw.created_at, "created_at"), origin: "SIMULATED", cuc: optionalString(raw.cuc), context };
+  return { orderId, assignedTechnicianId: optionalString(raw.assigned_technician_id) ?? "", assignedTechnicianName: optionalString(raw.assigned_technician_name), status, physicalStatus, version, purpose: "CUT", debtorId: requiredString(raw.debtor_id, "debtor_id"), accountId: optionalString(raw.account_id), supplyId: optionalString(raw.supply_id), createdBy: requiredString(raw.created_by, "created_by"), createdAt: requiredString(raw.created_at, "created_at"), origin: "SIMULATED", cuc: optionalString(raw.cuc), context };
+}
+
+function mapTechnician(value: unknown): TechnicianRecord {
+  const raw = asRecord(value);
+  if (raw.role !== "TECHNICIAN" || raw.enabled !== true) throw new Error("REMOTE_TECHNICIAN_INVALID");
+  return { userId: requiredString(raw.user_id, "user_id"), username: requiredString(raw.username, "username"), displayName: requiredString(raw.display_name, "display_name"), role: "TECHNICIAN", enabled: true, source: dataSource(raw.source) };
 }
 
 function mapAudit(value: unknown): AuditEvent {

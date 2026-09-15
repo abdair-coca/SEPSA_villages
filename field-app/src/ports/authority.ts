@@ -9,6 +9,7 @@ import type {
   OperationRecord,
   VisitRecord,
   Session,
+  TechnicianRecord,
   WorkOrder,
   WorkPackageEnvelope,
 } from "../domain";
@@ -30,6 +31,7 @@ export type TechnicalOrderAuthorizationResult =
 
 export interface OperationsAuthorityPort {
   findDebtors(query: DebtorQuery): Promise<DebtorRecord[]>;
+  listTechnicians(session: Session): Promise<TechnicianRecord[]>;
   createOrder(input: CreateOrderCommand): Promise<WorkOrder>;
   createOrdersBatch(input: CreateOrdersBatchCommand): Promise<CreateOrdersBatchResult>;
   assignOrder(input: AssignOrderCommand): Promise<WorkOrder>;

@@ -5,7 +5,7 @@ import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/m
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
 import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconMap, IconPhone, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch } from "./Icons";
+import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconExpand, IconMap, IconPhone, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch } from "./Icons";
 
 export interface FieldAppProps {
   store: AppStore;
@@ -295,12 +295,16 @@ function OperationalStrip({ state, store }: { state: AppState; store: AppStore }
 }
 
 function OrdersPanel({ state, orders, store, onRefreshAssigned, onMarkIncident }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void; onMarkIncident: (orderId: string) => void }) {
+  const ordersPerPage = 5;
   const [showMap, setShowMap] = useState(false);
+  const [mapFullscreenTarget, setMapFullscreenTarget] = useState<"rail" | "inline" | null>(null);
+  const [ordersPage, setOrdersPage] = useState(1);
   const [nextOrderId, setNextOrderId] = useState<string>();
   const [isMapCachedState, setIsMapCachedState] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<CacheProgress | null>(null);
   const [isDownloadingMap, setIsDownloadingMap] = useState(false);
   const [mapDownloadError, setMapDownloadError] = useState<string>();
+  const isMapFullscreen = mapFullscreenTarget !== null;
   const hasMapCoordinates = state.orders.some((order) => (
     typeof order.context?.cadastralLatitude === "number" &&
     typeof order.context?.cadastralLongitude === "number" &&
@@ -339,12 +343,45 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned, onMarkIncident }
   const cancelledCount = state.orders.filter((o) => o.status === "ANULADO").length;
   const reviewCount = state.orders.filter((o) => o.physicalStatus === "PHYSICAL_UNKNOWN").length;
   const prioritizedOrders = sortOrdersForNext(orders);
+  const ordersPageCount = Math.max(1, Math.ceil(orders.length / ordersPerPage));
+  const ordersPageStart = (ordersPage - 1) * ordersPerPage;
+  const pageOrders = orders.slice(ordersPageStart, ordersPageStart + ordersPerPage);
+  const firstVisibleOrder = orders.length ? ordersPageStart + 1 : 0;
+  const lastVisibleOrder = Math.min(ordersPageStart + pageOrders.length, orders.length);
   const nextOrder = prioritizedOrders.find((order) => order.orderId === nextOrderId) ?? prioritizedOrders[0];
   const nextOrderIndex = nextOrder ? prioritizedOrders.findIndex((order) => order.orderId === nextOrder.orderId) : -1;
 
   useEffect(() => {
     setNextOrderId((current) => current && prioritizedOrders.some((order) => order.orderId === current) ? current : prioritizedOrders[0]?.orderId);
   }, [state.orders, state.query, state.filter]);
+
+  useEffect(() => {
+    setOrdersPage(1);
+  }, [state.query, state.filter]);
+
+  useEffect(() => {
+    setOrdersPage((page) => Math.min(page, ordersPageCount));
+  }, [orders.length, ordersPageCount]);
+
+  useEffect(() => {
+    if (!mapFullscreenTarget || typeof document === "undefined") return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMapFullscreenTarget(null);
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [mapFullscreenTarget]);
+
+  const openMapFullscreen = (target: "rail" | "inline") => {
+    setShowMap(true);
+    setMapFullscreenTarget(target);
+  };
 
   function moveNextOrder(direction: -1 | 1): void {
     if (nextOrderIndex < 0) return;
@@ -357,7 +394,7 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned, onMarkIncident }
     { value: "GENERADO", label: "Por ejecutar", count: generatedCount },
     { value: "EJECUTADO", label: "Ejecutadas", count: executedCount },
     { value: "ANULADO", label: "Anuladas", count: cancelledCount },
-    { value: "REVIEW", label: "Revisión" },
+    { value: "REVIEW", label: "Revisión", count: reviewCount },
   ];
 
   return (
@@ -379,24 +416,41 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned, onMarkIncident }
                 <div>
                   <span className="eyebrow">BANDEJA ASIGNADA</span>
                   <h2>Mis órdenes</h2>
+                  <p className="section-subtitle">Todas tus órdenes asignadas para hoy.</p>
                 </div>
                 <span className="section-count">{orders.length}</span>
               </div>
               <OrderFilters state={state} store={store} filters={filters} />
               <div className="order-cards-list">
-                {orders.map((order) => (
+                {pageOrders.map((order) => (
                   <OrderCard
                     key={order.orderId}
                     order={order}
                     selected={state.selectedOrderId === order.orderId}
                     onSelect={() => store.selectOrder(order.orderId)}
-                    onShowMap={() => { store.selectOrder(order.orderId); setShowMap(true); }}
                   />
                 ))}
+                {!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}
+              </div>
+              <div className="order-pagination" aria-label="Paginación de órdenes">
+                <span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span>
+                <div className="order-pagination__controls">
+                  <button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button>
+                  <span>Página {ordersPage} de {ordersPageCount}</span>
+                  <button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button>
+                </div>
               </div>
             </section>
           </div>
-          <DesktopRightRail state={state} orders={orders} selectedOrderId={nextOrder.orderId} store={store} />
+          <DesktopRightRail
+            state={state}
+            orders={orders}
+            selectedOrderId={nextOrder.orderId}
+            store={store}
+            isMapFullscreen={mapFullscreenTarget === "rail"}
+            onExpandMap={() => openMapFullscreen("rail")}
+            onCloseFullscreen={() => setMapFullscreenTarget(null)}
+          />
         </div>
       ) : (
         <EmptyOrders hasAnyOrders={state.orders.length > 0} onRefresh={onRefreshAssigned ?? (() => void store.refresh())} onShowMap={() => setShowMap(true)} />
@@ -415,7 +469,17 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned, onMarkIncident }
         ) : <span className="map-cached-tag"><IconCheck className="cached-icon" /> Mapa descargado</span>}
       </div>
       {mapDownloadError ? <div className="map-warning-banner" role="alert">{mapDownloadError}</div> : null}
-      {showMap ? <FieldMap orders={orders} selectedOrderId={nextOrder?.orderId ?? null} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} /> : null}
+      {showMap ? (
+        <FieldMap
+          orders={orders}
+          selectedOrderId={nextOrder?.orderId ?? null}
+          onSelectOrder={(orderId) => store.selectOrder(orderId)}
+          mode={state.mode}
+          isFullscreen={mapFullscreenTarget === "inline"}
+          onExpandMap={() => openMapFullscreen("inline")}
+          onCloseFullscreen={() => setMapFullscreenTarget(null)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -425,74 +489,102 @@ function DesktopRightRail({
   orders,
   selectedOrderId,
   store,
+  onExpandMap,
+  onCloseFullscreen,
+  isMapFullscreen,
 }: {
   state: AppState;
   orders: WorkOrder[];
   selectedOrderId: string | null;
   store: AppStore;
+  onExpandMap: () => void;
+  onCloseFullscreen: () => void;
+  isMapFullscreen: boolean;
 }) {
   const pendingItems = state.syncItems.filter((item) => item.status !== "synced");
   const recentItems = pendingItems.slice(0, 3);
-  const recentActivity = state.activity.slice(0, 3);
+  const [showAllActivity, setShowAllActivity] = useState(false);
+  const recentActivity = showAllActivity ? state.activity : state.activity.slice(0, 5);
 
   return (
     <aside className="desktop-right-rail" aria-label="Resumen operativo">
-      <section className="desktop-rail-panel desktop-map-panel" aria-label="Mapa de órdenes">
+      <section className={`desktop-rail-panel desktop-map-panel${isMapFullscreen ? " desktop-map-panel--fullscreen" : ""}`} aria-label="Mapa de órdenes">
         <div className="desktop-rail-heading">
-          <div>
-            <span className="eyebrow">UBICACIONES</span>
+          <div className="desktop-map-title">
+            <span className="desktop-rail-icon" aria-hidden="true"><IconMap /></span>
             <h2>Mapa de órdenes</h2>
           </div>
-          <span className="section-count">{orders.length}</span>
+          <button type="button" className="desktop-map-expand" onClick={onExpandMap} aria-label="Expandir mapa a pantalla completa">
+            <IconExpand /> <span>Expandir mapa</span>
+          </button>
         </div>
-        <FieldMap orders={orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} />
+        <FieldMap
+          orders={orders}
+          selectedOrderId={selectedOrderId}
+          onSelectOrder={(orderId) => store.selectOrder(orderId)}
+          mode={state.mode}
+          compact
+          isFullscreen={isMapFullscreen}
+          onExpandMap={onExpandMap}
+          onCloseFullscreen={onCloseFullscreen}
+        />
       </section>
 
-      <section className="desktop-rail-panel desktop-sync-summary" aria-label="Cola resumida de sincronización">
-        <div className="desktop-rail-heading">
-          <div>
-            <span className="eyebrow">PENDIENTES</span>
-            <h2>Cola de sincronización</h2>
+      <section className="desktop-rail-panel desktop-sync-activity-panel" aria-label="Sincronización y actividad local">
+        <section className="desktop-rail-section desktop-sync-summary" aria-labelledby="desktop-sync-title">
+          <div className="desktop-rail-heading">
+            <div className="desktop-rail-title">
+              <span className="desktop-rail-icon" aria-hidden="true"><IconRefresh /></span>
+              <h2 id="desktop-sync-title">Cola de sincronización</h2>
+            </div>
+            <span className="desktop-rail-pending">{pendingItems.length} pendientes</span>
           </div>
-          <span className={pendingItems.length ? "queue-count queue-count--pending" : "queue-count"}>{pendingItems.length}</span>
-        </div>
-        {recentItems.length ? (
-          <div className="desktop-sync-list">
-            {recentItems.map((item) => (
-              <div className="desktop-sync-item" key={item.operationId}>
-                <div>
-                  <strong>{queueActionLabel(item.action)}</strong>
-                  <span>{state.orders.find((order) => order.orderId === item.orderId)?.context?.customerName ?? "Orden no disponible"}</span>
+          {recentItems.length ? (
+            <div className="desktop-sync-list">
+              {recentItems.map((item) => (
+                <div className="desktop-sync-item" key={item.operationId}>
+                  <div>
+                    <strong>{queueActionLabel(item.action)}</strong>
+                    <span>{state.orders.find((order) => order.orderId === item.orderId)?.context?.customerName ?? "Orden no disponible"}</span>
+                  </div>
+                  <span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span>
                 </div>
-                <span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span>
-              </div>
-            ))}
-          </div>
-        ) : <p className="desktop-rail-empty">Cola despejada.</p>}
-        <button type="button" className="desktop-rail-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>Ver cola completa <span>→</span></button>
-      </section>
+              ))}
+            </div>
+          ) : (
+            <div className="desktop-empty-state">
+              <span className="desktop-empty-state__icon" aria-hidden="true"><IconDatabase /></span>
+              <strong>No hay operaciones pendientes.</strong>
+              <span>Todas las operaciones están sincronizadas.</span>
+            </div>
+          )}
+          <button type="button" className="desktop-rail-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>Ver cola completa <span>→</span></button>
+        </section>
 
-      <section className="desktop-rail-panel desktop-activity-summary" aria-label="Actividad reciente">
-        <div className="desktop-rail-heading">
-          <div>
-            <span className="eyebrow">TRAZABILIDAD LOCAL</span>
-            <h2>Actividad reciente</h2>
+        <section className="desktop-rail-section desktop-activity-summary" aria-labelledby="desktop-activity-title">
+          <div className="desktop-rail-heading">
+            <div className="desktop-rail-title">
+              <span className="desktop-rail-icon" aria-hidden="true"><IconDatabase /></span>
+              <h2 id="desktop-activity-title">Actividad reciente</h2>
+            </div>
+            <button type="button" className="desktop-activity-link" onClick={() => setShowAllActivity((visible) => !visible)} aria-expanded={showAllActivity}>
+              {showAllActivity ? "Ver menos" : "Ver todas"}
+            </button>
           </div>
-        </div>
-        {recentActivity.length ? (
-          <div className="desktop-activity-list">
-            {recentActivity.map((entry) => (
-              <button type="button" className="desktop-activity-item" key={entry.record.operationId} onClick={() => { store.setTab("orders"); store.selectOrder(entry.record.orderId); }}>
-                <span className="desktop-activity-dot" aria-hidden="true" />
-                <span>
-                  <strong>{activityLabel(entry.record.kind)}</strong>
-                  <small>{formatDate(entry.record.recordedAt)} · {syncStatusLabel(entry.record.syncStatus)}</small>
-                </span>
-                <span aria-hidden="true">→</span>
-              </button>
-            ))}
-          </div>
-        ) : <p className="desktop-rail-empty">Sin actividad local registrada.</p>}
+          {recentActivity.length ? (
+            <div className="desktop-activity-list">
+              {recentActivity.map((entry) => (
+                <button type="button" className="desktop-activity-item" key={entry.record.operationId} onClick={() => { store.setTab("orders"); store.selectOrder(entry.record.orderId); }}>
+                  <span className="desktop-activity-dot" aria-hidden="true" />
+                  <span>
+                    <strong>{activityLabel(entry.record.kind)}</strong>
+                    <small>{formatActivityTime(entry.record.recordedAt)}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : <p className="desktop-rail-empty">Sin actividad local registrada.</p>}
+        </section>
       </section>
     </aside>
   );
@@ -586,67 +678,62 @@ function ReadinessItem({ ready, label, detail, warning = false }: { ready: boole
   return <div className={`current-order-card__readiness-item ${ready ? "current-order-card__readiness-item--ready" : "current-order-card__readiness-item--pending"}`}><span className={warning ? "current-order-card__readiness-icon current-order-card__readiness-icon--warning" : "current-order-card__readiness-icon"} aria-hidden="true">{ready ? "✓" : "!"}</span><div><strong>{label}</strong><span>{detail}</span></div></div>;
 }
 
-function OrderCard({
-  order,
-  selected,
-  onSelect,
-  onShowMap,
-}: {
+function OrderCard({ order, selected, onSelect }: {
   order: WorkOrder;
   selected: boolean;
   onSelect: () => void;
-  onShowMap: () => void;
 }) {
   const isCancelled = order.status === "ANULADO";
-  const isExecuted = order.status === "EJECUTADO";
   const account = order.context?.accountId || order.accountId || "S/C";
   const meter = order.context?.meterId || "S/M";
   const customer = order.context?.customerName || order.orderId;
   const address = order.context?.address || "Dirección no especificada";
   const route = order.context?.route || "Ruta —";
-  const debtBs = order.context?.debtCents ? (order.context.debtCents / 100).toFixed(2) : "0.00";
-  const daysSince = formatDaysSince(order.createdAt);
+  const debt = formatDebt(order.context?.debtCents) ?? "Bs 0.00";
+  const monthsPending = order.context?.monthsPending;
   const cuc = order.cuc;
 
   return (
     <article
-      className={`order-card order-item ${selected ? "order-card--selected" : ""} ${
+      className={`order-card order-list-row order-item ${selected ? "order-card--selected" : ""} ${
         isCancelled ? "order-card--cancelled" : ""
       }`}
       onClick={onSelect}
     >
       <div className="order-card__header">
+        <div className="order-card__identifiers">
+          <span className="order-card__order-id">Orden {shortTechnicalId(order.orderId)}</span>
+          {cuc ? <span className="order-card__cuc">CUC {shortTechnicalId(cuc)}</span> : null}
+        </div>
         <div className="order-card__badges">
           <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
-            {orderStatusLabel(order.status)}
+            {fieldOrderStatusLabel(order)}
           </span>
         </div>
       </div>
 
       <div className="order-card__body">
         <h3 className="order-card__customer">{customer}</h3>
-        <p className="order-card__supply">{account} · {meter}</p>
+        <p className="order-card__supply">Cuenta {account} · Medidor {meter}</p>
         <p className="order-card__address">
           <IconPin className="card-address-icon" /> {address}
         </p>
-        <p className="order-card__route">{order.context?.locality || "Localidad no disponible"} · {route}</p>
+        <p className="order-card__route">{order.context?.locality || "Localidad no disponible"} · Ruta {route}</p>
       </div>
 
       <div className="order-card__footer">
         <div className="order-card__debt-info">
-          <span className="order-card__debt-label">Deuda:</span>
-          <strong className="order-card__debt-val">Bs {debtBs}</strong>
-          <span className="order-card__days">{daysSince}</span>
+          <span className="order-card__debt-label">Deuda</span>
+          <strong className="order-card__debt-val">{debt}</strong>
+          <span className="order-card__months">{monthsPending === undefined ? "Dato no disponible" : `${monthsPending} factura${monthsPending === 1 ? "" : "s"}`}</span>
         </div>
 
         <div className="order-card__actions">
           <button type="button" className="order-card__action-btn" onClick={(e) => { e.stopPropagation(); onSelect(); }}>
-            {isCancelled ? "Ver anulado" : isExecuted ? "Ver ejecutado" : "Abrir"}
+            Abrir
           </button>
-          <button type="button" className="order-card__map-btn" onClick={(e) => { e.stopPropagation(); onShowMap(); }}>Mapa</button>
         </div>
       </div>
-      <div className="technical-id order-card__technical">Orden {shortTechnicalId(order.orderId)}{cuc ? ` · CUC ${shortTechnicalId(cuc)}` : ""}</div>
     </article>
   );
 }
@@ -670,6 +757,10 @@ function OrderDetail({
 }) {
   const [draft, setDraft] = useState<ActionKind | null>(initialAction ?? null);
   const isCancelled = order.status === "ANULADO";
+  const canCut = order.status === "GENERADO" && order.physicalStatus === "NONE";
+  const locationHref = order.context && hasCadastralCoordinates(order.context)
+    ? `https://www.google.com/maps/search/?api=1&query=${order.context.cadastralLatitude},${order.context.cadastralLongitude}`
+    : undefined;
 
   useEffect(() => {
     if (initialAction) setDraft(initialAction);
@@ -701,27 +792,30 @@ function OrderDetail({
         </div>
       ) : null}
 
-      <div className="detail-heading">
-        <div>
+      <header className="order-detail-header">
+        <div className="order-detail-header__identity">
           <span className="eyebrow">ORDEN ACTUAL</span>
           <h2>{order.context?.customerName || order.orderId}</h2>
-          <p>{order.context?.accountId || order.accountId || "Cuenta no disponible"} · {order.context?.meterId || "Medidor no disponible"}</p>
+          <p>Cuenta / suministro {order.context?.accountId || order.accountId || "Cuenta no disponible"} · Medidor {order.context?.meterId || "Medidor no disponible"}</p>
         </div>
-        <div className="detail-technical-stack">
-          <span className="technical-id">Orden {shortTechnicalId(order.orderId)}</span>
-          {order.cuc ? <span className="technical-id">CUC: {shortTechnicalId(order.cuc)}</span> : null}
+        <div className="order-detail-header__status">
+          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
+            {orderStatusLabel(order.status)}
+          </span>
+          <div className="order-detail-identifiers">
+            <span className="technical-id">Orden {shortTechnicalId(order.orderId)}</span>
+            {order.cuc ? <span className="technical-id">CUC: {shortTechnicalId(order.cuc)}</span> : null}
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="physical-card">
-        <span className="physical-card__label">Estado físico</span>
-        <strong>{physicalStatusLabel(order.physicalStatus)}</strong>
-        {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
-          <p>Revisión humana requerida. No repetir acción.</p>
-        ) : (
-          <p>Estado local verificable sin conexión.</p>
-        )}
-      </div>
+      {order.physicalStatus !== "NONE" ? (
+        <div className="order-detail-physical-status">
+          <span>Estado físico</span>
+          <strong>{physicalStatusLabel(order.physicalStatus)}</strong>
+          {order.physicalStatus === "PHYSICAL_UNKNOWN" ? <small>Revisión humana requerida. No repetir acción.</small> : null}
+        </div>
+      ) : null}
 
       {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
         <div className="review-callout" role="alert">
@@ -738,24 +832,40 @@ function OrderDetail({
 
       <ActivityPanel entries={state.activity.filter((entry) => entry.record.orderId === order.orderId)} />
 
-      <div className="action-stack">
-        {order.status === "GENERADO" && order.physicalStatus === "NONE" ? (
+      <div className="order-detail-actions">
+        {canCut ? (
           <button className="primary-action" aria-label="Preparar corte" disabled={Boolean(state.busyAction)} onClick={() => setDraft("CUT")}>
-            Registrar corte <span>→</span>
+            <IconScissors />
+            Registrar corte
+            <span aria-hidden="true">→</span>
           </button>
         ) : null}
-        <button className={order.status === "GENERADO" && order.physicalStatus === "NONE" ? "secondary-action" : "primary-action"} disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
-          Registrar visita <span>→</span>
-        </button>
-        {enableReconnection && order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED" ? (
-          <button
-            className="secondary-action"
-            disabled={Boolean(state.busyAction)}
-            onClick={() => setDraft("RECONNECTION")}
-          >
-            Preparar reconexión <span>→</span>
+        <div className="order-detail-actions__secondary">
+          <button className={canCut ? "secondary-action" : "primary-action"} disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
+            Registrar visita
+            <span aria-hidden="true">→</span>
           </button>
-        ) : null}
+          {locationHref ? (
+            <a className="secondary-action" href={locationHref} target="_blank" rel="noreferrer">
+              <IconMap />
+              Ver ubicación
+            </a>
+          ) : (
+            <button type="button" className="secondary-action" disabled>
+              <IconMap />
+              Ver ubicación
+            </button>
+          )}
+          {enableReconnection && order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED" ? (
+            <button
+              className="secondary-action"
+              disabled={Boolean(state.busyAction)}
+              onClick={() => setDraft("RECONNECTION")}
+            >
+              Preparar reconexión <span aria-hidden="true">→</span>
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {draft ? (
@@ -779,58 +889,93 @@ function OrderDetail({
 
 function OperationalContext({ context }: { context: NonNullable<WorkOrder["context"]> }) {
   return (
-    <section className="context-panel" aria-label="Contexto operativo">
-      <div className="context-heading"><div><span className="eyebrow">DATOS PARA TRABAJAR</span><h3>Cliente y suministro</h3></div><span className="context-source">Actualizado {formatDate(context.updatedAt)}</span></div>
-      <div className="detail-location"><IconPin /><div><span>Dirección</span><strong>{context.address || "Dato no disponible"}</strong><small>{context.references || "Sin referencia adicional"}</small></div></div>
-      <div className="detail-debt"><div><span>Deuda de referencia</span><strong>Bs {(context.debtCents / 100).toFixed(2)}</strong></div><span>{context.monthsPending} facturas pendientes</span></div>
-      <div className="context-grid">
-        <div><span>Cuenta / suministro</span><strong>{context.accountId || "Dato no disponible"} · {context.supplyId || "Dato no disponible"}</strong></div>
-        <div><span>Medidor</span><strong>{context.meterId || "Dato no disponible"}{context.meterBrand ? ` · ${context.meterBrand}` : ""}</strong></div>
-        <div><span>Ruta / circuito</span><strong>{context.route || "Dato no disponible"} · {context.circuit || "Dato no disponible"}</strong></div>
-        <div><span>Localidad / estado</span><strong>{context.locality || "Dato no disponible"} · {context.supplyStatus || "Dato no disponible"}</strong></div>
+    <section className="order-detail-context" aria-label="Cliente y suministro">
+      <div className="order-detail-section-heading">
+        <div>
+          <span className="eyebrow">DATOS PARA TRABAJAR</span>
+          <h3>Cliente y suministro</h3>
+        </div>
+        <span className="context-source">Actualizado {formatDate(context.updatedAt)} · {context.source === "SIMULATED" ? "Fuente simulada" : "Fuente provisional"}</span>
       </div>
-      <details className="technical-details">
-        <summary>Ver datos técnicos</summary>
-        <div className="technical-details__body"><span>Tarifa: {context.tariff || "Dato no disponible"}</span><span>Coordenadas: {context.cadastralLatitude !== undefined && context.cadastralLongitude !== undefined ? `${context.cadastralLatitude.toFixed(6)}, ${context.cadastralLongitude.toFixed(6)}` : "No disponibles"}</span></div>
-      </details>
-      <details className="kardex-details">
-        <summary>Kardex y deuda</summary>
-        {context.kardex.length ? context.kardex.map((entry) => <div className="kardex-row" key={entry.entryId}><span>{entry.period}</span><span>Bs {(entry.amountCents / 100).toFixed(2)}</span><span>{entry.status === "PENDING" ? "Pendiente" : "Pagado"}</span></div>) : <p>Historial no disponible en paquete local.</p>}
+      <div className="detail-location"><IconPin /><div><span>Dirección</span><strong>{context.address || "Dato no disponible"}</strong><small>{context.references || "Sin referencia adicional"}</small></div></div>
+      <div className="detail-debt">
+        <div><span>Deuda de referencia</span><strong>{formatDebt(context.debtCents) ?? "Dato no disponible"}</strong></div>
+        <span>{context.monthsPending} facturas pendientes</span>
+      </div>
+      <div className="context-grid">
+        <div className="data-point"><span>Cuenta / suministro</span><strong>{context.accountId || "Dato no disponible"} · {context.supplyId || "Dato no disponible"}</strong></div>
+        <div className="data-point"><span>Medidor</span><strong>{context.meterId || "Dato no disponible"}{context.meterBrand ? ` · ${context.meterBrand}` : ""}</strong></div>
+        <div className="data-point"><span>Ruta / circuito</span><strong>{context.route || "Dato no disponible"} · {context.circuit || "Dato no disponible"}</strong></div>
+        <div className="data-point"><span>Localidad / estado</span><strong>{context.locality || "Dato no disponible"} · {context.supplyStatus || "Dato no disponible"}</strong></div>
+      </div>
+      <section className="order-detail-kardex" aria-label="Kardex y deuda">
+        <div className="order-detail-section-heading order-detail-section-heading--compact">
+          <h3>Kardex y deuda</h3>
+        </div>
+        {context.kardex.length ? (
+          <div className="kardex-table-wrap">
+            <table className="kardex-table">
+              <thead><tr><th scope="col">Periodo</th><th scope="col">Monto</th><th scope="col">Estado</th><th scope="col">Días mora</th></tr></thead>
+              <tbody>
+                {context.kardex.map((entry) => (
+                  <tr key={entry.entryId}>
+                    <td>{entry.period}</td>
+                    <td>{formatDebt(entry.amountCents) ?? "Dato no disponible"}</td>
+                    <td><span className={`kardex-status kardex-status--${entry.status.toLowerCase()}`}>{entry.status === "PENDING" ? "Pendiente" : "Pagado"}</span></td>
+                    <td>{entry.daysLate ?? "Dato no disponible"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="kardex-empty">Historial no disponible en paquete local.</p>}
+      </section>
+      <details className="order-detail-technical">
+        <summary>Datos técnicos</summary>
+        <div className="order-detail-technical__grid">
+          <div className="data-point"><span>Tarifa</span><strong>{context.tariff || "Dato no disponible"}</strong></div>
+          <div className="data-point"><span>Coordenadas</span><strong>{context.cadastralLatitude !== undefined && context.cadastralLongitude !== undefined ? `${context.cadastralLatitude.toFixed(6)}, ${context.cadastralLongitude.toFixed(6)}` : "No disponibles"}</strong></div>
+        </div>
       </details>
     </section>
   );
 }
 
 function ActivityPanel({ entries }: { entries: ActivityEntry[] }) {
-  if (!entries.length) return <div className="activity-empty">Sin actividad local registrada.</div>;
   return (
-    <section className="activity-panel" aria-label="Actividad local">
-      <div className="eyebrow">ACTIVIDAD LOCAL</div>
-      {entries.map((entry) => (
-        <article className="activity-entry" key={entry.record.operationId}>
-          <div className="activity-entry__top">
-            <strong>{activityLabel(entry.record.kind)}</strong>
-            <span>{syncStatusLabel(entry.record.syncStatus)}</span>
-          </div>
-          <p>
-            {formatDate(entry.record.recordedAt)} · {activityDetail(entry.record)}
-          </p>
-          {entry.evidence.length ? (
-            <div className="evidence-list">
-              {entry.evidence.map((evidence) => (
-                <div className="evidence-meta" key={evidence.evidenceId}>
-                  <strong>
-                    {evidence.mimeType === "image/jpeg" ? "JPEG" : "PNG"} · {evidence.width} × {evidence.height}
-                  </strong>
-                  <span>Guardada localmente · SHA-256 {shortHash(evidence.contentHash)}</span>
+    <section className="order-detail-local-state" aria-label="Estado local">
+      <div className="order-detail-local-state__heading">
+        <h3>Estado local</h3>
+      </div>
+      {entries.length ? (
+        <div className="activity-entry-list">
+          {entries.map((entry) => (
+            <article className="activity-entry" key={entry.record.operationId}>
+              <div className="activity-entry__top">
+                <strong>{activityLabel(entry.record.kind)}</strong>
+                <span>{syncStatusLabel(entry.record.syncStatus)}</span>
+              </div>
+              <p>
+                {formatDate(entry.record.recordedAt)} · {activityDetail(entry.record)}
+              </p>
+              {entry.evidence.length ? (
+                <div className="evidence-list">
+                  {entry.evidence.map((evidence) => (
+                    <div className="evidence-meta" key={evidence.evidenceId}>
+                      <strong>
+                        {evidence.mimeType === "image/jpeg" ? "JPEG" : "PNG"} · {evidence.width} × {evidence.height}
+                      </strong>
+                      <span>Guardada localmente · SHA-256 {shortHash(evidence.contentHash)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : activityException(entry.record) ? (
-            <div className="exception-meta">Excepción: {activityException(entry.record)}</div>
-          ) : null}
-        </article>
-      ))}
+              ) : activityException(entry.record) ? (
+                <div className="exception-meta">Excepción: {activityException(entry.record)}</div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : <p className="order-detail-local-state__empty">Sin actividad local registrada.</p>}
     </section>
   );
 }
@@ -1140,7 +1285,6 @@ function EmptyOrders({ hasAnyOrders, onRefresh, onShowMap }: { hasAnyOrders: boo
       <span>{hasAnyOrders ? "Prueba cambiar búsqueda o filtro." : "Actualiza la bandeja o espera una nueva asignación."}</span>
       <div className="empty-state__actions">
         <button type="button" className="primary-action" onClick={onRefresh}>Actualizar bandeja</button>
-        <button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver mapa</button>
       </div>
     </div>
   );
@@ -1222,6 +1366,10 @@ function orderStatusLabel(status: WorkOrder["status"]): string {
     ? "Reconectada"
     : "Anulada";
 }
+function fieldOrderStatusLabel(order: WorkOrder): string {
+  if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "En revisión";
+  return order.status === "ANULADO" ? "Anulada" : order.status === "GENERADO" ? "Por ejecutar" : "Ejecutada";
+}
 function physicalStatusLabel(status: WorkOrder["physicalStatus"]): string {
   return status === "NONE"
     ? "Sin ejecución"
@@ -1264,15 +1412,13 @@ function formatDate(value?: string): string {
     ? "Sin datos"
     : new Intl.DateTimeFormat("es-BO", { dateStyle: "short", timeStyle: "short" }).format(date);
 }
-function formatDaysSince(dateStr?: string): string {
-  if (!dateStr) return "—";
-  const timestamp = Date.parse(dateStr);
-  if (Number.isNaN(timestamp)) return "—";
-  const diffMs = Date.now() - timestamp;
-  const days = Math.max(0, diffMs / (1000 * 60 * 60 * 24));
-  return `${days.toFixed(1)} d`;
+function formatActivityTime(value?: string): string {
+  if (!value) return "Sin datos";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Sin datos"
+    : new Intl.DateTimeFormat("es-BO", { timeStyle: "short" }).format(date);
 }
-
 function shortTechnicalId(value: string): string {
   if (value.length <= 18) return value;
   return `${value.slice(0, 9)}…${value.slice(-4)}`;

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ConnectivityMode, WorkOrder } from "../domain";
 import { MAP_CACHE_NAME, SATELLITE_TILE_URL_TEMPLATE } from "../app/map-cache";
 import {
   IconCrosshair,
+  IconExpand,
   IconSignal,
   IconStop,
   IconRoute,
@@ -17,6 +18,10 @@ interface FieldMapProps {
   technicianLocation?: { latitude: number; longitude: number; accuracy?: number };
   mode: ConnectivityMode;
   onLocationUpdate?: (loc: { latitude: number; longitude: number; accuracyMeters: number }) => void;
+  compact?: boolean;
+  isFullscreen?: boolean;
+  onExpandMap?: () => void;
+  onCloseFullscreen?: () => void;
 }
 
 function orderCoordinates(order: WorkOrder): { lat: number; lng: number } | null {
@@ -26,6 +31,16 @@ function orderCoordinates(order: WorkOrder): { lat: number; lng: number } | null
   return { lat, lng };
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  }[character] ?? character));
+}
+
 export function FieldMap({
   orders,
   selectedOrderId,
@@ -33,6 +48,10 @@ export function FieldMap({
   technicianLocation,
   mode,
   onLocationUpdate,
+  compact = false,
+  isFullscreen = false,
+  onExpandMap,
+  onCloseFullscreen,
 }: FieldMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [mapStatus, setMapStatus] = useState<string>("");
@@ -49,6 +68,7 @@ export function FieldMap({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const techMarkerRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
+  const fullscreenCloseRef = useRef<HTMLButtonElement>(null);
 
   const activeLocation = liveLocation ?? technicianLocation ?? null;
   const mappedOrderCount = orders.filter((order) => orderCoordinates(order) !== null).length;
@@ -145,9 +165,9 @@ export function FieldMap({
         const isRealGps = liveLocation !== null;
         const techIcon = L.divIcon({
           className: "field-user-marker-wrap",
-          html: `<div class="user-gps-marker ${isRealGps ? "user-gps-marker--live" : ""}"><div class="user-gps-pulse"></div><div class="user-gps-dot"></div></div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          html: `<div class="map-user-marker"><div class="user-gps-marker ${isRealGps ? "user-gps-marker--live" : ""}"><div class="user-gps-pulse"></div><div class="user-gps-dot"></div></div><span class="map-user-marker__label">Mi ubicación</span></div>`,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
         });
 
         const techMarker = L.marker([activeLocation.latitude, activeLocation.longitude], {
@@ -173,20 +193,22 @@ export function FieldMap({
         const isExecuted = order.status === "EJECUTADO";
         const isSelected = order.orderId === selectedOrderId;
 
-        const markerColor = isCancelled ? "#64748b" : isExecuted ? "#16a34a" : "#dc2626";
-
-        const marker = L.circleMarker([lat, lng], {
-          radius: isSelected ? 10 : 7,
-          color: isSelected ? "#f59e0b" : "#ffffff",
-          weight: isSelected ? 3 : 2,
-          fillColor: markerColor,
-          fillOpacity: 0.95,
-        }).addTo(map);
+        const markerColor = isCancelled ? "#64748b" : isExecuted ? "#16a34a" : "#e85d04";
 
         const debtBs = order.context?.debtCents ? (order.context.debtCents / 100).toFixed(2) : "0.00";
         const account = order.context?.accountId || order.accountId || "S/C";
         const meter = order.context?.meterId || "S/M";
         const customer = order.context?.customerName || order.orderId;
+        const markerTone = isCancelled ? "muted" : isExecuted ? "done" : "pending";
+        const marker = L.marker([lat, lng], {
+          icon: L.divIcon({
+            className: "map-order-marker-wrap",
+            html: `<div class="map-order-marker map-order-marker--${markerTone}${isSelected ? " map-order-marker--selected" : ""}"><span class="map-order-marker__dot" style="background:${markerColor}"></span><span class="map-order-marker__label">${escapeHtml(customer)}</span></div>`,
+            iconSize: [0, 0],
+            iconAnchor: [7, 7],
+          }),
+          title: customer,
+        }).addTo(map);
 
         const popupContent = document.createElement("div");
         popupContent.className = "map-popup";
@@ -243,6 +265,15 @@ export function FieldMap({
       )
       .openPopup();
   }, [liveLocation, isTracking]);
+
+  useEffect(() => {
+    if (!isFullscreen || typeof window === "undefined") return;
+    const frame = window.requestAnimationFrame(() => {
+      mapInstanceRef.current?.invalidateSize({ pan: false });
+      fullscreenCloseRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isFullscreen]);
 
   const handleGetRealLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -340,7 +371,13 @@ export function FieldMap({
 
   if (!hasOrderCoordinates && !activeLocation) {
     return (
-      <div className="field-map-container field-map-container--empty" aria-label="Mapa de la ruta">
+      <div
+        className={`field-map-container field-map-container--empty${isFullscreen ? " field-map-container--fullscreen" : ""}`}
+        role={isFullscreen ? "dialog" : undefined}
+        aria-modal={isFullscreen ? true : undefined}
+        aria-label="Mapa de la ruta"
+      >
+        {isFullscreen ? <FullscreenMapHeader closeRef={fullscreenCloseRef} onClose={onCloseFullscreen} /> : null}
         <div className="field-map-empty" role="status">
           <IconPin className="toolbar-icon" />
           <strong>Ubicaciones no disponibles</strong>
@@ -351,9 +388,23 @@ export function FieldMap({
   }
 
   return (
-    <div className="field-map-container" aria-label="Mapa interactivo de la ruta">
+    <div
+      className={`field-map-container${compact ? " field-map-container--compact" : ""}${isFullscreen ? " field-map-container--fullscreen" : ""}`}
+      role={isFullscreen ? "dialog" : undefined}
+      aria-modal={isFullscreen ? true : undefined}
+      aria-label="Mapa interactivo de la ruta"
+    >
+      {isFullscreen ? <FullscreenMapHeader closeRef={fullscreenCloseRef} onClose={onCloseFullscreen} /> : null}
+      {mapStatus ? (
+        <div className="map-warning-banner" role="status">
+          {mapStatus}
+        </div>
+      ) : null}
+
+      <div ref={mapContainerRef} className="field-map-canvas" />
+
       <div className="field-map-toolbar">
-        <div className="field-map-info">
+        {!compact ? <div className="field-map-info">
           <span className="field-map-stat">
             <IconPin className="toolbar-icon" /> <strong>{mappedOrderCount}</strong> suministros con ubicación
           </span>
@@ -365,7 +416,7 @@ export function FieldMap({
               <IconCheck className="toolbar-icon" /> GPS activo
             </span>
           ) : null}
-        </div>
+        </div> : null}
 
         <div className="field-map-buttons">
           <button
@@ -398,16 +449,34 @@ export function FieldMap({
             <IconRoute className="btn-icon" />
             <span>Zona de órdenes</span>
           </button>
+
+          {!compact && !isFullscreen && onExpandMap ? (
+            <button type="button" className="btn-expand-map" onClick={onExpandMap} aria-label="Expandir mapa a pantalla completa">
+              <IconExpand className="btn-icon" />
+              <span>Expandir mapa</span>
+            </button>
+          ) : null}
         </div>
       </div>
+      <div className="field-map-legend" aria-label="Leyenda del mapa">
+        <span><i className="field-map-legend__dot field-map-legend__dot--order" />Orden de corte</span>
+        <span><i className="field-map-legend__dot field-map-legend__dot--location" />Mi ubicación</span>
+      </div>
+    </div>
+  );
+}
 
-      {mapStatus ? (
-        <div className="map-warning-banner" role="status">
-          {mapStatus}
-        </div>
-      ) : null}
-
-      <div ref={mapContainerRef} className="field-map-canvas" />
+function FullscreenMapHeader({ closeRef, onClose }: { closeRef: RefObject<HTMLButtonElement | null>; onClose?: () => void }) {
+  return (
+    <div className="field-map-fullscreen-header">
+      <div>
+        <span className="eyebrow">SEPSA · CAMPO</span>
+        <h2>Mapa de órdenes</h2>
+      </div>
+      <button ref={closeRef} type="button" className="field-map-close" onClick={onClose} aria-label="Cerrar mapa en pantalla completa">
+        <span aria-hidden="true">×</span>
+        <span>Cerrar mapa</span>
+      </button>
     </div>
   );
 }

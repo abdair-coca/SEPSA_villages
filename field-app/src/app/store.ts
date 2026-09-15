@@ -191,8 +191,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       update({ tab });
     },
     selectOrder(orderId) {
-      const order = snapshot.orders.find((candidate) => candidate.orderId === orderId);
-      if (!order) return;
+      if (orderId !== null && !snapshot.orders.some((candidate) => candidate.orderId === orderId)) return;
       update({ selectedOrderId: orderId, message: undefined });
     },
     setMode(mode) {

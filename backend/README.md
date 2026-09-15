@@ -21,6 +21,8 @@ Seed users are `admin.sepsa` (ADMIN), `jhonny.moya` and `tecnico.sepsa02-06` (TE
 
 `sql/005_definitive_seed.sql` loads 28 debtors from `Deudores_morosos_30_03_2026.xlsx` (sheet MOROSOS) and wipes previous PILOT_PROVISIONAL users, debtors, orders, assignments, authorizations and sync state so technicians start with zero orders. `sql/004_e2e_seed.sql` is deprecated and intentionally empty.
 
+To import the workbook into an existing database without deleting orders or audit history, set `DATABASE_URL` for the process and run `python scripts/import-debtors-xlsx.py path/to/Deudores_morosos_30_03_2026.xlsx`. The importer validates headers, preserves stable debtor/account/supply identifiers, stores the original row in `context.excel_row`, and commits all updates in one transaction.
+
 ## Verification
 
 `npm run build` compiles TypeScript. `npm test` runs pure tests and skips database integration harness when `DATABASE_URL` is absent.

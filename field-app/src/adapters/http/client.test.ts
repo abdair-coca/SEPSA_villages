@@ -2,6 +2,23 @@ import { describe, expect, it } from "vitest";
 import { HttpPilotClient } from "./client";
 
 describe("PILOT_PROVISIONAL HTTP client", () => {
+  it("loads enabled technicians from the authoritative API", async () => {
+    const requests: string[] = [];
+    const client = new HttpPilotClient({
+      baseUrl: "http://localhost:8080",
+      fetchImpl: async (input) => {
+        requests.push(String(input));
+        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
+        if (String(input).endsWith("/technicians")) return json({ technicians: [{ user_id: "technician-1", username: "tech.one", display_name: "Técnico Uno", role: "TECHNICIAN", enabled: true, source: "PILOT_PROVISIONAL" }] });
+        return json({ debtors: [] });
+      },
+    });
+    const session = await client.authenticate({ username: "admin", password: "password" });
+
+    await expect(client.listTechnicians(session)).resolves.toEqual([expect.objectContaining({ userId: "technician-1", username: "tech.one", displayName: "Técnico Uno", enabled: true, source: "PILOT_PROVISIONAL" })]);
+    expect(requests).toContain("http://localhost:8080/v1/technicians");
+  });
+
   it("sends all administrative delinquency filters and maps batch creation", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const client = new HttpPilotClient({
@@ -23,6 +40,18 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     expect(requests[1]?.url).toContain("supply_status=A");
     expect(batch).toMatchObject({ batchId: "batch-1", created: [{ orderId: "order-1" }] });
     expect(JSON.parse(String(requests[2]?.init.body))).toEqual({ batch_id: "batch-1", debtor_ids: ["debtor-1"], purpose: "CUT" });
+  });
+
+  it("maps authoritative area and route names for filter labels", async () => {
+    const client = new HttpPilotClient({
+      baseUrl: "http://localhost:8080",
+      fetchImpl: async (input) => String(input).endsWith("/auth/login")
+        ? json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } })
+        : json({ debtors: [{ debtor_id: "debtor-1", account_id: "account-1", supply_id: "supply-1", customer_name: "Customer", address: "Address", references: "", meter_id: "meter-1", area: "B", area_name: "BETANZOS", locality: "078 - COA COA", route: "078", route_name: "COA COA", debt_cents: 100, months_pending: 1, updated_at: "2026-09-14T00:00:00.000Z", kardex: [], source: "PILOT_PROVISIONAL" }] }),
+    });
+    const session = await client.authenticate({ username: "admin", password: "password" });
+
+    await expect(client.findDebtors({ session })).resolves.toEqual([expect.objectContaining({ area: "B", areaName: "BETANZOS", route: "078", routeName: "COA COA" })]);
   });
 
   it("keeps cut authorization deferred and sends its binding to sync", async () => {

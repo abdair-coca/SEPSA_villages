@@ -38,6 +38,21 @@ Revoca sesión actual. Response `204`.
 
 ## Administración
 
+### `GET /v1/technicians`
+
+Requiere `ADMIN`. Devuelve únicamente técnicos habilitados de la fuente provisional, sin contraseñas ni hashes.
+
+Response `200`:
+
+```json
+{
+  "source": "PILOT_PROVISIONAL",
+  "technicians": [
+    { "user_id": "...", "username": "...", "display_name": "...", "role": "TECHNICIAN", "enabled": true, "source": "PILOT_PROVISIONAL" }
+  ]
+}
+```
+
 ### `GET /v1/debtors?query=<text>`
 
 Requiere `ADMIN`. Devuelve registros operativos provisionales.

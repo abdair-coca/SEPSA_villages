@@ -1,4 +1,4 @@
-import { DomainError, assertCan, permissionsForRole, type AssignOrderCommand, type AuditEvent, type BatchOrderSkip, type CreateOrderCommand, type CreateOrdersBatchCommand, type CreateOrdersBatchResult, type DebtorQuery, type DebtorRecord, type DemoCredentials, type OperationRecord, type Session, type SimulatedUser, type VisitRecord, type WorkOrder, type WorkPackage, type WorkPackageEnvelope } from "../../domain";
+import { DomainError, assertCan, permissionsForRole, type AssignOrderCommand, type AuditEvent, type BatchOrderSkip, type CreateOrderCommand, type CreateOrdersBatchCommand, type CreateOrdersBatchResult, type DebtorQuery, type DebtorRecord, type DemoCredentials, type OperationRecord, type Session, type SimulatedUser, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackage, type WorkPackageEnvelope } from "../../domain";
 import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
 import type { RemoteResult } from "../../ports/authorization";
 import { createSimulatedPackageEnvelope } from "./package-validation";
@@ -140,9 +140,9 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     const db = await this.dbPromise;
     const transaction = db.transaction(["debtors", "audit"], "readwrite");
     const records = (await requestResult(transaction.objectStore("debtors").getAll())) as DebtorRecord[];
-    const normalized = query.query?.trim().toLocaleLowerCase();
+    const normalized = normalizeSearchValue(query.query);
     const result = records.filter((debtor) => {
-      const textMatch = !normalized || [debtor.debtorId, debtor.accountId, debtor.supplyId, debtor.customerName, debtor.meterId].some((value) => value.toLocaleLowerCase().includes(normalized));
+      const textMatch = !normalized || searchableDebtorValues(debtor).some((value) => normalizeSearchValue(value).includes(normalized));
       return textMatch && matchesOptional(debtor.area, query.area) && matchesOptional(debtor.locality, query.locality) && matchesOptional(debtor.route, query.route)
         && (query.minMonthsPending === undefined || debtor.monthsPending >= query.minMonthsPending)
         && matchesOptional(debtor.supplyStatus ?? "", query.supplyStatus);
@@ -150,6 +150,20 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     transaction.objectStore("audit").put(auditEvent({ actorId: session.userId, actorRole: session.role, action: "FIND_DEBTORS", result: "accepted", occurredAt: new Date().toISOString() }));
     await transactionComplete(transaction);
     return result;
+  }
+
+  async listTechnicians(session: Session): Promise<TechnicianRecord[]> {
+    const authorized = await this.requireAction(session, "VIEW_TECHNICIANS");
+    const db = await this.dbPromise;
+    const transaction = db.transaction(["users", "audit"], "readwrite");
+    const users = (await requestResult(transaction.objectStore("users").getAll())) as StoredUser[];
+    const technicians = users
+      .filter((user) => user.role === "TECHNICIAN" && user.enabled)
+      .sort((left, right) => left.displayName.localeCompare(right.displayName, "es") || left.username.localeCompare(right.username, "es"))
+      .map(({ userId, username, displayName, enabled, source }) => ({ userId, username, displayName, role: "TECHNICIAN" as const, enabled, source }));
+    transaction.objectStore("audit").put(auditEvent({ actorId: authorized.userId, actorRole: authorized.role, action: "VIEW_TECHNICIANS", result: "accepted", occurredAt: new Date().toISOString() }));
+    await transactionComplete(transaction);
+    return technicians.map((technician) => structuredClone(technician));
   }
 
   async createOrder(input: CreateOrderCommand): Promise<WorkOrder> {
@@ -279,7 +293,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       throw new DomainError("Order is already assigned to this technician.", "ORDER_ALREADY_ASSIGNED");
     }
     const now = new Date().toISOString();
-    const assigned: WorkOrder = { ...current, assignedTechnicianId: technician.userId, version: input.expectedOrderVersion + 1 };
+    const assigned: WorkOrder = { ...current, assignedTechnicianId: technician.userId, assignedTechnicianName: technician.displayName, version: input.expectedOrderVersion + 1 };
     transaction.objectStore("orders").put(assigned);
     operationStore.put({ operationId: input.operationId, commandHash: hash, action: "ASSIGN_ORDER", result: assigned } satisfies StoredOperation);
     transaction.objectStore("audit").put(auditEvent({ actorId: session.userId, actorRole: session.role, action: "ASSIGN_ORDER", entityId: assigned.orderId, orderId: assigned.orderId, operationId: input.operationId, result: "accepted", occurredAt: now, transition: { before: { assignedTechnicianId: current.assignedTechnicianId, version: input.expectedOrderVersion }, after: { assignedTechnicianId: assigned.assignedTechnicianId, version: assigned.version ?? input.expectedOrderVersion + 1 } } }));
@@ -678,8 +692,51 @@ async function hashCredential(credential: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+const NO_DATA_FILTER_VALUE = "__NO_DATA__";
+
 function matchesOptional(value: string, expected: string | undefined): boolean {
-  return !expected || value.toLocaleLowerCase() === expected.trim().toLocaleLowerCase();
+  if (!expected) return true;
+  if (expected === NO_DATA_FILTER_VALUE) return !normalizeFilterValue(value);
+  return normalizeFilterValue(value) === normalizeFilterValue(expected);
+}
+
+function normalizeFilterValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+}
+
+function normalizeSearchValue(value: string | number | boolean | undefined | null): string {
+  return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+}
+
+function searchableDebtorValues(debtor: DebtorRecord): Array<string | number | boolean | undefined | null> {
+  return [
+    debtor.debtorId,
+    debtor.accountId,
+    debtor.supplyId,
+    debtor.customerName,
+    debtor.address,
+    debtor.references,
+    debtor.meterId,
+    debtor.area,
+    debtor.locality,
+    debtor.route,
+    debtor.circuit,
+    debtor.debtCents,
+    (debtor.debtCents / 100).toFixed(2),
+    debtor.monthsPending,
+    debtor.supplyStatus,
+    debtor.tariff,
+    debtor.enablingTitle,
+    debtor.routeOrder,
+    debtor.customerCi,
+    debtor.contactPhone,
+    debtor.meterBrand,
+    debtor.meterIndex,
+    debtor.meterMultiplier,
+    debtor.claims,
+    debtor.paymentPlan,
+    ...debtor.kardex.flatMap((entry) => [entry.period, entry.amountCents, (entry.amountCents / 100).toFixed(2), entry.status, entry.daysLate]),
+  ];
 }
 
 function isWorkOrderResult(value: StoredOperation["result"]): value is WorkOrder {

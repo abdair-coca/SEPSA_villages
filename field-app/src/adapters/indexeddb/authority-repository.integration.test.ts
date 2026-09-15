@@ -15,6 +15,20 @@ afterEach(async () => {
 });
 
 describe("SIMULATED authority vertical", () => {
+  it("lists only enabled technicians with their stored identities", async () => {
+    const dbName = "authority-technicians";
+    databases.push(dbName);
+    const authority = new IndexedDbAuthorityRepository({ dbName });
+    repositories.push(authority);
+    await authority.seedSimulatedData();
+    const admin = await login(authority, { username: "admin.simulated", password: "SIMULATED-admin-003" });
+
+    await expect(authority.listTechnicians(admin)).resolves.toEqual([
+      expect.objectContaining({ userId: "tech-camila", username: "camila.simulated", displayName: "Camila Rojas (SIMULATED)", role: "TECHNICIAN", enabled: true, source: "SIMULATED" }),
+      expect.objectContaining({ userId: "tech-diego", username: "diego.simulated", displayName: "Diego Vargas (SIMULATED)", role: "TECHNICIAN", enabled: true, source: "SIMULATED" }),
+    ]);
+  });
+
   it("filters debtors by pending invoices and supply status", async () => {
     const dbName = "authority-filter-fields";
     databases.push(dbName);
@@ -27,6 +41,55 @@ describe("SIMULATED authority vertical", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ accountId: "CTA-1001", monthsPending: 3, supplyStatus: "A" });
+  });
+
+  it("matches area, locality, route, and status despite case or surrounding spaces", async () => {
+    const dbName = "authority-normalized-filters";
+    databases.push(dbName);
+    const authority = new IndexedDbAuthorityRepository({ dbName });
+    repositories.push(authority);
+    await authority.seedSimulatedData();
+    const admin = await login(authority, { username: "admin.simulated", password: "SIMULATED-admin-003" });
+
+    const result = await findDebtors(authority, admin, { area: " b ", locality: " 002 - mojotorillo ", route: " 002 ", supplyStatus: " a " });
+
+    expect(result).toHaveLength(2);
+    expect(result.every((debtor) => debtor.area === "B" && debtor.locality === "002 - MOJOTORILLO" && debtor.route === "002" && debtor.supplyStatus === "A")).toBe(true);
+  });
+
+  it("searches text across fields represented by filters", async () => {
+    const dbName = "authority-search-all-fields";
+    databases.push(dbName);
+    const authority = new IndexedDbAuthorityRepository({ dbName });
+    repositories.push(authority);
+    await authority.seedSimulatedData();
+    const admin = await login(authority, { username: "admin.simulated", password: "SIMULATED-admin-003" });
+    const [base] = await findDebtors(authority, admin);
+    if (!base) throw new Error("Expected seeded debtor");
+    await authority.seedSimulatedData([{
+      ...base,
+      debtorId: "debtor-query-fields",
+      accountId: "CTA-QUERY-FIELDS",
+      supplyId: "SUM-QUERY-FIELDS",
+      customerName: "Cliente de búsqueda",
+      address: "Dirección de búsqueda",
+      references: "Referencia de búsqueda",
+      meterId: "MED-QUERY-FIELDS",
+      area: "BETANZOS",
+      locality: "LOCALIDAD-QUERY",
+      route: "RUTA-QUERY",
+      circuit: "CIRCUITO-QUERY",
+      tariff: "TARIFA-QUERY",
+      supplyStatus: "ESTADO-QUERY",
+      monthsPending: 17,
+      debtCents: 1717,
+      kardex: [],
+    }]);
+
+    for (const query of ["BETANZOS", "LOCALIDAD-QUERY", "RUTA-QUERY", "17", "ESTADO-QUERY"]) {
+      const result = await findDebtors(authority, admin, { query });
+      expect(result.some((debtor) => debtor.debtorId === "debtor-query-fields")).toBe(true);
+    }
   });
 
   it("loads deterministic E2E fake data without changing the base fixture", async () => {
