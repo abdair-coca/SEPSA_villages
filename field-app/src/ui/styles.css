@@ -3460,6 +3460,63 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 }
 
+.notification {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.notification__text {
+  min-width: 0;
+  flex: 1;
+}
+
+.notification__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-shrink: 0;
+}
+
+.notification__action,
+.notification__dismiss {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font-weight: 700;
+}
+
+.notification__action {
+  min-height: 36px;
+  padding: 0 var(--space-8);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.notification__dismiss {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 24px;
+}
+
+.notification__action:hover,
+.notification__dismiss:hover {
+  opacity: .72;
+}
+
+@media (max-width: 560px) {
+  .field-app .notification {
+    align-items: flex-start;
+  }
+
+  .field-app .notification__actions {
+    align-items: flex-start;
+  }
+}
+
 /* Phase 1: admin composition aligned with approved reference. */
 .operations-app {
   background: #f8f8f6;

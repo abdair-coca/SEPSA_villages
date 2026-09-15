@@ -1,4 +1,4 @@
-import { assertAssignedOrder, assertOperationId, createVisit, DomainError, validateEvidence, type EvidenceReference, type FieldCapture, type VisitRecord, type WorkOrder } from "../domain";
+import { assertOperationId, assertVisitEligible, createVisit, DomainError, validateEvidence, type EvidenceReference, type FieldCapture, type VisitRecord, type WorkOrder } from "../domain";
 import type { AtomicOperationChange, LocalRepository, StoredRecord } from "../ports/repository";
 
 export interface OfflineVisitInput {
@@ -20,7 +20,7 @@ export type OfflineVisitResult = { outcome: "visit_recorded"; visit: VisitRecord
 /** Persists a visit and its pending queue item in the repository's atomic transaction. */
 export async function executeOfflineVisit(input: OfflineVisitInput): Promise<OfflineVisitResult> {
   assertOperationId(input.operationId);
-  assertAssignedOrder(input.order, input.technicianId);
+  assertVisitEligible(input.order, input.technicianId);
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
   if (!reason) throw new DomainError("La visita debe incluir un motivo.", "VISIT_REASON_REQUIRED");
   if (input.evidence || input.exceptionReason !== undefined) {

@@ -73,6 +73,7 @@ describe("FieldApp SSR shell", () => {
     const executed = html(store);
     expect(executed).toContain("preparar reconexión");
     expect(executed).not.toContain("preparar corte");
+    expect(executed).not.toContain("registrar visita");
   });
 
   it("renders durable queue state after local visit", async () => {
@@ -84,6 +85,15 @@ describe("FieldApp SSR shell", () => {
     expect(markup).toContain("cola de sincronización");
     expect(markup).toContain("pendiente");
     expect(markup).toContain("1 intento(s)");
+  });
+
+  it("uses reusable notification with a quiet link to pending operations", async () => {
+    const store = await readyStore("ui-notification");
+    store.setMode("offline");
+    await store.registerVisit("ORD-24017", { reason: "Visita local de verificación." });
+    const markup = html(store);
+    expect(markup).toContain("notification");
+    expect(markup).toContain("ver operaciones pendientes");
   });
 
   it("shows PHYSICAL_UNKNOWN review and never renders repeat action", async () => {

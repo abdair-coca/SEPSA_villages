@@ -6,6 +6,7 @@ import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
 import { FieldMap } from "./FieldMap";
 import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconExpand, IconMap, IconPhone, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch } from "./Icons";
+import { Notification } from "./Notification";
 
 export interface FieldAppProps {
   store: AppStore;
@@ -38,7 +39,7 @@ export function FieldApp({
     const message = state.message;
     setDismissedMessage(undefined);
     if (!message?.transient) return;
-    const timeout = window.setTimeout(() => setDismissedMessage(message), 500);
+    const timeout = window.setTimeout(() => setDismissedMessage(message), 4000);
     return () => window.clearTimeout(timeout);
   }, [state.message]);
 
@@ -113,6 +114,13 @@ export function FieldApp({
     }
   };
 
+  const pending = pendingCount(state.syncItems);
+  const openPendingQueue = () => {
+    if (state.message) setDismissedMessage(state.message);
+    store.selectOrder(null);
+    store.setTab("queue");
+  };
+
   return (
     <div className="field-app">
       <Header
@@ -129,11 +137,14 @@ export function FieldApp({
         onLogout={onLogout}
       />
       {state.message && !(state.message.transient && dismissedMessage === state.message) ? (
-        <div className={`message message--${state.message.tone}`} role="status">
-          {state.message.text}
-        </div>
+        <Notification
+          tone={state.message.tone}
+          text={state.message.text}
+          action={pending ? { label: "Ver operaciones pendientes", onClick: openPendingQueue } : undefined}
+          onDismiss={() => { if (state.message) setDismissedMessage(state.message); }}
+        />
       ) : null}
-      {assignedRefreshError ? <div className="message message--warning" role="status">{assignedRefreshError}</div> : null}
+      {assignedRefreshError ? <Notification tone="warning" text={assignedRefreshError} onDismiss={() => setAssignedRefreshError(undefined)} /> : null}
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "error" ? (
         <ErrorState text={state.error ?? "No pudimos cargar el paquete local."} onRetry={store.init} />
@@ -251,6 +262,8 @@ function Workbench({
   const [pendingAction, setPendingAction] = useState<{ orderId: string; kind: ActionKind } | null>(null);
 
   const openIncident = (orderId: string) => {
+    const order = state.orders.find((candidate) => candidate.orderId === orderId);
+    if (!order || !isManualVisitAllowed(order)) return;
     setPendingAction({ orderId, kind: "VISIT" });
     store.selectOrder(orderId);
   };
@@ -663,7 +676,7 @@ function CurrentOrderCard({ order, position, total, onPrevious, onNext, onOpen, 
         <button type="button" className="primary-action" onClick={onOpen}><IconScissors />{isReady ? "Registrar corte" : "Abrir orden"}<span>→</span></button>
         <button type="button" className="secondary-action" onClick={onShowMap}><IconMap /> Ver ubicación</button>
         <button type="button" className="secondary-action" onClick={onOpen}><IconDocument /> Ver detalle <span>→</span></button>
-        <button type="button" className="secondary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button>
+        {isReady ? <button type="button" className="secondary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button> : null}
       </div>
     </article>
   );
@@ -755,16 +768,17 @@ function OrderDetail({
   initialAction?: ActionKind | null;
   onBack: () => void;
 }) {
-  const [draft, setDraft] = useState<ActionKind | null>(initialAction ?? null);
+  const [draft, setDraft] = useState<ActionKind | null>(initialAction === "VISIT" && !isManualVisitAllowed(order) ? null : initialAction ?? null);
   const isCancelled = order.status === "ANULADO";
   const canCut = order.status === "GENERADO" && order.physicalStatus === "NONE";
+  const canRegisterVisit = isManualVisitAllowed(order);
   const locationHref = order.context && hasCadastralCoordinates(order.context)
     ? `https://www.google.com/maps/search/?api=1&query=${order.context.cadastralLatitude},${order.context.cadastralLongitude}`
     : undefined;
 
   useEffect(() => {
-    if (initialAction) setDraft(initialAction);
-  }, [initialAction]);
+    if (initialAction && (initialAction !== "VISIT" || canRegisterVisit)) setDraft(initialAction);
+  }, [canRegisterVisit, initialAction]);
 
   return (
     <section className="detail-panel panel detail-panel--fullscreen" aria-label={`Detalle de ${order.orderId}`}>
@@ -841,10 +855,12 @@ function OrderDetail({
           </button>
         ) : null}
         <div className="order-detail-actions__secondary">
-          <button className={canCut ? "secondary-action" : "primary-action"} disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
-            Registrar visita
-            <span aria-hidden="true">→</span>
-          </button>
+          {canRegisterVisit ? (
+            <button className={canCut ? "secondary-action" : "primary-action"} disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
+              Registrar visita
+              <span aria-hidden="true">→</span>
+            </button>
+          ) : null}
           {locationHref ? (
             <a className="secondary-action" href={locationHref} target="_blank" rel="noreferrer">
               <IconMap />
@@ -1398,6 +1414,9 @@ function syncStatusLabel(status: import("../domain").SyncStatus): string {
     : status === "synced"
     ? "Sincronizado"
     : "Falló";
+}
+function isManualVisitAllowed(order: WorkOrder): boolean {
+  return order.status === "GENERADO" && order.physicalStatus === "NONE";
 }
 function pendingCount(items: import("../ports").SyncItem[]): number {
   return items.filter((item) => item.status !== "synced").length;

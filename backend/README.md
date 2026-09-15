@@ -26,3 +26,5 @@ To import the workbook into an existing database without deleting orders or audi
 ## Verification
 
 `npm run build` compiles TypeScript. `npm test` runs pure tests and skips database integration harness when `DATABASE_URL` is absent.
+
+For a new empty pilot database, set `DATABASE_URL` to the direct PostgreSQL connection string and run `npm run pilot:bootstrap` once. The command refuses to run when provisional tables already contain data, so it cannot silently erase pilot operations.

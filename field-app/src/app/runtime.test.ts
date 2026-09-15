@@ -59,7 +59,7 @@ describe("simulated authoritative technician runtime", () => {
 
     await store.executeCut(setup.order.orderId, { exceptionReason: "No se pudo capturar foto.", fieldCapture: fieldCapture() });
 
-    expect(store.getSnapshot().activity).toMatchObject([{ record: { kind: "VISIT", attemptedAction: "CUT", execution: "NONE", syncStatus: "pending" } }]);
+    expect(store.getSnapshot().activity).toMatchObject([{ record: { kind: "VISIT", attemptedAction: "CUT", execution: "NONE", syncStatus: "failed" } }]);
   });
 
   it("refreshes technician tray after a new order is assigned", async () => {

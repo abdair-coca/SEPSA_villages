@@ -102,11 +102,11 @@ describe("field app store", () => {
     expect(store.getSnapshot().message?.text).toMatch(/ninguna fue eliminada|cola sigue guardada/i);
   });
 
-  it("confirms visit without evidence or exception and keeps it pending", async () => {
+  it("confirms visit without evidence or exception and syncs it online", async () => {
     const { store } = setup("store-visit-without-evidence");
     await store.init();
     await store.registerVisit("ORD-24017");
-    expect(store.getSnapshot().activity).toMatchObject([{ record: { kind: "VISIT", execution: "NONE", syncStatus: "pending" }, evidence: [] }]);
+    expect(store.getSnapshot().activity).toMatchObject([{ record: { kind: "VISIT", execution: "NONE", syncStatus: "synced" }, evidence: [] }]);
   });
 
   it("rejects blank visit reason at the use-case boundary and persists trimmed reason", async () => {
@@ -130,10 +130,19 @@ describe("field app store", () => {
   });
 
   it("configures five-minute demo grant before an online cut use case", async () => {
-    const { store } = setup("store-online-cut", true);
+    const { store, transport } = setup("store-online-cut", true);
     await store.init();
     await store.executeCut("ORD-24017", { exceptionReason: "Referencia de demostración.", fieldCapture: validFieldCapture() });
     expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")).toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED" });
+    expect(store.getSnapshot().syncItems).toMatchObject([{ action: "CUT", status: "synced" }]);
+    expect(transport.sent).toHaveLength(1);
+  });
+
+  it("rejects manual visit after a confirmed cut", async () => {
+    const { store } = setup("store-visit-after-cut", true);
+    await store.init();
+    await store.executeCut("ORD-24017", { exceptionReason: "Referencia de demostración.", fieldCapture: validFieldCapture() });
+    await expect(store.registerVisit("ORD-24017", { reason: "Visita posterior." })).rejects.toMatchObject({ code: "VISIT_NOT_ALLOWED_AFTER_CUT" });
   });
 
   it("persists binary evidence and hash across close and reopen, while activity exposes metadata only", async () => {
@@ -188,7 +197,7 @@ describe("field app store", () => {
     await expect(store.executeReconnection("ORD-24017", { exceptionReason: "Requiere revisión de orden." })).rejects.toThrow();
     expect(store.getSnapshot().syncItems).toEqual([]);
     store.setMode("offline");
-    await store.registerVisit("ORD-24019", { exceptionReason: "Visita registrada antes de reconexión." });
+    await store.registerVisit("ORD-24017", { exceptionReason: "Visita registrada antes de reconexión." });
     store.setMode("online");
     await store.sync();
     expect(store.getSnapshot().syncItems).toMatchObject([{ status: "synced", action: "VISIT" }]);

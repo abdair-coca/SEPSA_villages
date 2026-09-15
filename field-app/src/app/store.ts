@@ -226,11 +226,12 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
         await refresh();
         update({ message: { tone: result.outcome === "duplicate" ? "info" : "success", text: "Visita guardada en el dispositivo, sin afirmar ejecución física." } });
       });
+      await syncAfterLocalAction();
     },
     async executeCut(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
-      return runWithBusy("CUT", async () => {
+      await runWithBusy("CUT", async () => {
         const operationId = generateOperationId("cut");
         const timestamp = now();
         const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
@@ -250,11 +251,12 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
         await refresh();
         update({ message: messageForCut(result, snapshot.mode) });
       });
+      await syncAfterLocalAction();
     },
     async executeReconnection(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
-      return runWithBusy("RECONNECTION", async () => {
+      await runWithBusy("RECONNECTION", async () => {
         const operationId = generateOperationId("reconnection");
         const timestamp = now();
         const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
@@ -273,6 +275,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
         await refresh();
         update({ message: messageForReconnection(result, snapshot.mode) });
       });
+      await syncAfterLocalAction();
     },
     async sync() {
       return requestSync();
@@ -304,9 +307,8 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
 
   function requestSync(): Promise<void> {
     if (syncInFlight) return syncInFlight;
-    const operation = runSync().catch((error: unknown) => {
-      update({ message: { tone: "error", text: `No pudimos sincronizar. La cola sigue guardada en este dispositivo. ${readableError(error)}` } });
-      throw error;
+    const operation = runSync().catch(() => {
+      update({ message: { tone: "warning", text: "La operación quedó guardada en este dispositivo. No pudimos sincronizar; reintentaremos automáticamente." } });
     }).finally(() => {
       if (syncInFlight === operation) syncInFlight = undefined;
     });
@@ -327,6 +329,11 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
         ? { tone: "warning", text: "Algunas operaciones requieren revisión; ninguna fue eliminada." }
         : { tone: "success", text: formatSyncMessage(report.synced), transient: true } });
     });
+  }
+
+  async function syncAfterLocalAction(): Promise<void> {
+    if (snapshot.mode === "offline" || !snapshot.syncItems.some((item) => item.status !== "synced")) return;
+    await requestSync();
   }
 
   return store;
@@ -406,6 +413,7 @@ function readableError(error: unknown): string {
       GPS_ACCURACY_INVALID: "La precisión GPS no es válida.",
       CUT_TYPE_INVALID: "Seleccione tipo de corte válido.",
       NEARBY_METERS_REQUIRED: "Indique si verificó medidores cercanos.",
+      VISIT_NOT_ALLOWED_AFTER_CUT: "Esta orden ya tiene una ejecución o revisión registrada.",
     };
     return messages[error.code] ?? "La operación no pudo continuar. Revise datos locales.";
   }

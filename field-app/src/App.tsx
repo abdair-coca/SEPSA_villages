@@ -9,7 +9,7 @@ import type { IdentityPort, OperationsAuthorityPort } from "./ports";
 import { clearStoredSession, persistSession, readStoredSession } from "./application/session-persistence";
 
 const authority = typeof indexedDB === "undefined" ? undefined : new IndexedDbAuthorityRepository();
-const pilotBackendUrl = import.meta.env.VITE_PILOT_BACKEND_URL?.trim();
+const pilotBackendUrl = resolvePilotBackendUrl();
 const remoteAuthority = pilotBackendUrl ? new HttpPilotClient({ baseUrl: pilotBackendUrl }) : undefined;
 export function App() {
   const [session, setSession] = useState<Session | undefined>(() => readStoredSession());
@@ -127,4 +127,12 @@ function getStableDeviceId(): string {
 function isValidFutureDate(value?: string): boolean {
   const timestamp = value ? Date.parse(value) : Number.NaN;
   return Number.isFinite(timestamp) && timestamp > Date.now();
+}
+
+function resolvePilotBackendUrl(): string | undefined {
+  const configured = import.meta.env.VITE_PILOT_BACKEND_URL?.trim();
+  if (configured) return configured;
+  if (!import.meta.env.PROD || typeof window === "undefined") return undefined;
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") return undefined;
+  return window.location.origin;
 }

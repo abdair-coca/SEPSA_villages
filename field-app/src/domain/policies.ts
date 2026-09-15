@@ -39,6 +39,13 @@ export function assertAssignedOrder(order: WorkOrder, technicianId: string): voi
   }
 }
 
+export function assertVisitEligible(order: WorkOrder, technicianId: string): void {
+  assertAssignedOrder(order, technicianId);
+  if (order.status !== "GENERADO" || order.physicalStatus !== "NONE") {
+    throw new DomainError("This order already has a cut execution or review.", "VISIT_NOT_ALLOWED_AFTER_CUT");
+  }
+}
+
 export function assertCutEligible(order: WorkOrder, technicianId: string): void {
   assertAssignedOrder(order, technicianId);
   if (order.status !== "GENERADO") {

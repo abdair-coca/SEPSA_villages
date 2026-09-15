@@ -6,6 +6,7 @@ import {
   assertHistoricalOperationImmutable,
   assertOperationId,
   assertReconnectionEligible,
+  assertVisitEligible,
   DomainError,
   nextOrderState,
   validateEvidence,
@@ -66,6 +67,9 @@ describe("field domain policies", () => {
   it("limits operations to assigned orders and valid physical transitions", () => {
     expect(() => assertAssignedOrder(generatedOrder, "other-tech")).toThrowError(DomainError);
     expect(() => assertCutEligible(generatedOrder, "tech-1")).not.toThrow();
+    expect(() => assertVisitEligible(generatedOrder, "tech-1")).not.toThrow();
+    expect(() => assertVisitEligible({ ...generatedOrder, status: "EJECUTADO", physicalStatus: "CONFIRMED" }, "tech-1")).toThrowError(DomainError);
+    expect(() => assertVisitEligible({ ...generatedOrder, physicalStatus: "PHYSICAL_UNKNOWN" }, "tech-1")).toThrowError(DomainError);
     expect(() => assertReconnectionEligible({ ...generatedOrder, status: "EJECUTADO", physicalStatus: "CONFIRMED" }, "tech-1")).not.toThrow();
     expect(nextOrderState("GENERADO", "EJECUTADO")).toBe("EJECUTADO");
     expect(() => nextOrderState("RECONEXIÓN", "EJECUTADO")).toThrowError(DomainError);
