@@ -93,8 +93,7 @@ export function FieldApp({
     setIsRefreshingAssigned(true);
     setAssignedRefreshError(undefined);
     try {
-      if (onRefreshAssigned) await onRefreshAssigned();
-      else await store.refresh();
+      await syncThenRefreshAssigned(store, onRefreshAssigned ?? (() => store.refresh()));
     } catch (error) {
       setAssignedRefreshError(error instanceof Error ? error.message : "No pudimos actualizar la bandeja.");
     } finally {
@@ -114,9 +113,13 @@ export function FieldApp({
         store.setMode(online ? "online" : "offline");
       }
       if (store.getSnapshot().mode !== "offline") {
-        await store.sync().catch(() => undefined);
-        await handleRefreshAssigned();
+        await syncThenRefreshAssigned(store, onRefreshAssigned ?? (() => store.refresh()));
+        setAssignedRefreshError(undefined);
+      } else if (store.getSnapshot().syncItems.some((item) => item.status !== "synced")) {
+        setAssignedRefreshError("Sin conexión. Las operaciones pendientes siguen guardadas en este dispositivo.");
       }
+    } catch (error) {
+      setAssignedRefreshError(error instanceof Error ? error.message : "No pudimos completar la sincronización.");
     } finally {
       setIsProbingNetwork(false);
     }
@@ -166,6 +169,19 @@ export function FieldApp({
       ) : null}
     </div>
   );
+}
+
+export async function syncThenRefreshAssigned(store: AppStore, refreshAssigned: () => Promise<void>): Promise<void> {
+  const hasPending = store.getSnapshot().syncItems.some((item) => item.status !== "synced");
+  if (hasPending) await store.sync();
+  const remaining = store.getSnapshot().syncItems.filter((item) => item.status !== "synced");
+  if (remaining.length) {
+    const code = remaining.find((item) => item.errorCode)?.errorCode;
+    throw new Error(code
+      ? `El servidor no confirmó ${remaining.length} operación(es) pendiente(s) (${code}). Los registros y evidencias siguen guardados en este dispositivo.`
+      : `El servidor no confirmó ${remaining.length} operación(es) pendiente(s). Los registros y evidencias siguen guardados en este dispositivo.`);
+  }
+  await refreshAssigned();
 }
 
 function Header({
@@ -227,15 +243,15 @@ function Header({
             className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
             onClick={onRetryConnection}
             disabled={isProbingNetwork}
-            title="Reintentar conexión ahora"
-            aria-label="Reintentar conexión"
+            title="Reintentar envío de operaciones pendientes"
+            aria-label="Reintentar envío"
           >
             <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
-            <span>{isProbingNetwork ? "Probando…" : "Reintentar"}</span>
+            <span>{isProbingNetwork ? "Probando…" : "Reintentar envío"}</span>
           </button>
           <button type="button" className="header-refresh-button" onClick={onRefreshAssigned} disabled={isRefreshingAssigned}>
             <IconDownload />
-            <span>{isRefreshingAssigned ? "Actualizando…" : "Actualizar bandeja"}</span>
+            <span>{isRefreshingAssigned ? "Enviando y actualizando…" : "Enviar pendientes y actualizar"}</span>
           </button>
         </div>
       </div>
@@ -1191,7 +1207,7 @@ function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
         <div className="queue-panel__actions">
           <button type="button" className="toolbar-action" onClick={() => store.setTab("orders")}>Volver a mis órdenes</button>
           <button className="sync-button" disabled={!isUsable(state.mode) || state.busyAction === "SYNC"} onClick={() => void store.sync()}>
-            {state.busyAction === "SYNC" ? "Sincronizando…" : "Sincronizar ahora"}
+            {state.busyAction === "SYNC" ? "Enviando pendientes…" : "Enviar operaciones pendientes"}
           </button>
         </div>
       </div>
