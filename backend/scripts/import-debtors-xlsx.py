@@ -120,7 +120,7 @@ def json_literal(value: object) -> str:
 
 
 def cut_order_eligible(row: dict[str, object]) -> bool:
-    return int(row["debt_cents"]) > 0 and int(row["months_pending"]) > 3
+    return int(row["debt_cents"]) > 0 and int(row["months_pending"]) >= 3
 
 
 def map_row(headers: list[str], values: list[str], excel_row: int, dataset: str = "EXCEL_IMPORTED") -> dict[str, object]:
@@ -399,7 +399,7 @@ def main() -> int:
     eligible_count = sum(cut_order_eligible(row) for row in mapped)
     if dry_run:
         print(f"Validated {len(mapped)} debtor rows from {path.name}.")
-        print(f"Eligible cut orders (debt_cents > 0 and months_pending > 3): {eligible_count}.")
+        print(f"Eligible cut orders (debt_cents > 0 and months_pending >= 3): {eligible_count}.")
         print(f"Rows without an eligible cut order: {len(mapped) - eligible_count}.")
         print(f"Dataset: {dataset}.")
         return 0

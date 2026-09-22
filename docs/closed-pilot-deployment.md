@@ -45,7 +45,7 @@ python scripts/import-debtors-xlsx.py "C:\ruta\Listado_de_clientes_al_22_09_2026
 python scripts/import-debtors-xlsx.py "C:\ruta\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --replace-pilot --create-cut-orders --assign-technician jhonny.moya
 ```
 
-La sustitución elimina datos operativos `PILOT_PROVISIONAL` anteriores, conserva usuarios, carga 99 clientes y crea 8 órdenes elegibles (`DEUDA > 0` y `MESES > 3`) asignadas a `jhonny.moya`. No ejecutar sobre una base institucional o con datos fuera del piloto.
+La sustitución elimina datos operativos `PILOT_PROVISIONAL` anteriores, conserva usuarios, carga 99 clientes y crea 10 órdenes elegibles (`DEUDA > 0` y `MESES >= 3`) asignadas a `jhonny.moya`. No ejecutar sobre una base institucional o con datos fuera del piloto.
 
 ## Verificación mínima
 

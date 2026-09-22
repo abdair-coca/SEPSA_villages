@@ -38,7 +38,7 @@ After reviewing the preview, replace only `PILOT_PROVISIONAL` operational data a
 python scripts/import-debtors-xlsx.py "C:\Users\abdai\Downloads\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --replace-pilot --create-cut-orders --assign-technician jhonny.moya
 ```
 
-This explicit replacement removes provisional sessions, sync operations, authorizations, order history, audit events, orders, and debtors. Pilot users remain. It loads 99 debtor rows and creates orders only for rows with `DEUDA > 0` and `MESES > 3`: the supplied workbook currently produces 8 cut orders, all assigned to `jhonny.moya`; the remaining 91 rows remain available without a field-test cut order. The operation is transactional and records create/assignment audit entries for each generated order. It does not invent GPS, Kardex, source dates, or meanings for unconfirmed columns.
+This explicit replacement removes provisional sessions, sync operations, authorizations, order history, audit events, orders, and debtors. Pilot users remain. It loads 99 debtor rows and creates orders only for rows with `DEUDA > 0` and `MESES >= 3`: the supplied workbook currently produces 10 cut orders, all assigned to `jhonny.moya`; the remaining 89 rows remain available without a field-test cut order. The operation is transactional and records create/assignment audit entries for each generated order. It does not invent GPS, Kardex, source dates, or meanings for unconfirmed columns.
 
 ## Verification
 
