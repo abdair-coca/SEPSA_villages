@@ -412,7 +412,38 @@ export class Application {
     if (order.version !== payload.order_version) return await rejectSync(client, user, payload, "Order version is stale.");
     const authorization = await client.query<{ authorization_id: string; operation_id: string; token_hash: string; status: string; expires_at: string; order_id: string; technician_id: string; device_id: string; order_version: number }>("SELECT authorization_id, operation_id, token_hash, status, expires_at, order_id, technician_id, device_id, order_version FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE", [payload.authorization_id]);
     const grant = authorization.rows[0];
-    if (!grant || grant.operation_id !== payload.operation_id || grant.order_id !== payload.order_id || grant.technician_id !== user.userId || grant.device_id !== payload.device_id || grant.order_version !== payload.order_version || grant.status !== "RESERVED" || new Date(grant.expires_at).getTime() <= Date.now() || grant.token_hash !== hashToken(payload.authorization_token)) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
+    if (!grant || grant.operation_id !== payload.operation_id || grant.order_id !== payload.order_id || grant.technician_id !== user.userId || grant.device_id !== payload.device_id || grant.order_version !== payload.order_version || grant.status !== "RESERVED" || grant.token_hash !== hashToken(payload.authorization_token)) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
+    if (new Date(grant.expires_at).getTime() <= Date.now()) {
+      const recovery = retryingLegacyLocalEvidence
+        ? await client.query<{ eligible: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM audit_events authorization_audit
+             WHERE authorization_audit.action = 'AUTHORIZE_CUT'
+               AND authorization_audit.result = 'accepted'
+               AND authorization_audit.entity_id = $1
+               AND authorization_audit.order_id = $2
+               AND authorization_audit.operation_id = $3
+               AND authorization_audit.actor_id = $4
+               AND authorization_audit.device_id = $5
+               AND EXISTS (
+                 SELECT 1 FROM audit_events rejected_audit
+                 WHERE rejected_audit.action IN ('SYNC_CUT', 'SYNC_OPERATION')
+                   AND rejected_audit.result = 'rejected'
+                   AND rejected_audit.operation_id = $3
+                   AND rejected_audit.order_id = $2
+                   AND rejected_audit.actor_id = $4
+                   AND rejected_audit.device_id = $5
+                   AND rejected_audit.reason = $6
+                   AND rejected_audit.metadata = $7::jsonb
+                   AND rejected_audit.occurred_at > authorization_audit.occurred_at
+                   AND rejected_audit.occurred_at <= authorization_audit.occurred_at + ($8 * INTERVAL '1 second')
+               )
+           ) AS eligible`,
+          [grant.authorization_id, payload.order_id, payload.operation_id, user.userId, payload.device_id, LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON, JSON.stringify(safeSyncPayload(payload)), this.config.authorizationTtlSeconds],
+        )
+        : { rows: [], rowCount: 0 };
+      if (recovery.rows[0]?.eligible !== true) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
+    }
     await client.query("UPDATE cut_authorizations SET status = 'CONSUMED', consumed_at = now(), consumed_operation_id = $2 WHERE authorization_id = $1 AND status = 'RESERVED'", [grant.authorization_id, payload.operation_id]);
     const updatedOrder = await client.query("UPDATE orders SET status = 'EJECUTADO', physical_status = 'CONFIRMED', version = version + 1, updated_at = now() WHERE order_id = $1 AND version = $2", [payload.order_id, payload.order_version]);
     if (updatedOrder.rowCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed while consuming authorization.");

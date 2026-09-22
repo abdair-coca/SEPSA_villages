@@ -166,6 +166,117 @@ test("retries a legacy local-photo pending operation after the backend update", 
   }
 });
 
+test("recovers an expired authorization only for a previously rejected legacy local-photo operation", async () => {
+  const payload = localEvidencePayload();
+  const pool = new SyncPool({
+    operation_id: payload.operation_id,
+    technician_id: "technician-1",
+    device_id: "device-1",
+    status: "pending",
+    payload_hash: payloadDigest(payload),
+    conflict_reason: "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA.",
+  }, true, "2026-09-22T14:50:00.000Z");
+  const server = createServer((request, response) => {
+    void new Application(pool as unknown as Pool, config).handle(request, response);
+  });
+  await listen(server);
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, {
+      method: "POST",
+      headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status: "acknowledged", operation_id: "cut-local-evidence-1", source: "PILOT_PROVISIONAL" });
+    assert.equal(pool.client.authorizationConsumed, true);
+    assert.equal(pool.client.orderExecuted, true);
+    assert.equal(pool.client.auditResult, "accepted");
+    assert.equal((pool.client.auditMetadata as Record<string, unknown>).authorization_token, undefined);
+    assert.deepEqual(pool.client.recoveryAuditValues?.slice(0, 6), ["authorization-1", "order-1", "cut-local-evidence-1", "technician-1", "device-1", "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA."]);
+    assert.equal(pool.client.recoveryAuditValues?.[7], config.authorizationTtlSeconds);
+    const rejectedPayload = JSON.parse(String(pool.client.recoveryAuditValues?.[6])) as Record<string, unknown>;
+    assert.equal(rejectedPayload.authorization_token, undefined);
+    assert.deepEqual(rejectedPayload.evidence_refs, ["evidence-local-1"]);
+  } finally {
+    await close(server);
+  }
+});
+
+test("does not recover a legacy rejection that occurred after the original authorization TTL", async () => {
+  const payload = localEvidencePayload();
+  const pool = new SyncPool({
+    operation_id: payload.operation_id,
+    technician_id: "technician-1",
+    device_id: "device-1",
+    status: "pending",
+    payload_hash: payloadDigest(payload),
+    conflict_reason: "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA.",
+  }, true, "2026-09-22T14:50:00.000Z", {}, 301);
+  const server = createServer((request, response) => {
+    void new Application(pool as unknown as Pool, config).handle(request, response);
+  });
+  await listen(server);
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, {
+      method: "POST",
+      headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(response.status, 409);
+    assert.equal(pool.client.authorizationConsumed, false);
+    assert.equal(pool.client.orderExecuted, false);
+  } finally {
+    await close(server);
+  }
+});
+
+test("does not recover an expired authorization without exact legacy server evidence", async () => {
+  const original = localEvidencePayload();
+  const pendingOperation = {
+    operation_id: original.operation_id,
+    technician_id: "technician-1",
+    device_id: "device-1",
+    status: "pending",
+    payload_hash: payloadDigest(original),
+    conflict_reason: "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA.",
+  };
+  const scenarios = [
+    { label: "new expired operation", payload: original, existing: undefined, priorReject: true },
+    { label: "legacy row without rejected audit", payload: original, existing: pendingOperation, priorReject: false },
+    { label: "payload changed", payload: { ...original, recorded_at: "2026-09-22T14:01:00.000Z" }, existing: pendingOperation, priorReject: true },
+    { label: "consumed authorization", payload: original, existing: pendingOperation, priorReject: true, authorization: { status: "CONSUMED" } },
+    { label: "wrong device binding", payload: original, existing: pendingOperation, priorReject: true, authorization: { device_id: "another-device" } },
+    { label: "wrong technician binding", payload: original, existing: pendingOperation, priorReject: true, authorization: { technician_id: "another-technician" } },
+    { label: "wrong order binding", payload: original, existing: pendingOperation, priorReject: true, authorization: { order_id: "another-order" } },
+    { label: "wrong order version binding", payload: original, existing: pendingOperation, priorReject: true, authorization: { order_version: 2 } },
+  ];
+  for (const scenario of scenarios) {
+    const pool = new SyncPool(scenario.existing, scenario.priorReject, "2026-09-22T14:50:00.000Z", scenario.authorization);
+    const server = createServer((request, response) => {
+      void new Application(pool as unknown as Pool, config).handle(request, response);
+    });
+    await listen(server);
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+      const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, {
+        method: "POST",
+        headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" },
+        body: JSON.stringify(scenario.payload),
+      });
+      assert.equal(response.status, 409, scenario.label);
+      assert.equal(pool.client.authorizationConsumed, false, scenario.label);
+      assert.equal(pool.client.orderExecuted, false, scenario.label);
+    } finally {
+      await close(server);
+    }
+  }
+});
+
 class CatalogPool {
   catalogQuery = "";
 
@@ -259,8 +370,8 @@ class AssignmentClient {
 class SyncPool {
   readonly client: SyncClient;
 
-  constructor(private readonly existingOperation?: Record<string, unknown>) {
-    this.client = new SyncClient(existingOperation);
+  constructor(private readonly existingOperation?: Record<string, unknown>, private readonly priorLegacyReject = false, private readonly authorizationExpiresAt = "2099-09-22T14:05:00.000Z", private readonly authorizationOverrides: Record<string, unknown> = {}, private readonly rejectedAuditDelaySeconds = 1) {
+    this.client = new SyncClient(existingOperation, priorLegacyReject, authorizationExpiresAt, authorizationOverrides, rejectedAuditDelaySeconds);
   }
 
   async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
@@ -284,8 +395,9 @@ class SyncClient {
   syncAcknowledged = false;
   auditResult = "";
   auditMetadata: unknown;
+  recoveryAuditValues?: unknown[];
 
-  constructor(private readonly existingOperation?: Record<string, unknown>) {}
+  constructor(private readonly existingOperation?: Record<string, unknown>, private readonly priorLegacyReject = false, private readonly authorizationExpiresAt = "2099-09-22T14:05:00.000Z", private readonly authorizationOverrides: Record<string, unknown> = {}, private readonly rejectedAuditDelaySeconds = 1) {}
 
   async query<T extends Record<string, unknown>>(text: string, values: unknown[] = []): Promise<{ rows: T[]; rowCount: number }> {
     if (text === "BEGIN" || text === "COMMIT" || text === "ROLLBACK") return { rows: [], rowCount: 0 };
@@ -294,9 +406,15 @@ class SyncClient {
     if (text.includes("FOR UPDATE OF o, d")) return { rows: [syncOrder() as unknown as T], rowCount: 1 };
     if (text.includes("FROM cut_authorizations")) {
       return {
-        rows: [{ authorization_id: "authorization-1", operation_id: "cut-local-evidence-1", token_hash: hashToken("opaque-token"), status: "RESERVED", expires_at: "2099-09-22T14:05:00.000Z", order_id: "order-1", technician_id: "technician-1", device_id: "device-1", order_version: 1 } as unknown as T],
+        rows: [{ authorization_id: "authorization-1", operation_id: "cut-local-evidence-1", token_hash: hashToken("opaque-token"), status: "RESERVED", expires_at: this.authorizationExpiresAt, order_id: "order-1", technician_id: "technician-1", device_id: "device-1", order_version: 1, ...this.authorizationOverrides } as unknown as T],
         rowCount: 1,
       };
+    }
+    if (text.includes("FROM audit_events") && text.includes("AUTHORIZE_CUT")) {
+      this.recoveryAuditValues = values;
+      const insideOriginalTtl = !text.includes("authorization_audit.occurred_at + ($8 * INTERVAL '1 second')") || this.rejectedAuditDelaySeconds <= Number(values[7]);
+      const eligible = this.priorLegacyReject && insideOriginalTtl;
+      return { rows: eligible ? [{ eligible: true } as unknown as T] : [], rowCount: eligible ? 1 : 0 };
     }
     if (text.startsWith("UPDATE cut_authorizations SET")) {
       this.authorizationConsumed = true;
@@ -307,6 +425,7 @@ class SyncClient {
       return { rows: [], rowCount: 1 };
     }
     if (text.startsWith("UPDATE sync_operations SET status = 'pending'")) return { rows: [], rowCount: 1 };
+    if (text.startsWith("UPDATE sync_operations SET status = 'conflict'")) return { rows: [], rowCount: 1 };
     if (text.startsWith("UPDATE sync_operations SET status = 'acknowledged'")) {
       this.syncAcknowledged = true;
       return { rows: [], rowCount: 1 };
