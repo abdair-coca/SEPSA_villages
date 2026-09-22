@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
 import { executeCut } from "./process";
-import { SyncEngine } from "./sync";
+import { LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON, SyncEngine } from "./sync";
 import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
 import { MockAuthorizationAdapter, MockConnectivity, MockSyncTransport } from "../adapters/mock";
 import { ResponseLostError } from "../ports/authorization";
@@ -79,6 +79,29 @@ describe("durable sync engine", () => {
     await engine.syncOnce();
     expect(await repository.listConflicts()).toMatchObject([{ operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", remote: { status: "already_processed" } }]);
     expect(await repository.listSyncItems()).toMatchObject([{ status: "failed", errorCode: "REMOTE_CONFLICT" }]);
+  });
+
+  it("retries the legacy local-photo conflict without deleting the local evidence", async () => {
+    const repository = await setup("sync-local-photo-retry");
+    const operationId = "operation-local-photo-retry-00000000-0000-4000-8000-00000000001f";
+    const evidenceId = "evidence-local-photo-retry";
+    const authorization = new MockAuthorizationAdapter();
+    authorization.requestResponse = { status: "authorized", grant: authGrant(operationId) };
+    const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId, orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
+    expect(result.outcome).toBe("executed");
+
+    const transport = new MockSyncTransport();
+    transport.response = { status: "conflict", operationId, remote: { code: "CONFLICT", message: LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON }, reason: "CONFLICT" };
+    const engine = new SyncEngine(repository, new MockConnectivity("online"), transport);
+    await expect(engine.syncOnce()).resolves.toMatchObject({ failed: 1 });
+    await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "failed", manualReview: true }]);
+    await expect(repository.getEvidence(evidenceId)).resolves.toMatchObject({ evidenceId, operationId });
+
+    transport.response = { status: "acknowledged", operationId };
+    await expect(engine.syncOnce()).resolves.toMatchObject({ synced: 1 });
+    expect(transport.sent).toHaveLength(2);
+    await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "synced", manualReview: false }]);
+    await expect(repository.getEvidence(evidenceId)).resolves.toMatchObject({ evidenceId, operationId });
   });
 
   it("does not work while offline and keeps pending queue", async () => {

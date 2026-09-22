@@ -25,11 +25,12 @@ interface OrderRow {
   status: string; physical_status: string; version: number; created_by: string; assigned_technician_id: string | null;
   created_at: string; context: unknown; cuc: string | null; assigned_technician_name: string | null;
 }
-interface StoredOperationRow { operation_id: string; technician_id: string; device_id: string; status: string; payload_hash: string; }
+interface StoredOperationRow { operation_id: string; technician_id: string; device_id: string; status: string; payload_hash: string; conflict_reason: string | null; }
 interface CommandRow { operation_type: string; actor_id: string; request_hash: string; response: unknown; }
 
 const PROVISIONAL_SOURCE = "PILOT_PROVISIONAL";
 const NO_DATA_FILTER_VALUE = "__NO_DATA__";
+const LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON = "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA.";
 
 export class Application {
   constructor(private readonly pool: Pool, private readonly config: Config) {}
@@ -380,30 +381,29 @@ export class Application {
   }
 
   private async applySync(client: PoolClient, user: SessionUser, payload: SyncPayload): Promise<{ status: "acknowledged" } | { status: "conflict"; message: string }> {
-    const existing = await client.query<StoredOperationRow>("SELECT operation_id, technician_id, device_id, status, payload_hash FROM sync_operations WHERE operation_id = $1 FOR UPDATE", [payload.operation_id]);
+    const existing = await client.query<StoredOperationRow>("SELECT operation_id, technician_id, device_id, status, payload_hash, conflict_reason FROM sync_operations WHERE operation_id = $1 FOR UPDATE", [payload.operation_id]);
     const replay = existing.rows[0] ? syncReplay(existing.rows[0], user.userId, payload) : undefined;
     if (replay) return replay;
-    const inserted = await client.query(
-      "INSERT INTO sync_operations(operation_id, technician_id, device_id, order_id, action, payload, payload_hash, status, source) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8) ON CONFLICT (operation_id) DO NOTHING",
-      [payload.operation_id, user.userId, payload.device_id, payload.order_id, payload.action, safeSyncPayload(payload), digest(payload), PROVISIONAL_SOURCE],
-    );
-    if (inserted.rowCount !== 1) {
-      const concurrent = await client.query<StoredOperationRow>("SELECT operation_id, technician_id, device_id, status, payload_hash FROM sync_operations WHERE operation_id = $1 FOR UPDATE", [payload.operation_id]);
-      return concurrent.rows[0] ? syncReplay(concurrent.rows[0], user.userId, payload) ?? { status: "conflict", message: "Operation is already in progress." } : { status: "conflict", message: "Operation is already in progress." };
+    const retryingLegacyLocalEvidence = existing.rows[0]?.status === "pending" && existing.rows[0].conflict_reason === LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON;
+    if (!existing.rows[0]) {
+      const inserted = await client.query(
+        "INSERT INTO sync_operations(operation_id, technician_id, device_id, order_id, action, payload, payload_hash, status, source) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8) ON CONFLICT (operation_id) DO NOTHING",
+        [payload.operation_id, user.userId, payload.device_id, payload.order_id, payload.action, safeSyncPayload(payload), digest(payload), PROVISIONAL_SOURCE],
+      );
+      if (inserted.rowCount !== 1) {
+        const concurrent = await client.query<StoredOperationRow>("SELECT operation_id, technician_id, device_id, status, payload_hash, conflict_reason FROM sync_operations WHERE operation_id = $1 FOR UPDATE", [payload.operation_id]);
+        return concurrent.rows[0] ? syncReplay(concurrent.rows[0], user.userId, payload) ?? { status: "conflict", message: "Operation is already in progress." } : { status: "conflict", message: "Operation is already in progress." };
+      }
+    } else if (!retryingLegacyLocalEvidence) {
+      return { status: "conflict", message: "Operation remains unresolved and requires review." };
     }
     const orderResult = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE OF o, d`, [payload.order_id, PROVISIONAL_SOURCE]);
     const order = orderResult.rows[0];
     if (!order) return await rejectSync(client, user, payload, "Order was not found.");
     if (order.assigned_technician_id !== user.userId) return await rejectSync(client, user, payload, "Order is not assigned to current technician.");
     if (payload.action === "CUT") validateCaptureMeter(payload.field_capture, order.context);
-    if (payload.action === "CUT" && payload.evidence_refs.length > 0) {
-      const reason = "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA.";
-      await client.query("UPDATE sync_operations SET status = 'pending', conflict_reason = $2 WHERE operation_id = $1", [payload.operation_id, reason]);
-      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_CUT", result: "rejected", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, reason, metadata: safeSyncPayload(payload) });
-      return { status: "conflict", message: reason };
-    }
     if (payload.action === "VISIT") {
-      await client.query("UPDATE sync_operations SET status = 'acknowledged', acknowledged_at = now() WHERE operation_id = $1", [payload.operation_id]);
+      await client.query("UPDATE sync_operations SET status = 'acknowledged', conflict_reason = NULL, acknowledged_at = now() WHERE operation_id = $1", [payload.operation_id]);
        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_VISIT", result: "accepted", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, metadata: safeSyncPayload(payload) });
       return { status: "acknowledged" };
     }
@@ -416,7 +416,7 @@ export class Application {
     await client.query("UPDATE cut_authorizations SET status = 'CONSUMED', consumed_at = now(), consumed_operation_id = $2 WHERE authorization_id = $1 AND status = 'RESERVED'", [grant.authorization_id, payload.operation_id]);
     const updatedOrder = await client.query("UPDATE orders SET status = 'EJECUTADO', physical_status = 'CONFIRMED', version = version + 1, updated_at = now() WHERE order_id = $1 AND version = $2", [payload.order_id, payload.order_version]);
     if (updatedOrder.rowCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed while consuming authorization.");
-    await client.query("UPDATE sync_operations SET status = 'acknowledged', acknowledged_at = now() WHERE operation_id = $1", [payload.operation_id]);
+    await client.query("UPDATE sync_operations SET status = 'acknowledged', conflict_reason = NULL, acknowledged_at = now() WHERE operation_id = $1", [payload.operation_id]);
     await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_CUT", result: "accepted", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, metadata: safeSyncPayload(payload), transition: { before: order.status, after: "EJECUTADO", version: payload.order_version + 1 } });
     return { status: "acknowledged" };
   }
@@ -473,12 +473,13 @@ async function rejectSync(client: PoolClient, user: SessionUser, payload: SyncPa
 function syncReplay(row: StoredOperationRow, technicianId: string, payload: SyncPayload): { status: "acknowledged" } | { status: "conflict"; message: string } | undefined {
   if (row.technician_id !== technicianId || row.device_id !== payload.device_id || row.payload_hash !== digest(payload)) return { status: "conflict", message: "Operation identifier is bound to another payload or device." };
   if (row.status === "acknowledged") return { status: "acknowledged" };
+  if (row.status === "pending" && row.conflict_reason === LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON) return undefined;
   return { status: "conflict", message: "Operation remains unresolved and requires review." };
 }
 
 function safeSyncPayload(payload: SyncPayload): Record<string, unknown> {
   const { authorization_token: _authorizationToken, ...safe } = payload;
-  return safe;
+  return payload.evidence_refs.length > 0 ? { ...safe, evidence_storage: "LOCAL_ONLY" } : safe;
 }
 
 function isUuid(value: string): boolean {

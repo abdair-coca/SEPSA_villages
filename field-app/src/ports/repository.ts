@@ -37,7 +37,7 @@ export interface LocalRepository {
   updateOperationAndOrder(change: AtomicOperationChange, expectedOrderVersion?: number): Promise<void>;
   listSyncItems(): Promise<SyncItem[]>;
   getEvidence?(evidenceId: string): Promise<EvidenceReference | undefined>;
-  claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number): Promise<SyncClaimResult>;
+  claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number, options?: { allowManualReview?: boolean }): Promise<SyncClaimResult>;
   recoverPhysicalUnknown(operationId: string, now: string, lease?: { owner: string; leaseToken: string }): Promise<StoredRecord | undefined>;
   updateSyncState(
     operationId: string,
@@ -46,6 +46,7 @@ export interface LocalRepository {
   ): Promise<void>;
   recoverInFlight?(now?: string): Promise<void>;
   recordConflict?(conflict: ConflictRecord): Promise<void>;
+  listConflicts?(): Promise<ConflictRecord[]>;
   recordConflictAndFail(conflict: ConflictRecord, operationId: string, owner: string, leaseToken: string, now: string): Promise<void>;
 }
 

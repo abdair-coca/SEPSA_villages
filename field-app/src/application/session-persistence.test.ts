@@ -22,7 +22,7 @@ const session: Session = {
   role: "ADMIN",
   permissions: ["VIEW_ORDERS"],
   issuedAt: "2026-09-13T00:00:00.000Z",
-  expiresAt: "2026-09-20T00:00:00.000Z",
+  expiresAt: "2027-09-20T00:00:00.000Z",
   authenticity: "SIMULATED",
   sessionToken: "must-not-persist",
 };

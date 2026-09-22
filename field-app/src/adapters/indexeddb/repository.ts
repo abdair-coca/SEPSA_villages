@@ -329,7 +329,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return items.filter((item) => this.identityMatches(item));
   }
 
-  async claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number): Promise<SyncClaimResult> {
+  async claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number, options: { allowManualReview?: boolean } = {}): Promise<SyncClaimResult> {
     const db = await this.dbPromise;
     const transaction = db.transaction(["sync", "operations", "visits"], "readwrite");
     const syncStore = transaction.objectStore("sync");
@@ -338,7 +338,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
       transaction.abort();
       return { status: "not_found" };
     }
-    if (current.manualReview || current.status === "synced") {
+    if ((current.manualReview && !options.allowManualReview) || current.status === "synced") {
       transaction.abort();
       return { status: "skipped", item: current };
     }

@@ -15,7 +15,7 @@ Set `CORS_ORIGIN` to the exact frontend origin used by the pilot. Do not use `*`
 
 Session tokens are delivered through an `HttpOnly` cookie and never returned to frontend storage. Authorization tokens are hashed in authorization storage and removed from synchronized operation payloads and audit metadata; `payload_hash` preserves idempotency checks.
 
-Photo files remain locally persisted until an official SEPSA upload and verification contract exists. The backend does not mark a photo-backed cut as physically executed without that verification; controlled photo exceptions remain auditable.
+Photo files remain locally persisted on the field device. The sync payload sends only evidence references and metadata (`evidence_storage: LOCAL_ONLY`), never the photo bytes; after valid online authorization, capture, and idempotency checks, the backend can acknowledge the cut while the evidence remains local. Controlled photo exceptions remain auditable. Pending operations created by the previous local-photo rejection are retryable after this backend update; other conflicts remain pending review.
 
 Seed users are `admin.sepsa` (ADMIN), `jhonny.moya` and `tecnico.sepsa02-06` (TECHNICIAN: Alex Fernández, Paola Ríos, Cristian Soria, Daniela Paredes y Marco Aguilar — nombres ficticios de PRUEBA, no personal real). Initial password for all is `password123` for LOCAL pilot only; only scrypt hashes are stored in SQL. Rotate before any shared deployment.
 

@@ -16,6 +16,8 @@ export interface SyncReport {
   skipped: number;
 }
 
+export const LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON = "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA.";
+
 export class SyncEngine {
   private readonly now: () => string;
   private readonly owner: string;
@@ -40,13 +42,19 @@ export class SyncEngine {
     await this.recoverAfterRestart();
     if (!this.connectivity.isUsable()) return { processed: 0, synced: 0, failed: 0, skipped: 0 };
     const report: SyncReport = { processed: 0, synced: 0, failed: 0, skipped: 0 };
+    const retryableManualReview = new Set(
+      (await this.repository.listConflicts?.() ?? [])
+        .filter((conflict) => isLegacyLocalEvidenceConflict(conflict.remote))
+        .map((conflict) => conflict.operationId),
+    );
     const items = await this.repository.listSyncItems();
     for (const item of items) {
-      if (item.status === "synced" || item.manualReview) {
+      const allowManualReview = Boolean(item.manualReview && retryableManualReview.has(item.operationId));
+      if (item.status === "synced" || (item.manualReview && !allowManualReview)) {
         report.skipped += 1;
         continue;
       }
-      const claim = await this.claim(item);
+      const claim = await this.claim(item, allowManualReview);
       if (claim.status !== "claimed") {
         report.skipped += 1;
         continue;
@@ -69,8 +77,8 @@ export class SyncEngine {
     return report;
   }
 
-  private async claim(item: SyncItem): Promise<SyncClaimResult> {
-    return this.repository.claimSync(item.operationId, this.owner, this.now(), this.leaseMilliseconds);
+  private async claim(item: SyncItem, allowManualReview = false): Promise<SyncClaimResult> {
+    return this.repository.claimSync(item.operationId, this.owner, this.now(), this.leaseMilliseconds, { allowManualReview });
   }
 
   private async syncItem(item: SyncItem): Promise<"synced" | "failed" | "skipped"> {
@@ -97,7 +105,7 @@ export class SyncEngine {
         return "failed";
       }
       if (lookup.status === "confirmed") {
-        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true, manualReview: false });
         return "synced";
       }
       await this.fail(item, lookup.status === "unknown" ? lookup.errorCode ?? "LOOKUP_UNKNOWN" : "LOOKUP_NOT_FOUND", true);
@@ -117,7 +125,7 @@ export class SyncEngine {
         return "failed";
       }
       if (lookup.status === "confirmed") {
-        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true, manualReview: false });
         return "synced";
       }
       if (lookup.status === "unknown") {
@@ -134,7 +142,7 @@ export class SyncEngine {
         return "failed";
       }
       if (response.status === "acknowledged") {
-        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: record.kind !== "VISIT" });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: record.kind !== "VISIT", manualReview: false });
         return "synced";
       }
       if (response.status === "conflict") {
@@ -159,7 +167,7 @@ export class SyncEngine {
     }
   }
 
-  private async finish(item: SyncItem, status: SyncItem["status"], options: { uncertain?: boolean; errorCode?: string; remoteConfirmed?: boolean } = {}): Promise<void> {
+  private async finish(item: SyncItem, status: SyncItem["status"], options: { uncertain?: boolean; errorCode?: string; remoteConfirmed?: boolean; manualReview?: boolean } = {}): Promise<void> {
     await this.repository.updateSyncState(item.operationId, status, { ...options, owner: this.owner, leaseToken: leaseToken(item), now: this.now() });
   }
 
@@ -212,6 +220,10 @@ function leaseToken(item: SyncItem): string {
 
 function isLeaseFencingError(error: unknown): boolean {
   return error instanceof Error && /fencing token|lease belongs to another owner/i.test(error.message);
+}
+
+function isLegacyLocalEvidenceConflict(remote: unknown): boolean {
+  return typeof remote === "object" && remote !== null && "message" in remote && typeof remote.message === "string" && remote.message === LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON;
 }
 
 export { toPayload };
