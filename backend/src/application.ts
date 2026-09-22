@@ -13,7 +13,7 @@ interface SessionRow { session_id: string; user_id: string; username: string; di
 interface DebtorRow {
   debtor_id: string; account_id: string; supply_id: string; customer_name: string; address: string;
   reference_text: string; meter_id: string; area: string; locality: string; route: string; debt_cents: number;
-  months_pending: number; updated_at: string; kardex: unknown; circuit: string; customer_ci: string | null;
+  months_pending: number; updated_at: string | null; kardex: unknown; circuit: string; customer_ci: string | null;
   contact_phone: string | null; tariff: string; supply_status: string; enabling_title: string | null;
   route_order: number | null; cadastral_latitude: number | null; cadastral_longitude: number | null;
   meter_brand: string | null; meter_index: string | null; meter_multiplier: number | null;

@@ -35,6 +35,18 @@ Render Free puede suspender el API después de inactividad. Neon Free puede susp
 8. Re-crear el despliegue de Render y verificar `https://<api>/healthz`.
 9. Re-crear el despliegue de Vercel si se modificó `vercel.json`.
 
+## Carga controlada para prueba de campo
+
+La carga del archivo `Listado_de_clientes_al_22_09_2026 (1).xlsx` no se ejecuta automáticamente durante el despliegue. Desde `backend`, con la base provisional accesible, validar primero y luego ejecutar la sustitución explícita:
+
+```powershell
+$env:DATABASE_URL="<DATABASE_URL>"
+python scripts/import-debtors-xlsx.py "C:\ruta\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --dry-run
+python scripts/import-debtors-xlsx.py "C:\ruta\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --replace-pilot --create-cut-orders --assign-technician jhonny.moya
+```
+
+La sustitución elimina datos operativos `PILOT_PROVISIONAL` anteriores, conserva usuarios, carga 99 clientes y crea 8 órdenes elegibles (`DEUDA > 0` y `MESES > 3`) asignadas a `jhonny.moya`. No ejecutar sobre una base institucional o con datos fuera del piloto.
+
 ## Verificación mínima
 
 - API responde `200` en `/healthz`.

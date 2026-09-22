@@ -2,6 +2,7 @@
 BEGIN;
 
 ALTER TABLE debtors
+  ALTER COLUMN updated_at DROP NOT NULL,
   ADD COLUMN IF NOT EXISTS circuit text NOT NULL DEFAULT 'TODO: VALIDAR CON SEPSA',
   ADD COLUMN IF NOT EXISTS customer_ci text,
   ADD COLUMN IF NOT EXISTS contact_phone text,

@@ -19,9 +19,26 @@ Photo files remain locally persisted until an official SEPSA upload and verifica
 
 Seed users are `admin.sepsa` (ADMIN), `jhonny.moya` and `tecnico.sepsa02-06` (TECHNICIAN: Alex Fernández, Paola Ríos, Cristian Soria, Daniela Paredes y Marco Aguilar — nombres ficticios de PRUEBA, no personal real). Initial password for all is `password123` for LOCAL pilot only; only scrypt hashes are stored in SQL. Rotate before any shared deployment.
 
-`sql/005_definitive_seed.sql` loads 28 debtors from `Deudores_morosos_30_03_2026.xlsx` (sheet MOROSOS) and wipes previous PILOT_PROVISIONAL users, debtors, orders, assignments, authorizations and sync state so technicians start with zero orders. `sql/004_e2e_seed.sql` is deprecated and intentionally empty.
+`sql/005_definitive_seed.sql` contains the older 28-debtor bootstrap snapshot from `Deudores_morosos_30_03_2026.xlsx` (sheet MOROSOS). It is not the field-test replacement below. `sql/004_e2e_seed.sql` is deprecated and intentionally empty.
 
-To import the workbook into an existing database without deleting orders or audit history, set `DATABASE_URL` for the process and run `python scripts/import-debtors-xlsx.py path/to/Deudores_morosos_30_03_2026.xlsx`. The importer validates headers, preserves stable debtor/account/supply identifiers, stores the original row in `context.excel_row`, and commits all updates in one transaction.
+To import a workbook into an existing database without deleting orders or audit history, set `DATABASE_URL` for the process and run `python scripts/import-debtors-xlsx.py path/to/workbook.xlsx`. The importer validates headers, permits missing source GPS, preserves stable debtor/account/supply identifiers, stores the original row in `context.excel_row`, and commits all updates in one transaction. A non-date source value such as `Antigua` is stored as a null `updated_at` with the original value and a status marker in `context`.
+
+### Field test dataset
+
+For the 2026-09-22 field test, preview the supplied workbook first:
+
+```powershell
+$env:DATABASE_URL="postgres://pilot_provisional:pilot_provisional@localhost:15432/pilot_provisional"
+python scripts/import-debtors-xlsx.py "C:\Users\abdai\Downloads\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --dry-run
+```
+
+After reviewing the preview, replace only `PILOT_PROVISIONAL` operational data and create eligible `CUT` orders for `jhonny.moya`:
+
+```powershell
+python scripts/import-debtors-xlsx.py "C:\Users\abdai\Downloads\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --replace-pilot --create-cut-orders --assign-technician jhonny.moya
+```
+
+This explicit replacement removes provisional sessions, sync operations, authorizations, order history, audit events, orders, and debtors. Pilot users remain. It loads 99 debtor rows and creates orders only for rows with `DEUDA > 0` and `MESES > 3`: the supplied workbook currently produces 8 cut orders, all assigned to `jhonny.moya`; the remaining 91 rows remain available without a field-test cut order. The operation is transactional and records create/assignment audit entries for each generated order. It does not invent GPS, Kardex, source dates, or meanings for unconfirmed columns.
 
 ## Verification
 

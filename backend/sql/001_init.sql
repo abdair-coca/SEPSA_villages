@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS debtors (
   months_pending integer NOT NULL CHECK (months_pending >= 0),
   kardex jsonb NOT NULL DEFAULT '[]'::jsonb,
   context jsonb NOT NULL DEFAULT '{}'::jsonb,
-  updated_at timestamptz NOT NULL,
+  updated_at timestamptz,
   source text NOT NULL DEFAULT 'PILOT_PROVISIONAL' CHECK (source = 'PILOT_PROVISIONAL')
 );
 ALTER TABLE debtors ADD COLUMN IF NOT EXISTS circuit text NOT NULL DEFAULT '';

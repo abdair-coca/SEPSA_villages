@@ -11,6 +11,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "pilot:bootstrap": "node scripts/bootstrap-pilot.mjs",
+    "pilot:field-test": "python scripts/import-debtors-xlsx.py",
     "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {

@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -20,6 +21,8 @@ REQUIRED_HEADERS = {
     "ESTADO", "OBSERVACIONES", "UBICACION", "LATITUD", "LONGITUD",
     "TELEFONO / CELULAR", "CIRCUITO", "ULTIMA FECHA FACT.",
 }
+OPTIONAL_VALUE_HEADERS = {"LATITUD", "LONGITUD", "TELEFONO / CELULAR", "OBSERVACIONES", "UBICACION"}
+REQUIRED_VALUE_HEADERS = REQUIRED_HEADERS - OPTIONAL_VALUE_HEADERS
 
 
 def cell_value(cell: ElementTree.Element, shared_strings: list[str]) -> str:
@@ -91,9 +94,14 @@ def optional_number(value: str) -> str:
     return "" if text in NO_DATA else text
 
 
-def iso_timestamp(value: str) -> str:
+def iso_timestamp(value: str) -> str | None:
     text = clean(value)
-    parsed = datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+    if text in NO_DATA or text.casefold() in {"antigua", "n/a", "s/d"}:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+    except ValueError as error:
+        raise ValueError(f"Invalid source timestamp: {value!r}. Keep source value in context or validate with SEPSA.") from error
     return parsed.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
@@ -111,9 +119,13 @@ def json_literal(value: object) -> str:
     return sql_literal(json.dumps(value, ensure_ascii=False, separators=(",", ":"))) + "::jsonb"
 
 
-def map_row(headers: list[str], values: list[str], excel_row: int) -> dict[str, object]:
+def cut_order_eligible(row: dict[str, object]) -> bool:
+    return int(row["debt_cents"]) > 0 and int(row["months_pending"]) > 3
+
+
+def map_row(headers: list[str], values: list[str], excel_row: int, dataset: str = "EXCEL_IMPORTED") -> dict[str, object]:
     raw = {header: clean(values[index] if index < len(values) else "") for index, header in enumerate(headers)}
-    missing = sorted(header for header in REQUIRED_HEADERS if not raw.get(header))
+    missing = sorted(header for header in REQUIRED_VALUE_HEADERS if not raw.get(header))
     if missing:
         raise ValueError(f"Excel row {excel_row} missing required values: {', '.join(missing)}")
 
@@ -129,6 +141,7 @@ def map_row(headers: list[str], values: list[str], excel_row: int) -> dict[str, 
         longitude = ""
     if phone == "0":
         phone = ""
+    updated_at = iso_timestamp(raw["ULTIMA FECHA FACT."])
 
     return {
         "debtor_id": f"EXCEL-{raw['CODIGO']}",
@@ -143,7 +156,7 @@ def map_row(headers: list[str], values: list[str], excel_row: int) -> dict[str, 
         "route": raw["RUTA COD"],
         "debt_cents": cents(raw["DEUDA"]),
         "months_pending": int(raw["MESES"]),
-        "updated_at": iso_timestamp(raw["ULTIMA FECHA FACT."]),
+        "updated_at": updated_at,
         "circuit": raw["CIRCUITO"],
         "customer_ci": None,
         "contact_phone": phone or None,
@@ -164,8 +177,10 @@ def map_row(headers: list[str], values: list[str], excel_row: int) -> dict[str, 
         "reconnection_technician": None,
         "kardex": [],
         "context": {
-            "dataset": "EXCEL_20260330",
+            "dataset": dataset,
             "meaning_status": "TODO: VALIDAR CON SEPSA",
+            "source_updated_at": raw["ULTIMA FECHA FACT."],
+            "updated_at_status": "UNAVAILABLE_SOURCE_VALUE" if updated_at is None else "PARSED_SOURCE_VALUE",
             "area_name": raw["AREA"],
             "ruta_name": raw["RUTA"],
             "ubicacion_url": raw["UBICACION"],
@@ -175,7 +190,10 @@ def map_row(headers: list[str], values: list[str], excel_row: int) -> dict[str, 
     }
 
 
-def make_sql(rows: list[dict[str, object]]) -> str:
+def make_sql(rows: list[dict[str, object]], replace_pilot: bool = False, assign_technician: str | None = None) -> str:
+    if assign_technician and not replace_pilot:
+        raise ValueError("--assign-technician requires --replace-pilot so assignment is bounded to this field-test load.")
+
     columns = [
         "debtor_id", "account_id", "supply_id", "customer_name", "address", "reference_text", "meter_id",
         "area", "locality", "route", "debt_cents", "months_pending", "kardex", "context", "updated_at",
@@ -225,26 +243,140 @@ def make_sql(rows: list[dict[str, object]]) -> str:
         "meter_index = EXCLUDED.meter_index",
         "meter_multiplier = COALESCE(EXCLUDED.meter_multiplier, debtors.meter_multiplier)",
     ]
-    return """BEGIN;
-INSERT INTO debtors (%s)
+    statements = ["BEGIN;"]
+    if replace_pilot:
+        statements.extend([
+            "-- Explicit field-test replacement. Users remain so credentials and role identities stay stable.",
+            "DELETE FROM sync_operations WHERE source = 'PILOT_PROVISIONAL';",
+            "DELETE FROM cut_authorizations WHERE source = 'PILOT_PROVISIONAL';",
+            "DELETE FROM order_assignments WHERE source = 'PILOT_PROVISIONAL';",
+            "DELETE FROM audit_events WHERE source = 'PILOT_PROVISIONAL';",
+            "DELETE FROM orders WHERE source = 'PILOT_PROVISIONAL';",
+            "DELETE FROM sessions WHERE source = 'PILOT_PROVISIONAL';",
+            "DELETE FROM command_operations WHERE source = 'PILOT_PROVISIONAL';",
+            "DELETE FROM debtors WHERE source = 'PILOT_PROVISIONAL';",
+        ])
+
+    statements.append("""INSERT INTO debtors (%s)
 VALUES
   %s
 ON CONFLICT (debtor_id) DO UPDATE SET
-  %s;
-COMMIT;
-""" % (", ".join(columns), ",\n  ".join(values), ",\n  ".join(updates))
+  %s;""" % (", ".join(columns), ",\n  ".join(values), ",\n  ".join(updates)))
+
+    if assign_technician:
+        technician_literal = sql_literal(assign_technician)
+        technician_error = sql_literal(f"Requested pilot technician is missing, disabled, or not a technician: {assign_technician}")
+        admin_selector = "(SELECT user_id FROM users WHERE username = 'admin.sepsa' AND role = 'ADMIN' AND enabled = true AND source = 'PILOT_PROVISIONAL')"
+        technician_selector = f"(SELECT user_id FROM users WHERE username = {technician_literal} AND role = 'TECHNICIAN' AND enabled = true AND source = 'PILOT_PROVISIONAL')"
+        statements.append(f"""DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM users WHERE username = 'admin.sepsa' AND role = 'ADMIN' AND enabled = true AND source = 'PILOT_PROVISIONAL') THEN
+    RAISE EXCEPTION 'Required pilot admin admin.sepsa is missing or disabled.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM users WHERE username = {technician_literal} AND role = 'TECHNICIAN' AND enabled = true AND source = 'PILOT_PROVISIONAL') THEN
+    RAISE EXCEPTION {technician_error};
+  END IF;
+END $$;""")
+
+        eligible_rows = [row for row in rows if cut_order_eligible(row)]
+        for row in eligible_rows:
+            order_id = str(uuid.uuid4())
+            assignment_id = str(uuid.uuid4())
+            cuc = f"CUC-{uuid.uuid4()}"
+            debtor_id = str(row["debtor_id"])
+            create_operation_id = f"FIELD-TEST-CREATE-{debtor_id}"
+            assignment_operation_id = f"FIELD-TEST-ASSIGN-{debtor_id}"
+            statements.extend([
+                f"""INSERT INTO orders(order_id, cuc, debtor_id, purpose, status, physical_status, version, created_by, source)
+VALUES ({sql_literal(order_id)}, {sql_literal(cuc)}, {sql_literal(debtor_id)}, 'CUT', 'GENERADO', 'NONE', 1, {admin_selector}, 'PILOT_PROVISIONAL');""",
+                f"""INSERT INTO audit_events(audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, transition, metadata, source)
+VALUES ({sql_literal(str(uuid.uuid4()))}, {admin_selector}, 'ADMIN', 'CREATE_ORDER', {sql_literal(order_id)}, {sql_literal(order_id)}, {sql_literal(create_operation_id)}, 'accepted',
+  jsonb_build_object('before', NULL, 'after', 'GENERADO', 'version', 1),
+  {json_literal({'field_test': True, 'debtor_id': debtor_id})}, 'PILOT_PROVISIONAL');""",
+                f"""UPDATE orders
+SET assigned_technician_id = {technician_selector}, version = 2, updated_at = now()
+WHERE order_id = {sql_literal(order_id)} AND status = 'GENERADO' AND version = 1;""",
+                f"""INSERT INTO order_assignments(assignment_id, order_id, technician_id, assigned_by, from_technician_id, version, source)
+VALUES ({sql_literal(assignment_id)}, {sql_literal(order_id)}, {technician_selector}, {admin_selector}, NULL, 2, 'PILOT_PROVISIONAL');""",
+                f"""INSERT INTO audit_events(audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, transition, metadata, source)
+VALUES ({sql_literal(str(uuid.uuid4()))}, {admin_selector}, 'ADMIN', 'ASSIGN_ORDER', {sql_literal(order_id)}, {sql_literal(order_id)}, {sql_literal(assignment_operation_id)}, 'accepted',
+  jsonb_build_object('before', NULL, 'after', {technician_selector}, 'version', 2),
+  {json_literal({'field_test': True, 'technician_username': assign_technician})}, 'PILOT_PROVISIONAL');""",
+            ])
+
+    statements.append("COMMIT;")
+    return "\n\n".join(statements) + "\n"
+
+
+def parse_arguments(arguments: list[str]) -> dict[str, object]:
+    if not arguments:
+        raise ValueError("Usage: import-debtors-xlsx.py PATH [--dataset DATASET] [--dry-run] [--replace-pilot --create-cut-orders --assign-technician USERNAME]")
+
+    path: Path | None = None
+    dataset = "EXCEL_IMPORTED"
+    dry_run = False
+    replace_pilot = False
+    create_cut_orders = False
+    assign_technician: str | None = None
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument.startswith("--"):
+            if argument == "--dry-run":
+                dry_run = True
+            elif argument == "--replace-pilot":
+                replace_pilot = True
+            elif argument == "--create-cut-orders":
+                create_cut_orders = True
+            elif argument in {"--dataset", "--assign-technician"}:
+                index += 1
+                if index >= len(arguments) or arguments[index].startswith("--"):
+                    raise ValueError(f"{argument} requires a value.")
+                if argument == "--dataset":
+                    dataset = arguments[index]
+                else:
+                    assign_technician = arguments[index]
+            else:
+                raise ValueError(f"Unknown option: {argument}")
+        elif path is None:
+            path = Path(argument).expanduser()
+        else:
+            raise ValueError(f"Unexpected argument: {argument}")
+        index += 1
+
+    if path is None:
+        raise ValueError("An Excel path is required.")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", dataset):
+        raise ValueError("Dataset must contain only letters, numbers, underscores, or hyphens.")
+    if create_cut_orders and not assign_technician:
+        raise ValueError("--create-cut-orders requires --assign-technician.")
+    if assign_technician and not create_cut_orders:
+        raise ValueError("--assign-technician requires --create-cut-orders.")
+    if create_cut_orders and not replace_pilot:
+        raise ValueError("--create-cut-orders requires --replace-pilot so orders are not duplicated or reassigned silently.")
+    return {
+        "path": path,
+        "dataset": dataset,
+        "dry_run": dry_run,
+        "replace_pilot": replace_pilot,
+        "assign_technician": assign_technician,
+    }
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: import-debtors-xlsx.py PATH", file=sys.stderr)
-        return 2
-    path = Path(sys.argv[1]).expanduser()
+    options = parse_arguments(sys.argv[1:])
+    path = options["path"]
+    dataset = str(options["dataset"])
+    dry_run = bool(options["dry_run"])
+    replace_pilot = bool(options["replace_pilot"])
+    assign_technician = options["assign_technician"]
+    if not isinstance(path, Path):
+        raise ValueError("Invalid Excel path.")
     if not path.is_file():
         print(f"Excel file not found: {path}", file=sys.stderr)
         return 2
     database_url = __import__("os").environ.get("DATABASE_URL", "").strip()
-    if not database_url:
+    if not database_url and not dry_run:
         print("DATABASE_URL is required; no database write was attempted.", file=sys.stderr)
         return 2
 
@@ -258,16 +390,25 @@ def main() -> int:
         print(f"Excel headers missing: {', '.join(missing_headers)}", file=sys.stderr)
         return 2
 
-    mapped = [map_row(headers, values, index + 1) for index, values in enumerate(rows[1:], start=2) if any(clean(value) for value in values)]
+    mapped = [map_row(headers, values, index + 1, dataset) for index, values in enumerate(rows[1:], start=2) if any(clean(value) for value in values)]
     debtor_ids = [str(row["debtor_id"]) for row in mapped]
     account_ids = [str(row["account_id"]) for row in mapped]
     if len(debtor_ids) != len(set(debtor_ids)) or len(account_ids) != len(set(account_ids)):
         raise ValueError("Excel contains duplicate CODIGO values.")
 
+    eligible_count = sum(cut_order_eligible(row) for row in mapped)
+    if dry_run:
+        print(f"Validated {len(mapped)} debtor rows from {path.name}.")
+        print(f"Eligible cut orders (debt_cents > 0 and months_pending > 3): {eligible_count}.")
+        print(f"Rows without an eligible cut order: {len(mapped) - eligible_count}.")
+        print(f"Dataset: {dataset}.")
+        return 0
+
     subprocess.run(
         ["psql", "--dbname", database_url, "--set", "ON_ERROR_STOP=1", "--quiet"],
-        input=make_sql(mapped),
+        input=make_sql(mapped, replace_pilot, str(assign_technician) if assign_technician else None),
         text=True,
+        encoding="utf-8",
         check=True,
     )
     localities = {str(row["locality"]) for row in mapped}
@@ -275,7 +416,12 @@ def main() -> int:
     statuses = {str(row["supply_status"]) for row in mapped}
     print(f"Imported {len(mapped)} debtor rows transactionally.")
     print(f"Distinct areas: {len({str(row['area']) for row in mapped})}; localities: {len(localities)}; routes: {len(routes)}; statuses: {len(statuses)}.")
-    print("Existing debtor/account/supply identifiers were preserved; no orders or audit rows were deleted.")
+    if replace_pilot:
+        print("Replaced previous PILOT_PROVISIONAL field-test data; users were preserved.")
+    if assign_technician:
+        print(f"Created {eligible_count} CUT orders and assigned all to {assign_technician}.")
+    else:
+        print("Existing debtor/account/supply identifiers were preserved; no orders or audit rows were deleted.")
     return 0
 
 
