@@ -454,7 +454,9 @@ export function selectVisibleOrders(state: AppState): WorkOrder[] {
       (order.context?.meterId && order.context.meterId.toLocaleLowerCase().includes(query)) ||
       (order.context?.customerName && order.context.customerName.toLocaleLowerCase().includes(query)) ||
       (order.context?.address && order.context.address.toLocaleLowerCase().includes(query)) ||
-      (order.context?.route && order.context.route.toLocaleLowerCase().includes(query));
+      (order.context?.route && order.context.route.toLocaleLowerCase().includes(query)) ||
+      (order.context?.routeName && order.context.routeName.toLocaleLowerCase().includes(query)) ||
+      (order.context?.routeOrder !== undefined && String(order.context.routeOrder).includes(query));
     const matchesFilter = state.filter === "ALL" || (state.filter === "REVIEW" ? order.physicalStatus === "PHYSICAL_UNKNOWN" : order.status === state.filter);
     return Boolean(matchesQuery && matchesFilter);
   });

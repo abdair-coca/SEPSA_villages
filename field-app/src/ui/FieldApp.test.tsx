@@ -465,6 +465,29 @@ describe("FieldApp SSR shell", () => {
     expect(meterMarkup).not.toContain("josé quispe");
   });
 
+  it("filters assigned orders by route and route correlativo", async () => {
+    const seedPackage = createDemoPackage("2026-09-12T10:00:00.000Z");
+    const routePackage: WorkPackage = {
+      ...seedPackage,
+      orders: seedPackage.orders.map((order, index) => ({
+        ...order,
+        context: { ...order.context!, route: index === 0 ? "078" : "079", routeName: index === 0 ? "COA COA" : "OTRA RUTA", routeOrder: index === 0 ? 202 : 303 },
+      })),
+    };
+    const store = await readyStore("ui-route-search", routePackage);
+    store.setTab("orders");
+
+    store.setQuery("COA COA");
+    const routeMarkup = html(store);
+    expect(routeMarkup).toContain("maría flores");
+    expect(routeMarkup).not.toContain("josé quispe");
+
+    store.setQuery("202");
+    const correlativoMarkup = html(store);
+    expect(correlativoMarkup).toContain("maría flores");
+    expect(correlativoMarkup).not.toContain("josé quispe");
+  });
+
   it("paginates filtered field orders and keeps only the open action", async () => {
     const seedPackage = createDemoPackage("2026-09-12T10:00:00.000Z");
     const baseOrder = seedPackage.orders[0];
@@ -493,7 +516,7 @@ describe("FieldApp SSR shell", () => {
     expect(firstPage).toContain("ejecutadas");
     expect(firstPage).toContain("anuladas");
     expect(firstPage).toContain("revisión");
-    expect(firstPage).toContain("buscar por cuenta, medidor o cliente");
+    expect(firstPage).toContain("buscar por cuenta, medidor, cliente, ruta o correlativo");
     expect(firstPage).toContain("cliente página 1");
     expect(firstPage).toContain("cliente página 5");
     expect(firstPage).not.toContain("cliente página 6");

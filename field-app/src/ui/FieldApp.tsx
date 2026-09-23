@@ -615,7 +615,7 @@ function OrderFilters({ state, store, filters, compactViewport, filtersOpen, onF
       <div className="search-bar-wrap">
         <label className="search-field" htmlFor="order-search">
           <IconSearch className="search-field-icon" />
-          <input id="order-search" type="search" value={state.query} onChange={(event) => store.setQuery(event.target.value)} placeholder="Buscar por cuenta, medidor o cliente" />
+          <input id="order-search" type="search" value={state.query} onChange={(event) => store.setQuery(event.target.value)} placeholder="Buscar por cuenta, medidor, cliente, ruta o correlativo" />
         </label>
         {state.query ? <button type="button" className="search-clear-btn" onClick={() => store.setQuery("")} aria-label="Limpiar búsqueda">×</button> : null}
       </div>
