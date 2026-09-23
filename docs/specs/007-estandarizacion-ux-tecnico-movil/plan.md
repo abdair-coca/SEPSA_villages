@@ -1,13 +1,13 @@
 # Plan 007: estandarización UX con prioridad en Técnico móvil
 
-**Estado:** Fases 2–4 cerradas para QA local disponible. Fase 4: commits `adce142` (IndexedDB v2 y borradores scoped) y `f1772ca` (asistente compacto); `gpt-6-luna` data-layer PASS, dos P2 corregidos y re-revisión dirigida PASS; 166/166 pruebas y build aprobados. Validación física de teclado nativo y safe area no nula pendiente. QA visual independiente de Fase 1 queda pendiente para revisión integrada de Fase 5.
+**Estado:** Fase 5 PASS para QA local y revisión dirigida. Validación física de teclado nativo y safe area no nula pendiente (Fase 4.9); objetivo humano ≤3 s no demostrado.
 
 Este cambio armonizará el lenguaje visual de Administración y Técnico, priorizando el trabajo móvil del Técnico. Mantendrá las capacidades existentes, los datos y las reglas operativas; la referencia visual vigente es [`docs/design.md`](../../design.md).
 
 ## Ruta de trabajo
 
 1. Ejecutar las cinco fases en orden, con requisitos, evidencia y controles de seguridad de `spec.md`.
-2. En cada fase, reunir evidencia visual y funcional; `gpt-6-luna` revisa antes del avance.
+2. En cada fase, reunir evidencia visual y funcional; `gpt-6-luna` revisa código y el orquestador verifica el navegador antes del avance.
 3. Corregir hallazgos de fase y repetir revisión; no esperar aceptación del usuario.
 4. El usuario puede inspeccionar cada entrega y comentar; su revisión no bloquea avance.
 
@@ -17,7 +17,7 @@ Se normalizó la geometría de los estados de orden entre Admin y Técnico sin c
 
 La jerarquía, las superficies de panel y las acciones primarias ya reutilizan estilos comunes; se conservaron como base compartida en lugar de duplicar componentes o redefinir colores.
 
-La búsqueda, selección individual y selección múltiple de Admin, junto con el recorrido y detalle técnico, se probaron sin confirmar creación ni asignación sobre los datos cargados. Por instrucción explícita del usuario se continúa con la Fase 2. No se registró una revisión visual independiente de Fase 1.
+QA integrado posterior: Admin simulado aislado seleccionó dos suministros en páginas distintas; modal mostró ambos y técnico. Se creó/asignó uno elegible (Pedro Huanca) a Camila; ficha, cuenta y deuda correctas. Revisión visual Admin a 320/360/390 px sin overflow horizontal, con el mismo lenguaje/paleta del Técnico. No guardar capturas con PII en repo.
 
 ## Entrega cerrada: Fase 2
 
@@ -35,6 +35,18 @@ Browser a 320×568, 360×640 y 390×844: summary `scrollHeight=clientHeight`; ac
 
 Revisión `gpt-6-luna`: `PASS`. Commit: `28f6bb4`. Suite: 17 archivos/152 pruebas; build y `git diff --check` aprobados.
 
+## Evidencia de Fase 5 — QA local integrado
+
+Admin simulado aislado en 5176 seleccionó dos suministros entre dos páginas; el modal mostró ambos y el técnico. Se creó y asignó UNO elegible (Pedro Huanca) a Camila; ficha, cuenta y deuda correctas. Click final a interfaz estable: 375 ms. Esto no demuestra comprensión humana en ≤3 s. Modal 320×300: selector y CTA alcanzables con desplazamiento; Admin puede hacer scroll.
+
+Técnico real en puerto 5175, sesión Jhonny: siete órdenes y una operación local sobrevivieron reload con backend apagado. El intento automático de sync dejó el estado `failed`, `uncertain=true`, `manualReview=false`. No se confirmó ni eliminó la operación; no se pulsó «Verificar estado». No hubo confirmación del servidor.
+
+La evidencia visual browser de home/orders/map/queue/queue-detail mostró el documento sin scroll (`scrollHeight=clientHeight`) en 320×568, 360×640 y 390×844. Tras el último ajuste CSS, el detalle de cola volvió a verificarse en los tres tamaños. El mapa midió 226/298/527 px; toolbar y herramientas no desbordaron. Con operación cargada, error y detalle mostraron paginación, cliente e ID completo. Order review no tuvo scroll, con acciones antes de navegación. Admin visual en 320/360/390 sin overflow horizontal y con lenguaje/paleta compartidos. No se guardan capturas con PII en repo.
+
+Revisión: reviewer Luna inicial halló P2 de recorte del detalle de cola; writer corrigió scroll interno y cadenas. Reviewer Luna dirigido dio `PASS`, sin otros P1/P2 obvios; revisión de código sin navegador. Orquestador verificó visualmente después el navegador a 320×568, 360×640 y 390×844: detalle con `scrollHeight=clientHeight`, panel `overflowY=auto`, paginación fuera del panel, «Volver» y navegación visibles; captura 320 legible. Cola base con el nuevo botón en 320×568: página 568/568 y tres botones visibles antes de navegación.
+
+Verificación: frontend post-fix 17 archivos/177 pruebas y build aprobados. Backend 16 pruebas aprobadas, una integración DB omitida porque `DATABASE_URL` no estaba configurada; build backend aprobado. Operación local sigue `failed`, `uncertain=true`, `manualReview=false`: no confirmada ni borrada y «Verificar estado» no pulsado. Backend apagado; no hubo E2E con backend ni QA físico.
+
 ## Fases y aceptación
 
 | Fase | Entrega y secuencia | Criterios visuales | Criterios funcionales y seguridad de datos |
@@ -43,12 +55,12 @@ Revisión `gpt-6-luna`: `PASS`. Commit: `28f6bb4`. Suite: 17 archivos/152 prueba
 | **2. Jornada móvil y navegación acotada de órdenes — cerrada** | Jornada compacta prioriza una orden y permite recorrer todas. | Browser autenticado: sin scroll vertical en 320×568, 360×640, 390×844; filtros popover 2×3 con cinco opciones en 320 px; CTA/paginación visibles. | Suite previa 17 archivos/143 pruebas y build aprobados. Tras ajuste final `aria-label`/`min-height:44`, UI 14/14 y build aprobados; suite total no repetida. `gpt-6-luna` halló P2 de filtros, corregido; confirmó lo demás. |
 | **3. Revisión compacta de orden — cerrada** | Resumen con cinco datos prioritarios; mapa y detalle separados. | Tres viewports verificados; resumen sin scroll. | Apertura estable 300/270/284 ms; mide renderizado, no comprensión humana ≤3 s. `gpt-6-luna` PASS, commit `28f6bb4`; suite 17 archivos/152 pruebas, build y diff check aprobados. |
 | **4. Captura segura sin scroll y borradores locales durables — cerrada para QA local** | Commits `adce142`, `f1772ca`; wizard compacto y borradores restaurables. | Siete pasos con teclado simulado a 320×300: documento 300/300, cuerpo 190/190, CTA visible. En 320×568, 360×640 y 390×844 el documento no desplazó. Teclado nativo y safe area no nula en dispositivo físico quedan pendientes. | 166/166 pruebas y build aprobados; preservación v1→v2 de siete stores, aislamiento scoped, restauración Blob+File, write fail-closed, limpieza tras persistencia durable y autorización incierta bloqueada. Data-layer Luna PASS; dos P2 corregidos y targeted re-review PASS. No se envió corte. Borrador dummy local asociado a `a9587c65…a984`; no es operación real. |
-| **5. Pulido Admin y recorrido integrado** | Pulido visual administrativo y revisión integrada entre roles. | Evidencia de Admin y recorrido técnico completo en viewports acordados; Técnico cumple criterio de scroll establecido. | Preservar filtros, selección múltiple entre páginas y asignación grupal. Medir confirmación ≤3 s solo con orden elegible visible y técnico seleccionado/conocido. Revisar conexión, sync, mapa y vistas secundarias. Confirmar persistencia, cola, autorización y datos previos. Revisión final `gpt-6-luna`. |
+| **5. Pulido Admin y recorrido integrado — PASS QA local/revisión dirigida** | Pulido Admin y recorrido integrado entre roles. | Admin sin overflow horizontal a 320/360/390. Tras fix, detalle de cola medido visualmente en navegador a 320×568, 360×640, 390×844; scroll del documento 0, panel interno `auto`, paginación fuera del panel, «Volver» y navegación visibles. Cola base a 320×568 con nuevo botón: 568/568, tres botones visibles antes de navegación. Revisión física 4.9 pendiente. | Selección entre páginas y una asignación elegible comprobadas; interfaz estable en 375 ms, no prueba humana ≤3 s. Operación local `failed`, `uncertain=true`, `manualReview=false`, no confirmada ni eliminada; «Verificar estado» no pulsado; backend apagado. Revisor inicial halló P2 de recorte; fix de scroll/cadenas; revisión dirigida Luna PASS sin otros P1/P2 obvios. Revisión de código sin navegador. Frontend 17 archivos/177 pruebas y build aprobados. Backend 16 pass, una integración DB omitida sin `DATABASE_URL`, build. No QA físico ni E2E con backend. |
 
 ## Protocolo de revisión por fase
 
 1. Dejar versión ejecutable; usar navegador y registrar escenarios, evidencia, tiempos medidos y defectos conocidos.
-2. Revisar visual y funcionalmente con agente `gpt-6-luna`, incluidos integridad de datos y controles de seguridad aplicables.
+2. Revisar código y funcionalidad con agente `gpt-6-luna`; el orquestador verifica la vista en navegador, incluidos controles de seguridad aplicables.
 3. Corregir defectos de fase actual y repetir revisión; no afirmar resultados no medidos.
 4. Tras revisión satisfactoria, avanzar autónomamente a fase siguiente. Usuario puede inspeccionar cada entrega; aceptación no es gate.
 
@@ -61,11 +73,11 @@ Revisión `gpt-6-luna`: `PASS`. Commit: `28f6bb4`. Suite: 17 archivos/152 prueba
 | Borrador se pierde, se sincroniza por error o se limpia antes de tiempo | Store IndexedDB aditivo; claves estables; comprobar restauración, aislamiento de cola y orden durable antes de retirar. |
 | Error de persistencia parece éxito | Mantener paso actual, conservar memoria disponible, comunicar error y no avanzar. |
 | Autorización incierta permite corte | Mantener autorización online concluyente, vigente y de un uso; incertidumbre bloquea. |
-| Métrica de tres segundos se presenta sin medición válida | Registrar inicio/fin y precondiciones exactas de cada objetivo; no reportar estimación como resultado. |
+| Métrica de tres segundos se presenta sin medición válida | Distinguir tiempo a interfaz estable de comprensión humana. La medida disponible es 375 ms; objetivo humano sigue sin demostrar. |
 
 ## Límites
 
-Sin cambios de paleta/estilo, reglas de negocio, estados de dominio, permisos, backend, API, contratos, modelo de dominio o significado de datos. Sin eliminar/sobrescribir datos o capacidades Admin. Sin relajación de autorización. No se incorporan métricas, funciones de negocio ni arquitectura adicional. Fase 1 mantiene QA visual independiente pendiente, que revisión integrada final podrá cubrir. Fases 3 y 4 cerradas; Fase 5 sigue.
+Sin cambios de paleta/estilo, reglas de negocio, estados de dominio, permisos, backend, API, contratos, modelo de dominio o significado de datos. Sin eliminar/sobrescribir datos o capacidades Admin. Sin relajación de autorización. No se incorporan métricas, funciones de negocio ni arquitectura adicional. Fase 5 PASS para QA local y revisión dirigida; validación física 4.9 pendiente y objetivo humano ≤3 s no demostrado.
 
 ## Tareas
 

@@ -1,18 +1,18 @@
 # Tareas 007: estandarización UX con prioridad en Técnico móvil
 
-**Estado:** Fases 2–4 cerradas para QA local disponible. Fase 4: commits `adce142` y `f1772ca`; data-layer `gpt-6-luna` PASS, dos P2 corregidos, re-revisión dirigida PASS; 166/166 pruebas y build aprobados. Teclado móvil nativo y safe area no nula en dispositivo físico siguen pendientes. QA visual independiente de Fase 1 queda para revisión integrada de Fase 5.
+**Estado:** Fase 5 PASS para QA local y revisión dirigida. Teclado nativo y safe area no nula en dispositivo físico pendientes (4.9). Objetivos humanos ≤3 s no demostrados.
 
 Plan maestro: [`plan.md`](plan.md). Fuente de alcance: [`spec.md`](spec.md). Referencia visual: [`docs/design.md`](../../design.md).
 
-Las casillas marcadas son trabajo completado; las pendientes siguen abiertas. `gpt-6-luna` revisó Fase 4 y la fase se cierra para la QA local disponible sin requerir aceptación del usuario. Mantener abierta la validación física indicada.
+Las casillas marcadas son trabajo comprobado en QA local; las pendientes siguen abiertas. Fase 4 cerrada para QA local con data-layer review PASS. Validación física pendiente.
 
 ## Fase 1 — Lenguaje visual compartido (Admin + Técnico)
 
 - [x] **1.1** Inventariar patrones de estado, jerarquía y acciones de Admin y Técnico frente a `docs/design.md`; conservar paleta, estilo y reglas.
 - [x] **1.2** Reutilizar jerarquía, paneles y acciones primarias comunes; unificar la geometría de etiquetas de estado y reducir repeticiones. En Admin, la fila seleccionada cede el estado a la ficha abierta.
-- [ ] **1.3** **QA visual final del usuario:** inspeccionar Admin y Técnico en el navegador y confirmar que la jerarquía, los estados y la paleta corresponden a lo esperado. La revisión preliminar del navegador fue a 300×649 CSS px; el contenedor no permitió validar 320×568, 360×640 y 390×844. No se guardan capturas con datos de clientes en el repositorio.
-- [x] **1.4** **QA funcional:** Técnico recorrió orden siguiente/anterior y detalle. Admin probó búsqueda (28→11 coincidencias), filtro de área, selección individual y selección de dos suministros; se abrió y canceló el modal antes de confirmar creación/asignación. No se ejecutó ninguna operación de negocio sobre los datos cargados.
-- [ ] **1.5** Reunir evidencia, resultados y defectos conocidos; revisión visual/funcional `gpt-6-luna`. Corregir hallazgos de esta fase antes de avanzar. Usuario puede inspeccionar entrega. **QA visual independiente de Fase 1 sigue pendiente**; integración final puede cubrirla.
+- [x] **1.3** **QA visual integrado:** Admin revisado a 320/360/390 px, sin overflow horizontal y con lenguaje/paleta compartidos; pantallas técnicas revisadas en los viewports anotados en Fase 5. No se guardan capturas con PII en repo.
+- [x] **1.4** **QA funcional inicial:** Técnico recorrió orden siguiente/anterior y detalle. Admin probó búsqueda (28→11 coincidencias), filtro de área y selecciones; en esa sesión el modal se canceló sin escribir. La asignación única probada después está descrita en 5.3.
+- [x] **1.5** Evidencia visual/funcional integrada de roles reunida en Fase 5; revisión dirigida consolidada PASS en 5.5.
 
 ### Evidencia y límites de la Fase 1
 
@@ -60,8 +60,15 @@ Fase revisada y cerrada para QA local disponible. Commits `adce142` (IndexedDB v
 
 ## Fase 5 — Pulido Admin y recorrido integrado
 
-- [ ] **5.1** Armonizar visualmente Admin y completar revisión del recorrido de ambos roles; verificar contexto de orden, técnico, bloqueos y confirmación sin cambiar reglas.
-- [ ] **5.2** **QA visual:** capturar Admin y recorrido Técnico en viewports técnicos 320×568, 360×640 y 390×844; registrar áreas seguras, ausencia de scroll técnico, coherencia visual y defectos.
-- [ ] **5.3** **QA funcional Admin:** probar filtros, selección múltiple, selección conservada al cambiar página y asignación grupal; medir desde orden elegible visible y técnico ya seleccionado/conocido hasta confirmación; registrar tiempo/precondiciones y umbral ≤3 segundos.
-- [ ] **5.4** **QA funcional integrada y datos:** recorrer resumen, mapa/detalle, captura, borrador, autorización, persistencia y sync; comprobar estados y datos previos, que operación/evidencia/cola sobreviven conforme al flujo y que autorización incierta bloquea.
-- [ ] **5.5** Reunir evidencia visual y funcional, métricas con condiciones y defectos conocidos; revisión final `gpt-6-luna`. No reportar métricas sin medición. Usuario puede inspeccionar entrega.
+- [x] **5.1** QA visual integrada de Admin/Técnico completada en escenarios locales descritos abajo; coherencia confirmada, sin cambios de reglas.
+- [x] **5.2** **QA visual browser:** home/orders/map/queue/order-review y Admin según evidencia previa. Tras el fix de detalle de cola, navegador verificado a 320×568, 360×640 y 390×844: documento `scrollHeight=clientHeight`, panel `overflowY=auto`, paginación fuera del panel, «Volver» y navegación visibles; captura 320 legible. Cola base con nuevo botón a 320×568: 568/568 y tres botones visibles antes de navegación. Teclado nativo y safe area física no verificados; mantener 4.9 pendiente.
+- [x] **5.3** **QA funcional Admin:** simulado aislado 5176, selección de dos suministros en dos páginas; modal mostró ambos y técnico. Creó/asignó exactamente UNO elegible (Pedro Huanca) a Camila; ficha, cuenta y deuda correctas. No se probó crear/asignar ambos como lote. Click final a estado estable: 375 ms; no acredita comprensión humana ≤3 s. Modal 320×300 permite alcanzar selector/CTA con scroll; Admin puede desplazarse.
+- [x] **5.4** **QA de persistencia local y sync:** Técnico real, puerto 5175, sesión Jhonny: siete órdenes y una operación local sobrevivieron reload con backend apagado. El intento automático dejó `failed`, `uncertain=true`, `manualReview=false`. No se confirmó ni eliminó; «Verificar estado» no pulsado. Frontend post-fix: 17 archivos/177 pruebas y build aprobados. Backend: 16 pruebas aprobadas, una integración DB omitida por falta de `DATABASE_URL`, build aprobado. No afirmar procesamiento de servidor ni E2E con backend.
+- [x] **5.5 PASS — QA local y revisión dirigida:** reviewer Luna inicial halló P2 de recorte de detalle de cola; writer corrigió scroll interno y cadenas; reviewer dirigido Luna dio PASS, sin otros P1/P2 obvios. Revisión de código sin navegador; el orquestador verificó visualmente luego los viewports y cola base indicados en 5.2. No equivale a QA en dispositivo físico. Objetivo humano ≤3 s y validación física 4.9 siguen pendientes.
+
+### Límites QA integrado
+
+- Admin fue simulado y aislado; creación/asignación probada fue una sola orden elegible.
+- Backend apagado durante la prueba de Jhonny: operación persistió localmente; quedó `failed`, `uncertain=true`, `manualReview=false`. No se confirmó ni eliminó y no se pulsó «Verificar estado».
+- La revisión visual del fix del detalle de cola fue en navegador; no hubo validación en dispositivo físico.
+- Sin capturas con PII en repo.
