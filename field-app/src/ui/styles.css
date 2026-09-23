@@ -9250,3 +9250,377 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   .field-app .capture-wizard .checkbox-field { min-height: 40px; }
   .field-app .capture-wizard__review p { margin: var(--space-4) 0; }
 }
+
+/* One operation at a time on field phones; desktop keeps the full queue. */
+.field-app .queue-list--mobile,
+.field-app .queue-pagination {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .field-app:has(.queue-panel),
+  .field-app:has(.map-page) {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .field-app:has(.queue-panel) .app-header,
+  .field-app:has(.map-page) .app-header,
+  .field-app:has(.queue-panel) > .message,
+  .field-app:has(.map-page) > .message {
+    flex: 0 0 auto;
+  }
+
+  .field-app:has(.queue-panel) .app-header,
+  .field-app:has(.map-page) .app-header {
+    display: none;
+  }
+
+  .field-app:has(.queue-panel) .workbench,
+  .field-app:has(.map-page) .workbench {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-top: var(--space-4);
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+
+  .field-app .queue-panel,
+  .field-app .map-page {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .field-app .queue-panel {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-8);
+  }
+
+  .field-app .queue-panel .panel-heading {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    margin-bottom: var(--space-4);
+  }
+
+  .field-app .queue-panel .panel-heading > div:first-child {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+
+  .field-app .queue-panel .panel-heading .queue-panel__actions {
+    display: flex;
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .field-app .compact-network-status {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-8);
+    border: 1px solid #b8d8bf;
+    border-radius: var(--radius-full);
+    color: #276d50;
+    background: #f1f8f2;
+    font-size: 10px;
+    line-height: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .field-app .compact-network-status .network-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+  }
+
+  .field-app .compact-network-status--weak,
+  .field-app .compact-network-status--offline {
+    border-color: #e5c992;
+    color: #8d5319;
+    background: #fff8e8;
+  }
+
+  .field-app .queue-panel .panel-heading h2 {
+    margin-top: var(--space-2);
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  .field-app .queue-panel__actions {
+    flex: 0 0 auto;
+  }
+
+  .field-app .queue-panel__actions .toolbar-action {
+    display: none;
+  }
+
+  .field-app .queue-panel__actions .sync-button {
+    min-width: 0;
+    max-width: 132px;
+    min-height: 40px;
+    margin: 0;
+    padding: var(--space-4) var(--space-8);
+    white-space: normal;
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .field-app .queue-intro {
+    flex: 0 0 auto;
+    margin: 0 0 var(--space-4);
+    padding-bottom: var(--space-4);
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .field-app .queue-list--desktop {
+    display: none;
+  }
+
+  .field-app .queue-list--mobile {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .field-app .queue-full-details {
+    display: grid;
+    flex: 1 1 auto;
+    align-content: start;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .queue-full-details h3,
+  .field-app .queue-full-details p {
+    min-width: 0;
+    margin: var(--space-4) 0 0;
+  }
+
+  .field-app .queue-full-details__technical {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    vertical-align: bottom;
+  }
+
+  .field-app .queue-panel > .empty-state {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .field-app .queue-item {
+    padding: var(--space-8);
+  }
+
+  .field-app .queue-item__header {
+    align-items: flex-start;
+    gap: var(--space-8);
+  }
+
+  .field-app .queue-item__header > div {
+    min-width: 0;
+  }
+
+  .field-app .queue-item__meta {
+    gap: var(--space-4) var(--space-8);
+    margin-top: var(--space-8);
+  }
+
+  .field-app .queue-item__meta .technical-id {
+    flex-basis: auto;
+    overflow-wrap: normal;
+  }
+
+  .field-app .queue-error,
+  .field-app .queue-review {
+    overflow-wrap: anywhere;
+    margin-top: var(--space-8);
+  }
+
+  .field-app .queue-item__actions .queue-error--mobile,
+  .field-app .queue-item__actions .queue-review--mobile {
+    flex: 0 0 100%;
+    margin: 0;
+  }
+
+  .field-app .queue-item__customer {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .field-app .queue-item__meta {
+    column-gap: var(--space-8);
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .field-app .queue-item__header strong,
+  .field-app .queue-status {
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .field-app .queue-item__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  .field-app .queue-item__actions button {
+    min-height: 36px;
+    padding: var(--space-4) var(--space-8);
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .field-app .queue-item__actions {
+    margin-top: var(--space-8);
+  }
+
+  .field-app .queue-pagination {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding-top: var(--space-4);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .field-app .queue-pagination button {
+    min-height: 40px;
+    padding: 0 var(--space-8);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-4);
+    color: var(--accent);
+    background: var(--paper);
+  }
+
+  .field-app .queue-pagination button:disabled {
+    color: var(--muted);
+  }
+
+  .field-app .queue-pagination button:focus-visible,
+  .field-app .queue-item__actions button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .field-app .map-page {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: var(--space-8);
+    padding: var(--space-8);
+  }
+
+  .field-app .map-page__heading {
+    align-items: center;
+    flex-direction: row;
+    gap: var(--space-8);
+  }
+
+  .field-app .map-page__heading > div:first-child {
+    min-width: 0;
+  }
+
+  .field-app .map-page__heading .eyebrow {
+    display: none;
+  }
+
+  .field-app .map-page__heading .compact-network-status {
+    margin-left: auto;
+  }
+
+  .field-app .map-page__heading p {
+    display: none;
+  }
+
+  .field-app .map-page__surface {
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .field-app .map-page__surface .field-map-container:not(.field-map-container--fullscreen) {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .field-app .map-page__surface .field-map-container:not(.field-map-container--fullscreen) .field-map-canvas {
+    flex: 1 1 auto;
+    min-height: 180px;
+    height: auto;
+  }
+
+  .field-app .map-page__surface .field-map-container--fullscreen .field-map-canvas {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+  }
+
+  .field-app .map-page__surface .field-map-container--empty:not(.field-map-container--fullscreen) .field-map-empty {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .field-app .map-page__surface .field-map-container:not(.field-map-container--fullscreen) .field-map-toolbar {
+    flex: 0 0 auto;
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  .field-app .map-page__surface .field-map-container:not(.field-map-container--fullscreen) .field-map-info {
+    gap: var(--space-8);
+  }
+
+  .field-app .map-page__surface .field-map-container:not(.field-map-container--fullscreen) .field-map-buttons {
+    gap: var(--space-4);
+  }
+
+  .field-app .map-page__surface .field-map-container:not(.field-map-container--fullscreen) .field-map-buttons > button {
+    min-height: 36px;
+    font-size: 11px;
+  }
+
+  .field-app .map-page__tools {
+    flex: 0 0 auto;
+    min-height: 0;
+    gap: var(--space-4);
+    overflow: visible;
+    padding: var(--space-8);
+  }
+
+  .field-app .map-page__download {
+    gap: var(--space-4);
+  }
+
+  .field-app .map-page__tools .map-download-link {
+    min-height: 40px;
+  }
+}

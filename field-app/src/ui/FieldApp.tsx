@@ -209,7 +209,7 @@ function Header({
   onLogout?: () => void;
 }) {
   const modeLabel =
-    state.mode === "online" ? "Conectada" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
+    state.mode === "online" ? "Red disponible" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
 
   return (
     <header className="app-header">
@@ -489,7 +489,14 @@ function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
     catch (error) { setMapDownloadError(error instanceof Error ? error.message : "No pudimos descargar el mapa para trabajo offline."); }
     finally { setIsDownloadingMap(false); setDownloadProgress(null); }
   };
-  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools"><div className="map-page__download">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} aria-busy={isDownloadingMap} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}<span className="map-page__download-hint">{isMapCachedState ? "Disponible sin conexión en este dispositivo." : "Guarda esta zona antes de salir a terreno."}</span></div>{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
+  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><CompactNetworkStatus mode={state.mode} /><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools"><div className="map-page__download">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} aria-busy={isDownloadingMap} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}<span className="map-page__download-hint">{isMapCachedState ? "Disponible sin conexión en este dispositivo." : "Guarda esta zona antes de salir a terreno."}</span></div>{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
+}
+
+export function CompactNetworkStatus({ mode }: { mode: ConnectivityMode }) {
+  const label = mode === "offline" ? "Sin conexión" : mode === "weak" ? "Señal débil" : "Red disponible";
+  return <span className={`compact-network-status compact-network-status--${mode}`} role="status">
+    <span className={`network-dot network-dot--${mode}`} aria-hidden="true" />{label}
+  </span>;
 }
 
 function DesktopRightRail({
@@ -1502,9 +1509,19 @@ export function restoreEvidenceFile(value: File | Blob): File {
   return new File([value], `evidencia-recuperada.${extension}`, { type: value.type });
 }
 
-function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
+export function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
+  const [requestedPage, setRequestedPage] = useState(1);
+  const [showFullDetails, setShowFullDetails] = useState(false);
   const items = [...state.syncItems].sort(
     (left, right) => Number(right.status !== "synced") - Number(left.status !== "synced")
+  );
+  const canSendPending = items.some((item) =>
+    (item.status === "pending" || item.status === "failed") && !item.manualReview && !item.uncertain
+  );
+  const canRunQueueSync = isUsable(state.mode) && state.busyAction !== "SYNC";
+  const { page, pageCount, item: mobileItem } = queuePageItem(items, requestedPage);
+  const renderItem = (item: import("../ports").SyncItem, mobile: boolean) => (
+    <QueueItem key={item.operationId} item={item} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} onViewFullDetails={() => setShowFullDetails(true)} canRetry={!mobile || canRunQueueSync} canVerify={canRunQueueSync} mobile={mobile} />
   );
   return (
     <section className="queue-panel panel" aria-label="Cola de sincronización">
@@ -1513,20 +1530,38 @@ function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
           <div className="eyebrow">TRAZABILIDAD LOCAL</div>
           <h2>Cola de sincronización</h2>
         </div>
+        <CompactNetworkStatus mode={state.mode} />
         <div className="queue-panel__actions">
           <button type="button" className="toolbar-action" onClick={() => store.setTab("orders")}>Volver a mis órdenes</button>
-          <button className="sync-button" disabled={!isUsable(state.mode) || state.busyAction === "SYNC"} onClick={() => void store.sync()}>
+          {canSendPending ? <button className="sync-button" disabled={!isUsable(state.mode) || state.busyAction === "SYNC"} onClick={() => void store.sync()}>
             {state.busyAction === "SYNC" ? "Enviando pendientes…" : "Enviar operaciones pendientes"}
-          </button>
+          </button> : null}
         </div>
       </div>
       <p className="queue-intro">Los registros permanecen en este dispositivo hasta recibir confirmación válida.</p>
       {items.length ? (
-        <div className="queue-list">
-          {items.map((item) => (
-            <QueueItem key={item.operationId} item={item} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} />
-          ))}
-        </div>
+        <>
+          {showFullDetails && mobileItem ? <section className="queue-full-details" aria-label="Detalle completo de operación">
+            <button type="button" className="queue-item__detail" onClick={() => setShowFullDetails(false)}>Volver a cola</button>
+            <h3>Detalle de operación</h3>
+            <p><strong>Identificador:</strong> <span className="queue-full-details__technical" title={mobileItem.operationId}>{mobileItem.operationId}</span></p>
+            {mobileItem.orderId ? <p><strong>Orden:</strong> {mobileItem.orderId}</p> : null}
+            {state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName ? <p><strong>Cliente:</strong> {state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName}</p> : null}
+            <p><strong>Estado:</strong> {syncStatusLabel(mobileItem.status)}</p>
+            <p><strong>Fecha:</strong> {formatDate(mobileItem.updatedAt)}</p>
+            <p><strong>Intentos:</strong> {mobileItem.attempts}</p>
+            {mobileItem.errorCode ? <p className="queue-error"><strong>Error:</strong> {mobileItem.errorCode}</p> : null}
+            {queueReviewMessage(mobileItem) ? <p className="queue-review">{queueReviewMessage(mobileItem)}</p> : null}
+          </section> : <>
+            <div className="queue-list queue-list--desktop">{items.map((item) => renderItem(item, false))}</div>
+            <div className="queue-list queue-list--mobile" aria-label="Operación de cola">{mobileItem ? renderItem(mobileItem, true) : null}</div>
+          </>}
+          <nav className="queue-pagination" aria-label="Paginación de cola">
+            <button type="button" onClick={() => setRequestedPage(Math.max(1, page - 1))} disabled={page <= 1}>Anterior</button>
+            <span aria-live="polite">Operación {page} de {pageCount}</span>
+            <button type="button" onClick={() => setRequestedPage(Math.min(pageCount, page + 1))} disabled={page >= pageCount}>Siguiente</button>
+          </nav>
+        </>
       ) : (
         <div className="empty-state">
           <strong>Cola despejada</strong>
@@ -1537,32 +1572,46 @@ function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
   );
 }
 
-function QueueItem({ item, order, onRetry, onViewOrder }: { item: import("../ports").SyncItem; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void }) {
-  const manualReview = item.manualReview || item.uncertain;
+export function queuePageItem(items: import("../ports").SyncItem[], requestedPage: number) {
+  const pageCount = Math.max(1, items.length);
+  const page = Number.isFinite(requestedPage) ? Math.min(pageCount, Math.max(1, Math.trunc(requestedPage))) : 1;
+  return { page, pageCount, item: items[page - 1] };
+}
+
+function QueueItem({ item, order, onRetry, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: import("../ports").SyncItem; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
+  const manualReview = Boolean(item.manualReview);
+  const uncertain = Boolean(item.uncertain);
+  const protectedFromRetry = manualReview || uncertain;
+  const reviewMessage = queueReviewMessage(item);
   return (
     <article className="queue-item">
       <div className="queue-item__header">
-        <div><strong>{queueActionLabel(item.action)}</strong><span className="queue-item__customer">{order?.context?.customerName || `Orden ${shortTechnicalId(item.orderId ?? "sin orden")}`}</span></div>
+        <div><strong>{queueActionLabel(item.action)}</strong><span className="queue-item__customer" title={`${order?.context?.customerName || "Cliente no disponible"} · ${item.orderId ?? "Orden no disponible"}`} aria-label={`Cliente ${order?.context?.customerName || "no disponible"}; orden ${item.orderId ?? "no disponible"}`}>{order?.context?.customerName || "Cliente no disponible"} · {item.orderId ?? "Orden no disponible"}</span></div>
         <span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span>
       </div>
       <div className="queue-item__meta">
         <span>{formatDate(item.updatedAt)}</span>
         <span>{item.attempts} intento(s)</span>
-        <span className="technical-id">Operación {shortTechnicalId(item.operationId)}</span>
+        <span className="technical-id" title={item.operationId} aria-label={`Identificador completo de operación: ${item.operationId}`}>Operación {shortTechnicalId(item.operationId)}</span>
       </div>
-      {item.errorCode ? (
-        <p className="queue-error">
-          {manualReview ? "Requiere revisión humana. " : "Último aviso: "}
-          {item.errorCode}
-        </p>
-      ) : null}
-      {manualReview ? <p className="queue-review">Resultado incierto: no reenviar automáticamente.</p> : null}
+      {mobile && reviewMessage ? <p className="queue-review queue-review--mobile">{reviewMessage}</p> : null}
+      {mobile && item.errorCode && item.errorCode.length <= 36 ? <p className="queue-error queue-error--mobile">Error: {item.errorCode}</p> : null}
       <div className="queue-item__actions">
-        {item.status !== "synced" && !manualReview ? <button type="button" className="queue-item__retry" onClick={onRetry}>Reintentar</button> : null}
+        {(item.status === "pending" || item.status === "failed") && !protectedFromRetry ? <button type="button" className="queue-item__retry" disabled={!canRetry} onClick={onRetry}>Reintentar</button> : null}
+        {mobile && item.status === "failed" && uncertain && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar estado</button> : null}
+        {mobile && (item.errorCode || manualReview || uncertain) ? <button type="button" className="queue-item__detail" onClick={onViewFullDetails}>Ver error y contexto</button> : null}
+        {!mobile && item.errorCode ? <p className="queue-error">{manualReview ? "Requiere revisión humana. " : "Último aviso: "}{item.errorCode}</p> : null}
+        {!mobile && reviewMessage ? <p className="queue-review">{reviewMessage}</p> : null}
         {item.orderId ? <button type="button" className="queue-item__detail" onClick={() => onViewOrder(item.orderId ?? "")}>Ver detalle</button> : null}
       </div>
     </article>
   );
+}
+
+export function queueReviewMessage(item: Pick<import("../ports").SyncItem, "manualReview" | "uncertain">): string | undefined {
+  if (item.manualReview) return "Revisión humana · no reenviar";
+  if (item.uncertain) return "Resultado incierto: verificar estado podría continuar sincronización según el motor.";
+  return undefined;
 }
 
 function EmptyOrders({ hasAnyOrders, onRefresh, onShowMap }: { hasAnyOrders: boolean; onRefresh: () => void; onShowMap: () => void }) {

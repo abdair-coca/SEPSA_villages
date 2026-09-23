@@ -5,7 +5,8 @@ import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/index
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
-import { adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import type { SyncItem } from "../ports";
+import { adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -82,6 +83,13 @@ function html(store: AppStore): string {
 }
 
 describe("FieldApp SSR shell", () => {
+  it("labels online device connectivity as available network", async () => {
+    const store = await readyStore("ui-online-connectivity-label");
+    const markup = html(store);
+    expect(markup).toContain("red disponible");
+    expect(markup).not.toContain("conectada");
+  });
+
   it("restores a real File evidence draft after repository reopen", async () => {
     const name = "ui-file-draft-reopen";
     databaseNames.push(name);
@@ -216,8 +224,13 @@ describe("FieldApp SSR shell", () => {
     expect(markup).not.toContain("sticky-actions");
 
     store.setTab("map");
-    expect(html(store)).toContain("ruta de campo");
-    expect(html(store)).toContain("descargar zona offline");
+    const map = html(store);
+    expect(map).toContain("ruta de campo");
+    expect(map).toContain("descargar zona offline");
+    expect(map).toContain("mi ubicación");
+    expect(map).toContain("zona de órdenes");
+    expect(map).toContain("expandir mapa a pantalla completa");
+    expect(map).toContain("red disponible");
     store.setTab("orders");
     expect(html(store)).toContain("bandeja asignada");
   });
@@ -231,6 +244,155 @@ describe("FieldApp SSR shell", () => {
     expect(markup).toContain("cola de sincronización");
     expect(markup).toContain("pendiente");
     expect(markup).toContain("1 intento(s)");
+  });
+
+  it("pages through every queue state one operation at a time without mutating queue", async () => {
+    const store = await readyStore("ui-queue-pages");
+    const items: SyncItem[] = [
+      { operationId: "pending-operation-full-identifier-001", orderId: "ORD-24017", action: "VISIT", status: "pending", attempts: 0, updatedAt: "2026-09-12T10:00:00.000Z" },
+      { operationId: "syncing-002", orderId: "ORD-24017", action: "VISIT", status: "syncing", attempts: 1, updatedAt: "2026-09-12T10:01:00.000Z" },
+      { operationId: "failed-003", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 2, errorCode: "NETWORK_UNAVAILABLE", updatedAt: "2026-09-12T10:02:00.000Z" },
+      { operationId: "synced-004", orderId: "ORD-24017", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T10:03:00.000Z" },
+    ];
+    const original = items.map((item) => ({ ...item }));
+    const visited = Array.from({ length: items.length }, (_, index) => queuePageItem(items, index + 1).item?.operationId);
+
+    expect(visited).toEqual(items.map((item) => item.operationId));
+    expect(queuePageItem(items, 0).page).toBe(1);
+    expect(queuePageItem(items, 99).page).toBe(4);
+    expect(queuePageItem([], 1)).toMatchObject({ page: 1, pageCount: 1, item: undefined });
+    expect(items).toEqual(original);
+
+    const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items }} store={store} />).toLocaleLowerCase();
+    const mobile = markup.split('class="queue-list queue-list--mobile"')[1]?.split('class="queue-pagination"')[0] ?? "";
+    expect(mobile.match(/class="queue-item"/g)).toHaveLength(1);
+    expect(mobile).toContain('title="pending-operation-full-identifier-001"');
+    expect(mobile).toContain("operación pending-o…-001");
+    expect(mobile).toContain('title="maría flores · ord-24017"');
+    expect(mobile).not.toContain("syncing-002");
+    expect(markup).toContain('aria-label="paginación de cola"');
+    expect(markup).toContain("operación 1 de 4");
+    expect(markup).toContain("0 intento(s)");
+    expect(mobile).toMatch(/12\/9\/\d{2,4}/);
+    expect(markup).toContain("pendiente");
+    expect(markup).toContain("sincronizando");
+    expect(markup).toContain("falló");
+    expect(markup).toContain("sincronizado");
+    const syncingCard = markup.split('<article class="queue-item">').find((part) => part.includes("syncing-002")) ?? "";
+    expect(syncingCard).not.toContain(">reintentar</button>");
+    expect(items).toEqual(original);
+  });
+
+  it("shows review and errors, and withholds retry for uncertain or reviewed operations", async () => {
+    const store = await readyStore("ui-queue-review-guards");
+    const items: SyncItem[] = [
+      { operationId: "safe-001", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 2, errorCode: "NETWORK_UNAVAILABLE" },
+      { operationId: "review-002", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, manualReview: true, errorCode: "REMOTE_CONFLICT" },
+      { operationId: "uncertain-003", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, uncertain: true },
+      { operationId: "done-004", orderId: "ORD-24017", action: "VISIT", status: "synced", attempts: 1 },
+    ];
+    const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items }} store={store} />).toLocaleLowerCase();
+    const cards = markup.split('<article class="queue-item">').slice(1).map((part) => part.split("</article>")[0]);
+    const cardsFor = (id: string) => cards.filter((card) => card.includes(id));
+
+    expect(cardsFor("safe-001")).toHaveLength(2);
+    expect(cardsFor("safe-001").every((card) => card.includes(">reintentar</button>"))).toBe(true);
+    for (const id of ["review-002", "uncertain-003", "done-004"]) {
+      expect(cardsFor(id)).toHaveLength(1);
+      expect(cardsFor(id)[0]).not.toContain(">reintentar</button>");
+    }
+    expect(cardsFor("review-002")[0]).toContain("revisión humana · no reenviar");
+    expect(cardsFor("review-002")[0]).toContain("remote_conflict");
+    expect(cardsFor("review-002")[0]).not.toContain(">ver error y contexto</button>");
+    expect(cardsFor("review-002")[0]).toContain(">ver detalle</button>");
+    const reviewOnlyMarkup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: [items[1]] }} store={store} />).toLocaleLowerCase();
+    const reviewMobile = reviewOnlyMarkup.split('class="queue-list queue-list--mobile"')[1]?.split('class="queue-pagination"')[0] ?? "";
+    expect(reviewMobile).toContain("revisión humana · no reenviar");
+    expect(reviewMobile).toContain("error: remote_conflict");
+    expect(reviewMobile).not.toContain(">reintentar</button>");
+    expect(reviewMobile).toContain(">ver error y contexto</button>");
+    expect(reviewMobile).toContain(">ver detalle</button>");
+    expect(cardsFor("uncertain-003")[0]).toContain("resultado incierto");
+    expect(markup).toContain("enviar operaciones pendientes");
+
+    const offline = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), mode: "offline", syncItems: items }} store={store} />).toLocaleLowerCase();
+    expect(offline).toContain("sin conexión");
+    expect(offline).not.toContain("conectada");
+    expect(offline).toContain('class="queue-item__retry" disabled=""');
+  });
+
+  it("offers state verification for uncertain-only failure, but withholds sync actions for manual review", async () => {
+    const store = await readyStore("ui-queue-only-review");
+    const uncertain: SyncItem = { operationId: "uncertain-full-id-100", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 3, uncertain: true, errorCode: "REMOTE_RESULT_UNKNOWN_LONG_DETAIL" };
+    const reviewed: SyncItem = { operationId: "review-full-id-200", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 2, manualReview: true, errorCode: "CONFLICT_REQUIRES_OPERATOR_REVIEW" };
+    const uncertainMarkup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: [uncertain] }} store={store} />).toLocaleLowerCase();
+    const uncertainMobile = uncertainMarkup.split('class="queue-list queue-list--mobile"')[1]?.split('class="queue-pagination"')[0] ?? "";
+
+    expect(uncertainMarkup).not.toContain("enviar operaciones pendientes");
+    expect(uncertainMobile).toContain('title="uncertain-full-id-100"');
+    expect(uncertainMobile).toContain(">verificar estado</button>");
+    expect(uncertainMobile).not.toContain(">reintentar</button>");
+    expect(uncertainMobile).toContain("resultado incierto");
+    expect(uncertainMobile).toContain("podría continuar sincronización según el motor");
+    expect(uncertainMobile).toContain(">ver error y contexto</button>");
+    expect(uncertainMarkup).toContain("remote_result_unknown_long_detail");
+    expect(uncertain.operationId).toBe("uncertain-full-id-100");
+
+    const reviewedMarkup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: [reviewed] }} store={store} />).toLocaleLowerCase();
+    const reviewedDesktop = reviewedMarkup.split('class="queue-list queue-list--desktop"')[1]?.split('class="queue-list queue-list--mobile"')[0] ?? "";
+    const reviewedMobile = reviewedMarkup.split('class="queue-list queue-list--mobile"')[1]?.split('class="queue-pagination"')[0] ?? "";
+    expect(reviewedMarkup).not.toContain("enviar operaciones pendientes");
+    expect(reviewedDesktop).not.toContain(">ver error y contexto</button>");
+    expect(reviewedDesktop).toContain("conflict_requires_operator_review");
+    expect(reviewedDesktop).toContain("revisión humana · no reenviar");
+    expect(reviewedDesktop).toContain(">ver detalle</button>");
+    expect(reviewedMobile).not.toContain(">verificar estado</button>");
+    expect(reviewedMobile).not.toContain(">reintentar</button>");
+    expect(reviewedMobile).toContain(">ver error y contexto</button>");
+    expect(reviewedMobile).toContain("revisión humana · no reenviar");
+    expect(reviewedMarkup).toContain("conflict_requires_operator_review");
+
+    const unavailable = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), mode: "offline", syncItems: [uncertain] }} store={store} />).toLocaleLowerCase();
+    expect(unavailable).toContain('class="queue-item__verify" disabled=""');
+    const busy = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), busyAction: "SYNC", syncItems: [uncertain] }} store={store} />).toLocaleLowerCase();
+    expect(busy).toContain('class="queue-item__verify" disabled=""');
+  });
+
+  it("lets manual review override uncertainty messaging and verification", async () => {
+    const store = await readyStore("ui-queue-uncertain-manual-review");
+    const item: SyncItem = { operationId: "uncertain-reviewed-001", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 2, uncertain: true, manualReview: true };
+    const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: [item] }} store={store} />).toLocaleLowerCase();
+    const mobile = markup.split('class="queue-list queue-list--mobile"')[1]?.split('class="queue-pagination"')[0] ?? "";
+
+    expect(queueReviewMessage(item)).toBe("Revisión humana · no reenviar");
+    expect(markup.match(/revisión humana · no reenviar/g)).toHaveLength(2);
+    expect(markup).not.toContain("verificar estado podría continuar");
+    expect(mobile).not.toContain(">verificar estado</button>");
+    expect(mobile).not.toContain(">reintentar</button>");
+    expect(mobile).toContain(">ver error y contexto</button>");
+    expect(mobile).toContain(">ver detalle</button>");
+  });
+
+  it("labels online, weak, and offline connectivity separately", () => {
+    const status = (mode: "online" | "weak" | "offline") => renderToStaticMarkup(<CompactNetworkStatus mode={mode} />).toLocaleLowerCase();
+    expect(status("online")).toContain('compact-network-status--online');
+    expect(status("online")).toContain("red disponible");
+    expect(status("weak")).toContain('compact-network-status--weak');
+    expect(status("weak")).toContain('network-dot network-dot--weak');
+    expect(status("weak")).toContain("señal débil");
+    expect(status("offline")).toContain('compact-network-status--offline');
+    expect(status("offline")).toContain("sin conexión");
+  });
+
+  it("keeps global send for safe retryable operations", async () => {
+    const store = await readyStore("ui-queue-safe-send");
+    const items: SyncItem[] = [
+      { operationId: "safe-retry-001", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 1, errorCode: "NETWORK_UNAVAILABLE" },
+      { operationId: "uncertain-002", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, uncertain: true },
+    ];
+    const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items }} store={store} />).toLocaleLowerCase();
+    expect(markup).toContain(">enviar operaciones pendientes</button>");
+    expect(markup).toContain(">reintentar</button>");
   });
 
   it("uses reusable notification with a quiet link to pending operations", async () => {
