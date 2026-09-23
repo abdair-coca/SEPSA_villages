@@ -19,6 +19,7 @@ export interface FieldAppProps {
 }
 
 type NavigationTab = "home" | "orders" | "map" | "queue";
+type OrderReviewView = "review" | "details" | "map" | "activity";
 
 const navigationItems: Array<{ tab: NavigationTab; label: string; icon: ReactNode }> = [
   { tab: "home", label: "Inicio", icon: <IconRoute /> },
@@ -276,6 +277,7 @@ function Workbench({
   const visibleOrders = selectVisibleOrders(state);
   const selectedOrder = state.orders.find((order) => order.orderId === state.selectedOrderId);
   const [pendingAction, setPendingAction] = useState<{ orderId: string; kind: ActionKind } | null>(null);
+  const [returnToJourney, setReturnToJourney] = useState(false);
 
   const openIncident = (orderId: string) => {
     const order = state.orders.find((candidate) => candidate.orderId === orderId);
@@ -287,6 +289,7 @@ function Workbench({
   const prioritizedOrders = sortOrdersForNext(state.orders);
   const navigate = (tab: "home" | "orders" | "map" | "queue") => {
     setPendingAction(null);
+    setReturnToJourney(false);
     store.selectOrder(null);
     store.setTab(tab);
   };
@@ -299,16 +302,16 @@ function Workbench({
         enableReconnection={enableReconnection}
         technicianName={technicianName}
         initialAction={pendingAction?.orderId === selectedOrder.orderId ? pendingAction.kind : null}
-        onBack={() => { setPendingAction(null); store.selectOrder(null); }}
+        onBack={() => { setPendingAction(null); store.selectOrder(null); if (returnToJourney) store.setTab("home"); setReturnToJourney(false); }}
       />
     ) : (
-      <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} />
+      <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} onOpenOrder={() => setReturnToJourney(false)} />
     )
     : state.tab === "map"
       ? <MapPanel state={state} store={store} />
       : state.tab === "queue"
         ? <QueuePanel state={state} store={store} />
-        : <FieldHome state={state} store={store} orders={prioritizedOrders} onOpenIncident={openIncident} />;
+        : <FieldHome state={state} store={store} orders={prioritizedOrders} onOpenIncident={openIncident} onReviewOrder={() => setReturnToJourney(true)} />;
 
   return (
     <main className="workbench">
@@ -319,7 +322,7 @@ function Workbench({
   );
 }
 
-function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; store: AppStore; orders: WorkOrder[]; onOpenIncident: (orderId: string) => void }) {
+function FieldHome({ state, store, orders, onOpenIncident, onReviewOrder }: { state: AppState; store: AppStore; orders: WorkOrder[]; onOpenIncident: (orderId: string) => void; onReviewOrder: () => void }) {
   const filteredOrders = selectVisibleOrders(state);
   const eligibleOrders = state.query.trim() || state.filter !== "ALL" ? filteredOrders : orders;
   const focusOrders = orderJourneyOrders(eligibleOrders);
@@ -333,6 +336,7 @@ function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; 
   }, [currentOrder, focusedOrderId]);
 
   const openOrder = (orderId: string) => {
+    onReviewOrder();
     store.setTab("orders");
     store.selectOrder(orderId);
   };
@@ -422,7 +426,7 @@ function BottomNavigation({ activeTab, onNavigate, pending }: { activeTab: AppSt
   return <nav className="bottom-navigation" aria-label="Navegación principal">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "bottom-navigation__item bottom-navigation__item--active" : "bottom-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "queue" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</nav>;
 }
 
-function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void }) {
+function OrdersPanel({ state, orders, store, onRefreshAssigned, onOpenOrder }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void; onOpenOrder: () => void }) {
   const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
   const [filtersOpen, setFiltersOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 760px)").matches);
   const ordersPerPage = isCompactViewport ? 1 : 5;
@@ -457,7 +461,7 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppSt
   }, []);
   useEffect(() => { setOrdersPage((page) => Math.min(page, ordersPageCount)); }, [orders.length, ordersPageCount]);
   const selectedFilter = filters.find((filter) => filter.value === state.filter)?.label ?? "Todas";
-  return <section className="orders-panel orders-tray" aria-label="Mis órdenes"><div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div><OrderFilters state={state} store={store} filters={filters} compactViewport={isCompactViewport} filtersOpen={filtersOpen} onFiltersOpenChange={setFiltersOpen} selectedFilter={selectedFilter} /><div className="order-cards-list">{pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => store.selectOrder(order.orderId)} />)}{!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}</div><div className="order-pagination" aria-label="Paginación de órdenes"><span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span><div className="order-pagination__controls"><button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button><span>Página {ordersPage} de {ordersPageCount}</span><button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button></div></div>{!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}</section>;
+  return <section className="orders-panel orders-tray" aria-label="Mis órdenes"><div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div><OrderFilters state={state} store={store} filters={filters} compactViewport={isCompactViewport} filtersOpen={filtersOpen} onFiltersOpenChange={setFiltersOpen} selectedFilter={selectedFilter} /><div className="order-cards-list">{pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => { onOpenOrder(); store.selectOrder(order.orderId); }} />)}{!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}</div><div className="order-pagination" aria-label="Paginación de órdenes"><span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span><div className="order-pagination__controls"><button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button><span>Página {ordersPage} de {ordersPageCount}</span><button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button></div></div>{!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}</section>;
 }
 
 function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
@@ -686,7 +690,7 @@ function OrderCard({ order, selected, onSelect }: {
   const customer = order.context?.customerName || order.orderId;
   const address = order.context?.address || "Dirección no especificada";
   const route = order.context?.route || "Ruta —";
-  const debt = formatDebt(order.context?.debtCents) ?? "Bs 0.00";
+  const debt = formatDebt(order.context?.debtCents) ?? "Dato no disponible";
   const monthsPending = order.context?.monthsPending;
   const cuc = order.cuc;
 
@@ -753,6 +757,10 @@ function OrderDetail({
   onBack: () => void;
 }) {
   const [draft, setDraft] = useState<ActionKind | null>(initialAction === "VISIT" && !isManualVisitAllowed(order) ? null : initialAction ?? null);
+  const [mobileView, setMobileView] = useState<OrderReviewView>("review");
+  const [kardexIndex, setKardexIndex] = useState(0);
+  const [detailsPageIndex, setDetailsPageIndex] = useState(0);
+  const [activityPageIndex, setActivityPageIndex] = useState(0);
   const isCancelled = order.status === "ANULADO";
   const canCut = order.status === "GENERADO" && order.physicalStatus === "NONE";
   const canRegisterVisit = isManualVisitAllowed(order);
@@ -761,11 +769,41 @@ function OrderDetail({
     : undefined;
 
   useEffect(() => {
+    setMobileView("review");
+    setKardexIndex(0);
+    setDetailsPageIndex(0);
+    setActivityPageIndex(0);
+  }, [order.orderId]);
+
+  useEffect(() => {
     if (initialAction && (initialAction !== "VISIT" || canRegisterVisit)) setDraft(initialAction);
   }, [canRegisterVisit, initialAction]);
 
   return (
     <section className="detail-panel panel detail-panel--fullscreen" aria-label={`Detalle de ${order.orderId}`}>
+      <MobileOrderReview
+        order={order}
+        mode={state.mode}
+        entries={state.activity.filter((entry) => entry.record.orderId === order.orderId)}
+        view={mobileView}
+        onViewChange={setMobileView}
+        onBack={onBack}
+        canCut={canCut}
+        canRegisterVisit={canRegisterVisit}
+        canReconnect={enableReconnection && order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED"}
+        busy={Boolean(state.busyAction)}
+        onCut={() => setDraft("CUT")}
+        onVisit={() => setDraft("VISIT")}
+        onReconnect={() => setDraft("RECONNECTION")}
+        kardexIndex={kardexIndex}
+        onKardexIndexChange={setKardexIndex}
+        detailsPageIndex={detailsPageIndex}
+        onDetailsPageIndexChange={setDetailsPageIndex}
+        activityPageIndex={activityPageIndex}
+        onActivityPageIndexChange={setActivityPageIndex}
+        hidden={Boolean(draft)}
+      />
+      <div className="order-detail-legacy">
       {/* Barra superior de retorno */}
       <div className="detail-navigation-bar">
         <button type="button" className="btn-back" onClick={onBack}>
@@ -862,6 +900,7 @@ function OrderDetail({
           ) : null}
         </div>
       </div>
+      </div>
 
       {draft ? (
         <ActionForm
@@ -880,6 +919,234 @@ function OrderDetail({
       ) : null}
     </section>
   );
+}
+
+function MobileOrderReview({
+  order, mode, entries, view, onViewChange, onBack, canCut, canRegisterVisit, canReconnect, busy,
+  onCut, onVisit, onReconnect, kardexIndex, onKardexIndexChange, detailsPageIndex, onDetailsPageIndexChange,
+  activityPageIndex, onActivityPageIndexChange, hidden,
+}: {
+  order: WorkOrder;
+  mode: ConnectivityMode;
+  entries: ActivityEntry[];
+  view: OrderReviewView;
+  onViewChange: (view: OrderReviewView) => void;
+  onBack: () => void;
+  canCut: boolean;
+  canRegisterVisit: boolean;
+  canReconnect: boolean;
+  busy: boolean;
+  onCut: () => void;
+  onVisit: () => void;
+  onReconnect: () => void;
+  kardexIndex: number;
+  onKardexIndexChange: (index: number) => void;
+  detailsPageIndex: number;
+  onDetailsPageIndexChange: (index: number) => void;
+  activityPageIndex: number;
+  onActivityPageIndexChange: (index: number) => void;
+  hidden: boolean;
+}) {
+  const context = order.context;
+  const kardex = context?.kardex ?? [];
+  const currentKardex = kardex[kardexIndex];
+  const activityPages = orderActivityReviewPages(entries);
+  const currentActivityPage = activityPages[activityPageIndex];
+  const status = fieldOrderStatusLabel(order);
+  const debt = formatDebt(context?.debtCents);
+  const account = context?.accountId || order.accountId;
+  const meter = context?.meterId;
+  const detailFields = context ? [
+    { label: "Referencia", value: context.references },
+    { label: "Ruta", value: context.route },
+    { label: "Circuito", value: context.circuit },
+    { label: "Localidad", value: context.locality },
+    { label: "Estado del suministro", value: context.supplyStatus === "A" ? "Activo" : context.supplyStatus },
+    { label: "Fuente y actualización", value: `${context.source === "SIMULATED" ? "Simulada" : "Provisional"} · ${formatDate(context.updatedAt)}` },
+    { label: "Tarifa", value: context.tariff },
+    { label: "Coordenadas", value: hasCadastralCoordinates(context) ? `${context.cadastralLatitude!.toFixed(6)}, ${context.cadastralLongitude!.toFixed(6)}` : undefined },
+  ] : [];
+  const detailPages = paginateReviewFields(detailFields);
+  const detailsPageCount = detailPages.length;
+  const showKardex = detailsPageIndex === detailsPageCount;
+  const detailPageLabel = showKardex ? "Kardex" : `Datos ${detailsPageIndex + 1} de ${detailsPageCount}`;
+
+  return (
+    <section className="order-review-mobile" aria-label="Revisión de orden" hidden={hidden}>
+      <div className="order-review-toolbar">
+        <button type="button" className="order-review-back" onClick={onBack}>← Volver</button>
+        <span>Orden {shortTechnicalId(order.orderId)}</span>
+      </div>
+      <nav className="order-review-navigation" aria-label="Vistas de la orden">
+        {([
+          ["review", "Resumen"], ["details", "Datos"], ["map", "Mapa"], ["activity", "Actividad"],
+        ] as const).filter(([target]) => target !== "activity" || entries.length > 0).map(([target, label]) => (
+          <button key={target} type="button" aria-pressed={view === target} onClick={() => onViewChange(target)}>
+            {label}{target === "activity" && entries.length ? ` ${entries.length}` : ""}
+          </button>
+        ))}
+      </nav>
+
+      {view === "review" ? (
+        <div className="order-review-screen order-review-screen--summary" aria-label="Resumen prioritario de la orden">
+          <header className="order-review-identity">
+            <h2>{displayValue(context?.customerName)}</h2>
+            <p>Cuenta {displayValue(account)} · Medidor {displayValue(meter)}</p>
+          </header>
+          {order.status === "ANULADO" ? (
+            <div className="order-review-alert order-review-alert--cancelled" role="alert">
+              <strong>Corte bloqueado</strong>
+              <span>{order.cancellation?.detectedAt ? `Regularización registrada ${formatDate(order.cancellation.detectedAt)}. No registrar corte ni visita.` : "No registrar corte ni visita."}</span>
+            </div>
+          ) : null}
+          {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
+            <div className="order-review-alert order-review-alert--unknown" role="alert">
+              <strong>No repetir acción</strong>
+              <span>Revisión humana requerida.</span>
+            </div>
+          ) : null}
+          <div className="order-review-facts">
+            <div className="order-review-fact order-review-fact--address"><span>Dirección</span><strong>{displayValue(context?.address)}</strong></div>
+            <div className="order-review-fact"><span>Deuda</span><strong className="order-review-debt">{displayValue(debt)}</strong><small>{context?.monthsPending === undefined ? "Dato no disponible" : `${context.monthsPending} facturas pendientes`}</small></div>
+            <div className="order-review-fact"><span>Estado</span><strong>{status}</strong>{order.physicalStatus !== "NONE" ? <small>Físico: {physicalStatusLabel(order.physicalStatus)}</small> : null}</div>
+          </div>
+          <div className="order-review-actions">
+            {canCut ? <button type="button" className="primary-action" disabled={busy} onClick={onCut}><IconScissors />Registrar corte</button> : null}
+            {canReconnect ? <button type="button" className="primary-action" disabled={busy} onClick={onReconnect}>Preparar reconexión</button> : null}
+            {canRegisterVisit && canCut ? <button type="button" className="order-review-secondary-action" disabled={busy} onClick={onVisit}>Registrar visita</button> : null}
+            {!canCut && !canReconnect && !canRegisterVisit ? <p className="order-review-no-action">Sin acciones disponibles para este estado.</p> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {view === "details" ? (
+        <section className="order-review-screen order-review-screen--details" aria-label="Datos secundarios de la orden">
+          <h2>Datos del suministro</h2>
+          {context ? <>
+            {!showKardex ? <div className="order-review-detail-grid">
+              {detailPages[detailsPageIndex]?.map((field) => <ReviewData key={field.label} label={field.label} value={field.value} />)}
+            </div> : null}
+            {showKardex ? <section className="order-review-kardex" aria-label="Kardex de deuda">
+              <div><strong>Kardex</strong><span>{kardex.length ? `${kardexIndex + 1} de ${kardex.length}` : "No disponible"}</span></div>
+              {currentKardex ? <p>{currentKardex.period} · {formatDebt(currentKardex.amountCents) ?? "Dato no disponible"} · {currentKardex.status === "PENDING" ? "Pendiente" : "Pagado"} · {currentKardex.daysLate ?? "Dato no disponible"} días mora</p> : <p>Historial no disponible en paquete local.</p>}
+              {kardex.length > 1 ? <div className="order-review-pager"><button type="button" disabled={kardexIndex <= 0} onClick={() => onKardexIndexChange(kardexIndex - 1)}>Anterior</button><button type="button" disabled={kardexIndex >= kardex.length - 1} onClick={() => onKardexIndexChange(kardexIndex + 1)}>Siguiente</button></div> : null}
+            </section> : null}
+            <div className="order-review-pager" aria-label="Páginas de datos">
+              <button type="button" disabled={detailsPageIndex <= 0} onClick={() => onDetailsPageIndexChange(detailsPageIndex - 1)}>Anterior</button>
+              <span>{detailPageLabel}</span>
+              <button type="button" disabled={detailsPageIndex >= detailsPageCount} onClick={() => onDetailsPageIndexChange(detailsPageIndex + 1)}>Siguiente</button>
+            </div>
+          </> : <p className="order-review-no-action">Datos operativos no disponibles en este paquete local.</p>}
+        </section>
+      ) : null}
+
+      {view === "map" ? <OrderReviewMap order={order} mode={mode} onViewChange={onViewChange} /> : null}
+
+      {view === "activity" && activityPages.length > 0 ? (
+        <section className="order-review-screen order-review-screen--activity" aria-label="Actividad de la orden">
+          <article className="order-review-activity-page" aria-live="polite">
+            <h3>{currentActivityPage?.title}</h3>
+            <p>{currentActivityPage?.text}</p>
+          </article>
+          {activityPages.length > 1 ? <div className="order-review-pager"><button type="button" disabled={activityPageIndex <= 0} onClick={() => onActivityPageIndexChange(activityPageIndex - 1)}>Anterior</button><span>{activityPageIndex + 1} de {activityPages.length}</span><button type="button" disabled={activityPageIndex >= activityPages.length - 1} onClick={() => onActivityPageIndexChange(activityPageIndex + 1)}>Siguiente</button></div> : null}
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+export function OrderReviewMap({
+  order,
+  mode,
+  onViewChange,
+}: {
+  order: WorkOrder;
+  mode: ConnectivityMode;
+  onViewChange: (view: OrderReviewView) => void;
+}) {
+  const context = order.context;
+  const hasCoordinates = hasCadastralCoordinates(context);
+
+  return (
+    <section className="order-review-screen order-review-screen--map" aria-label="Mapa de ubicación">
+      <div className="order-review-map-address"><strong>{displayValue(context?.address)}</strong><span>{displayValue(context?.references)}</span></div>
+      {hasCoordinates ? (
+        <FieldMap orders={[order]} selectedOrderId={order.orderId} onSelectOrder={() => onViewChange("details")} mode={mode} />
+      ) : (
+        <div className="field-map-container field-map-container--empty" aria-label="Ubicación de esta orden no disponible">
+          <div className="field-map-empty" role="status">
+            <IconMap />
+            <strong>Ubicación de esta orden no disponible</strong>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReviewData({ label, value }: { label: string; value?: string }) {
+  return <div className="order-review-fact"><span>{label}</span><strong>{displayValue(value)}</strong></div>;
+}
+
+export function paginateReviewFields(fields: readonly { label: string; value?: string }[], pageSize = 4): Array<Array<{ label: string; value?: string }>> {
+  const pages: Array<Array<{ label: string; value?: string }>> = [];
+  let currentPage: Array<{ label: string; value?: string }> = [];
+  const flush = () => {
+    if (!currentPage.length) return;
+    pages.push(currentPage);
+    currentPage = [];
+  };
+  for (const field of fields) {
+    if ((field.value?.length ?? 0) > 120) {
+      flush();
+      const chunks = splitReviewText(field.value ?? "");
+      chunks.forEach((value, index) => pages.push([{ label: `${field.label} · parte ${index + 1} de ${chunks.length}`, value }]));
+      continue;
+    }
+    currentPage.push(field);
+    if (currentPage.length === pageSize) flush();
+  }
+  flush();
+  return pages;
+}
+
+interface OrderActivityReviewPage {
+  title: string;
+  text: string;
+}
+
+export function orderActivityReviewPages(entries: readonly ActivityEntry[]): OrderActivityReviewPage[] {
+  return entries.flatMap((entry) => {
+    const pages: OrderActivityReviewPage[] = [];
+    const appendText = (title: string, text: string) => {
+      const chunks = splitReviewText(text);
+      chunks.forEach((chunk, index) => pages.push({
+        title: chunks.length > 1 ? `${title} · parte ${index + 1} de ${chunks.length}` : title,
+        text: chunk,
+      }));
+    };
+    const kind = activityLabel(entry.record.kind);
+    appendText(kind, `${formatDate(entry.record.recordedAt)} · ${activityDetail(entry.record)}`);
+    const exception = activityException(entry.record);
+    if (exception) appendText("Excepción", exception);
+    entry.evidence.forEach((evidence, index) => {
+      appendText(`Evidencia ${index + 1}`, `${evidence.mimeType} · ${evidence.width} × ${evidence.height} · Guardada localmente · SHA-256 ${evidence.contentHash}`);
+    });
+    return pages;
+  });
+}
+
+function splitReviewText(value: string, maxLength = 120): string[] {
+  const chunks: string[] = [];
+  let remaining = value;
+  while (remaining.length > maxLength) {
+    let splitAt = remaining.lastIndexOf(" ", maxLength);
+    if (splitAt <= 0) splitAt = maxLength;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt);
+  }
+  if (remaining || chunks.length === 0) chunks.push(remaining);
+  return chunks;
 }
 
 function OperationalContext({ context }: { context: NonNullable<WorkOrder["context"]> }) {
@@ -1369,9 +1636,9 @@ function orderStatusLabel(status: WorkOrder["status"]): string {
     ? "Reconectada"
     : "Anulada";
 }
-function fieldOrderStatusLabel(order: WorkOrder): string {
+export function fieldOrderStatusLabel(order: WorkOrder): string {
   if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "En revisión";
-  return order.status === "ANULADO" ? "Anulada" : order.status === "GENERADO" ? "Por ejecutar" : "Ejecutada";
+  return order.status === "ANULADO" ? "Anulada" : order.status === "GENERADO" ? "Por ejecutar" : order.status === "RECONEXIÓN" ? "Reconectada" : "Ejecutada";
 }
 function physicalStatusLabel(status: WorkOrder["physicalStatus"]): string {
   return status === "NONE"

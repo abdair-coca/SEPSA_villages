@@ -5,7 +5,7 @@ import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/index
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
-import { adjacentJourneyOrder, FieldApp, orderJourneyOrders, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import { adjacentJourneyOrder, FieldApp, fieldOrderStatusLabel, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -287,22 +287,167 @@ describe("FieldApp SSR shell", () => {
     expect(trayMarkup).not.toContain("detalle de ord-24017");
   });
 
-  it("shows explicit missing-location state without fallback coordinates", async () => {
+  it("shows five real review facts together with eligible field actions", async () => {
+    const store = await readyStore("ui-order-review-facts");
+    store.selectOrder("ORD-24017");
+    const markup = html(store);
+
+    expect(markup).toContain("revisión de orden");
+    expect(markup).toContain("maría flores");
+    expect(markup).toContain("cuenta cta-1001 · medidor med-1001");
+    expect(markup).toContain("villa esperanza, dirección simulada");
+    expect(markup).toContain("bs 240.50");
+    expect(markup).toContain("por ejecutar");
+    expect(markup).toContain("registrar corte");
+    expect(markup).toContain("registrar visita");
+    const reviewView = markup.slice(markup.indexOf('aria-label="revisión de orden"'), markup.indexOf('class="order-detail-legacy"'));
+    expect(reviewView.match(/por ejecutar/g)).toHaveLength(1);
+  });
+
+  it("labels reconnection as reconnection in field order status", async () => {
+    const store = await readyStore("ui-order-review-reconnection-label");
+    const reconnection = store.getSnapshot().orders.find((order) => order.status === "RECONEXIÓN");
+
+    expect(reconnection).toBeDefined();
+    expect(fieldOrderStatusLabel(reconnection!)).toBe("Reconectada");
+  });
+
+  it("paginates all eight secondary data fields four at a time, including long values", () => {
+    const longValue = "Referencia de campo extensa ".repeat(12).trim();
+    const fields = Array.from({ length: 8 }, (_, index) => ({ label: `Campo ${index + 1}`, value: index === 0 ? longValue : `Valor ${index + 1}` }));
+    const pages = paginateReviewFields(fields);
+    const longValueParts = pages.flat().filter((field) => field.label.startsWith("Campo 1 · parte"));
+
+    expect(pages.map((page) => page.length)).toEqual([1, 1, 1, 4, 3]);
+    expect(longValueParts.map((field) => field.value).join("")).toBe(longValue);
+    expect(pages.flat().filter((field) => !field.label.startsWith("Campo 1 · parte"))).toEqual(fields.slice(1));
+  });
+
+  it("splits long activity exceptions into readable pages without losing wording", async () => {
+    const reason = "No fue posible confirmar la referencia en campo. ".repeat(9).trim();
+    const store = await readyStore("ui-order-review-long-activity");
+    await store.registerVisit("ORD-24017", { reason });
+    const entries = store.getSnapshot().activity.filter((entry) => entry.record.orderId === "ORD-24017");
+    const entry = entries[0];
+    expect(entry).toBeDefined();
+    const pages = orderActivityReviewPages([{ ...entry!, record: { ...entry!.record, exceptionReason: reason } }]);
+    const renderedText = pages.map((page) => page.text).join("");
+
+    expect(pages.length).toBeGreaterThan(1);
+    expect(pages.every((page) => page.text.length <= 120)).toBe(true);
+    expect(pages.some((page) => page.title.startsWith("Excepción · parte"))).toBe(true);
+    expect(renderedText).toContain(reason);
+  });
+
+  it("marks missing review facts unavailable and never substitutes zero debt", async () => {
     const seedPackage = createDemoPackage("2026-09-12T10:00:00.000Z");
-    const packageWithoutCoordinates: WorkPackage = {
+    const missingDataPackage: WorkPackage = {
       ...seedPackage,
-      orders: seedPackage.orders.map((order) => order.context ? {
+      orders: seedPackage.orders.map((order) => order.orderId === "ORD-24017" ? {
         ...order,
-        context: {
+        accountId: "",
+        context: order.context ? ({
           ...order.context,
-          cadastralLatitude: undefined,
-          cadastralLongitude: undefined,
-        },
+          customerName: "",
+          accountId: "",
+          meterId: "",
+          address: "",
+          debtCents: undefined,
+          monthsPending: undefined,
+        } as unknown as NonNullable<WorkOrder["context"]>) : undefined,
       } : order),
     };
-    const store = await readyStore("ui-no-coordinates", packageWithoutCoordinates);
+    const store = await readyStore("ui-order-review-missing", missingDataPackage);
+    store.selectOrder("ORD-24017");
     const markup = html(store);
-    expect(markup).toContain("ubicaciones no disponibles");
+
+    expect(markup).toContain("dato no disponible");
+    expect(markup).not.toContain("bs 0.00");
+  });
+
+  it("keeps review state prominent and only exposes eligible primary actions", async () => {
+    const store = await readyStore("ui-order-review-eligibility");
+    store.selectOrder("ORD-24017");
+    expect(html(store)).toContain("registrar corte");
+
+    store.selectOrder("ORD-24019");
+    const completed = html(store);
+    expect(completed).toContain("preparar reconexión");
+    expect(completed).not.toContain("registrar corte");
+
+    const seedPackage = createDemoPackage("2026-09-12T10:00:00.000Z");
+    const reviewPackage: WorkPackage = {
+      ...seedPackage,
+      orders: seedPackage.orders.map((order) => order.orderId === "ORD-24017" ? { ...order, physicalStatus: "PHYSICAL_UNKNOWN" } : order),
+    };
+    const reviewStore = await readyStore("ui-order-review-unknown", reviewPackage);
+    reviewStore.selectOrder("ORD-24017");
+    const review = html(reviewStore);
+    expect(review).toContain("no repetir acción");
+    expect(review).toContain("revisión humana requerida");
+    expect(review).not.toContain("registrar corte");
+    expect(review).not.toContain("registrar visita");
+
+    const cancelledPackage: WorkPackage = {
+      ...seedPackage,
+      orders: seedPackage.orders.map((order) => order.orderId === "ORD-24017" ? { ...order, status: "ANULADO" } : order),
+    };
+    const cancelledStore = await readyStore("ui-order-review-cancelled", cancelledPackage);
+    cancelledStore.selectOrder("ORD-24017");
+    const cancelled = html(cancelledStore);
+    expect(cancelled).toContain("corte bloqueado");
+    expect(cancelled).toContain("no registrar corte ni visita");
+    expect(cancelled).not.toContain('class="primary-action"');
+  });
+
+  it("keeps offline state and separate detail, map, and activity views reachable", async () => {
+    const store = await readyStore("ui-order-review-secondary-views");
+    store.setMode("offline");
+    store.selectOrder("ORD-24017");
+    const markup = html(store);
+
+    expect(markup).toContain("sin conexión");
+    expect(markup).toContain('aria-label="vistas de la orden"');
+    expect(markup).toContain('aria-pressed="true">resumen</button>');
+    expect(markup).toContain('aria-pressed="false">datos</button>');
+    expect(markup).toContain('aria-pressed="false">mapa</button>');
+    expect(markup).not.toContain('aria-pressed="false">actividad');
+  });
+
+  it("keeps order activity reachable when records exist", async () => {
+    const store = await readyStore("ui-order-review-activity");
+    await store.registerVisit("ORD-24017", { reason: "Visita local de verificación." });
+    store.selectOrder("ORD-24017");
+
+    expect(html(store)).toContain('aria-pressed="false">actividad 1</button>');
+  });
+
+  it("shows explicit missing-location state and never substitutes another order", () => {
+    const seedPackage = createDemoPackage("2026-09-12T10:00:00.000Z");
+    const selectedOrder = seedPackage.orders.find((order) => order.orderId === "ORD-24017")!;
+    const selectedWithoutCoordinates = {
+      ...selectedOrder,
+      context: { ...selectedOrder.context!, cadastralLatitude: undefined, cadastralLongitude: undefined },
+    };
+    const markup = renderToStaticMarkup(
+      <OrderReviewMap order={selectedWithoutCoordinates} mode="offline" onViewChange={() => undefined} />,
+    ).toLocaleLowerCase();
+
+    expect(markup).toContain("ubicación de esta orden no disponible");
+    expect(markup).not.toContain("field-map-canvas");
+    expect(markup).not.toContain("suministros con ubicación");
     expect(markup).not.toContain("-19.589366");
+  });
+
+  it("maps only selected order when its cadastral coordinates exist", () => {
+    const seedPackage = createDemoPackage("2026-09-12T10:00:00.000Z");
+    const selectedOrder = seedPackage.orders.find((order) => order.orderId === "ORD-24017")!;
+    const markup = renderToStaticMarkup(
+      <OrderReviewMap order={selectedOrder} mode="offline" onViewChange={() => undefined} />,
+    ).toLocaleLowerCase();
+
+    expect(markup).toContain("field-map-canvas");
+    expect(markup).toContain("<strong>1</strong> suministros con ubicación");
+    expect(markup).toContain("mapa interactivo de la ruta");
   });
 });

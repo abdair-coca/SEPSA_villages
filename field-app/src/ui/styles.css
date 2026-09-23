@@ -8636,3 +8636,523 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     min-height: 48px;
   }
 }
+
+/* Fase 3: revisión compacta de orden, con contexto secundario en vistas propias. */
+.field-app .order-review-mobile {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .field-app:has(.order-review-mobile:not([hidden])) {
+    display: flex;
+    height: calc(100dvh - 64px - env(safe-area-inset-bottom));
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .field-app:has(.order-review-mobile:not([hidden])) .app-header {
+    width: calc(100% - 24px);
+    flex: 0 0 auto;
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 4px 0;
+    border: 0;
+  }
+
+  .field-app:has(.order-review-mobile:not([hidden])) .identity-block {
+    display: none;
+  }
+
+  .field-app:has(.order-review-mobile:not([hidden])) .header-meta,
+  .field-app:has(.order-review-mobile:not([hidden])) .header-top-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .field-app:has(.order-review-mobile:not([hidden])) .header-top-actions .last-update,
+  .field-app:has(.order-review-mobile:not([hidden])) .header-bottom-actions {
+    display: none;
+  }
+
+  .field-app:has(.order-review-mobile:not([hidden])) .workbench {
+    display: flex;
+    width: calc(100% - 24px);
+    min-height: 0;
+    flex: 1 1 auto;
+    padding: 4px 0 8px;
+  }
+
+  .field-app .detail-panel--fullscreen:has(.order-review-mobile:not([hidden])) {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 8px;
+    border-radius: 8px;
+  }
+
+  .field-app .order-detail-legacy {
+    display: none;
+  }
+
+  .field-app .order-review-mobile:not([hidden]) {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .field-app .order-review-toolbar {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--sepsa-text-secondary);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-back {
+    min-height: 44px;
+    padding: 0 8px;
+    border: 1px solid var(--sepsa-border-strong);
+    border-radius: 6px;
+    color: var(--sepsa-text);
+    background: var(--sepsa-surface);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .field-app .order-review-navigation {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .field-app .order-review-navigation button {
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 2px;
+    border: 1px solid var(--sepsa-border);
+    border-radius: 6px;
+    color: var(--sepsa-text-secondary);
+    background: var(--sepsa-surface);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+  }
+
+  .field-app .order-review-navigation button[aria-pressed="true"] {
+    border-color: var(--sepsa-orange);
+    color: var(--sepsa-orange-hover);
+    background: var(--sepsa-orange-soft);
+  }
+
+  .field-app .order-review-screen {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 8px;
+    overflow: visible;
+  }
+
+  .field-app .order-review-screen--summary {
+    gap: 7px;
+  }
+
+  .field-app .order-review-identity {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 3px 6px;
+    min-width: 0;
+  }
+
+  .field-app .order-review-identity h2,
+  .field-app .order-review-screen > h2 {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--sepsa-text);
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .field-app .order-review-identity h2 {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .field-app .order-review-identity .status-badge {
+    min-height: 24px;
+    padding: 3px 7px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-identity p {
+    grid-column: 1 / -1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--sepsa-text-secondary);
+    font-size: 12px;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .field-app .order-review-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .field-app .order-review-fact {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 2px;
+    padding: 6px 8px;
+    border: 1px solid var(--sepsa-border);
+    border-radius: 6px;
+    background: var(--sepsa-surface-soft);
+  }
+
+  .field-app .order-review-fact > span {
+    color: var(--sepsa-text-secondary);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-fact > strong {
+    overflow-wrap: anywhere;
+    color: var(--sepsa-text);
+    font-size: 13px;
+    line-height: 17px;
+    font-weight: 600;
+  }
+
+  .field-app .order-review-fact > small {
+    overflow-wrap: anywhere;
+    color: var(--sepsa-text-secondary);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-fact--address {
+    grid-column: 1 / -1;
+  }
+
+  .field-app .order-review-fact .order-review-debt {
+    color: var(--sepsa-orange-hover);
+    font-size: 16px;
+    line-height: 20px;
+  }
+
+  .field-app .order-review-alert {
+    display: grid;
+    gap: 1px;
+    padding: 6px 8px;
+    border: 1px solid var(--sepsa-red);
+    border-radius: 6px;
+    color: var(--sepsa-red);
+    background: var(--sepsa-red-soft);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-alert--cancelled {
+    border-color: var(--sepsa-red);
+    color: var(--sepsa-red);
+    background: var(--sepsa-red-soft);
+  }
+
+  .field-app .order-review-alert strong {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-actions {
+    display: grid;
+    gap: 5px;
+    margin-top: auto;
+    padding-top: 2px;
+  }
+
+  .field-app .order-review-actions .primary-action {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--sepsa-orange);
+    border-radius: 8px;
+    color: var(--sepsa-surface);
+    background: var(--sepsa-orange-hover);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 700;
+  }
+
+  .field-app .order-review-secondary-action {
+    min-height: 44px;
+    padding: 4px 8px;
+    border: 1px solid var(--sepsa-border-strong);
+    border-radius: 6px;
+    color: var(--sepsa-text);
+    background: var(--sepsa-surface);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+  }
+
+  .field-app .order-review-actions button:disabled {
+    opacity: .55;
+  }
+
+  .field-app .order-review-no-action {
+    margin: 0;
+    padding: 8px;
+    border-radius: 6px;
+    color: var(--sepsa-text-secondary);
+    background: var(--sepsa-neutral-soft);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-screen--details > h2 {
+    flex: 0 0 auto;
+  }
+
+  .field-app .order-review-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .field-app .order-review-detail-grid .order-review-fact {
+    padding: 5px 6px;
+  }
+
+  .field-app .order-review-detail-grid .order-review-fact > strong {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-detail-grid .order-review-fact > span {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-kardex {
+    display: grid;
+    gap: 5px;
+    margin-top: auto;
+    padding: 7px;
+    border: 1px solid var(--sepsa-border);
+    border-radius: 6px;
+    background: var(--sepsa-surface-soft);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-kardex > div:first-child {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .field-app .order-review-kardex > div:first-child span {
+    color: var(--sepsa-text-secondary);
+  }
+
+  .field-app .order-review-kardex p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .field-app .order-review-pager {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .field-app .order-review-pager button {
+    min-width: 72px;
+    min-height: 44px;
+    padding: 0 8px;
+    border: 1px solid var(--sepsa-border-strong);
+    border-radius: 6px;
+    color: var(--sepsa-text);
+    background: var(--sepsa-surface);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .field-app .order-review-pager button:disabled {
+    opacity: .45;
+  }
+
+  .field-app .order-review-map-address {
+    display: grid;
+    gap: 2px;
+    flex: 0 0 auto;
+    overflow: visible;
+    color: var(--sepsa-text);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-map-address > * {
+    overflow-wrap: anywhere;
+  }
+
+  .field-app .order-review-screen--map .field-map-container {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    margin: 0;
+  }
+
+  .field-app .order-review-screen--map .field-map-canvas {
+    min-height: 0;
+    flex: 1 1 auto;
+    height: auto;
+  }
+
+  .field-app .order-review-screen--map .field-map-container--empty {
+    min-height: 0;
+  }
+
+  .field-app .order-review-screen--map .field-map-empty {
+    max-width: none;
+    padding: 12px;
+  }
+
+  .field-app .order-review-screen--map .field-map-toolbar {
+    flex: 0 0 auto;
+    padding: 5px;
+  }
+
+  .field-app .order-review-screen--map .field-map-info {
+    gap: 4px 8px;
+  }
+
+  .field-app .order-review-screen--map .field-map-buttons {
+    gap: 4px;
+  }
+
+  .field-app .order-review-screen--map .field-map-buttons button {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .field-app .order-review-screen--activity .order-detail-local-state {
+    min-height: 0;
+    flex: 1 1 auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .field-app .order-review-screen--activity .activity-entry-list,
+  .field-app .order-review-screen--activity .activity-entry {
+    min-height: 0;
+  }
+
+  .field-app .order-review-screen--activity .activity-entry {
+    overflow: visible;
+    padding: 8px;
+  }
+
+  .field-app .order-review-screen--activity .activity-entry p {
+    margin: 5px 0;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-screen--activity .evidence-meta,
+  .field-app .order-review-screen--activity .exception-meta {
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .order-review-screen--activity .order-review-pager {
+    flex: 0 0 auto;
+  }
+
+  .field-app .order-review-activity-page {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--sepsa-border);
+    border-radius: 8px;
+    background: var(--sepsa-surface-soft);
+  }
+
+  .field-app .order-review-activity-page h3,
+  .field-app .order-review-activity-page p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .field-app .order-review-activity-page h3 {
+    color: var(--sepsa-text-secondary);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+  }
+
+  .field-app .order-review-activity-page p {
+    color: var(--sepsa-text);
+    font-size: 14px;
+    line-height: 20px;
+    white-space: pre-wrap;
+  }
+
+  .field-app .order-review-toolbar button:focus-visible,
+  .field-app .order-review-navigation button:focus-visible,
+  .field-app .order-review-actions button:focus-visible,
+  .field-app .order-review-pager button:focus-visible {
+    outline: 3px solid var(--sepsa-orange-hover);
+    outline-offset: 2px;
+  }
+}
+
+@media (max-width: 380px) and (max-height: 600px) {
+  .field-app .detail-panel--fullscreen:has(.order-review-mobile:not([hidden])) {
+    padding: 6px;
+  }
+
+  .field-app .order-review-mobile:not([hidden]) {
+    gap: 4px;
+  }
+
+  .field-app .order-review-fact {
+    padding: 4px 6px;
+  }
+
+  .field-app .order-review-alert {
+    padding: 4px 6px;
+  }
+}
