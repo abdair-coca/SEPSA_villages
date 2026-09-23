@@ -1,6 +1,6 @@
 # Tareas 007: estandarización UX con prioridad en Técnico móvil
 
-**Estado:** Fase 2 cerrada; Fase 3 iniciada. `gpt-6-luna` revisó Fase 2, halló P2 de filtros ya corregido y confirmó lo demás. Usuario puede inspeccionar; aceptación no es gate.
+**Estado:** Fases 2 y 3 cerradas; Fase 3 recibió `PASS` de `gpt-6-luna`, commit `28f6bb4`. Fase 4 iniciada; almacenamiento de borradores en curso. QA visual independiente de Fase 1 sigue pendiente para revisión integrada de Fase 5.
 
 Plan maestro: [`plan.md`](plan.md). Fuente de alcance: [`spec.md`](spec.md). Referencia visual: [`docs/design.md`](../../design.md).
 
@@ -36,18 +36,20 @@ Las casillas marcadas son trabajo completado; las pendientes siguen abiertas. Ag
 - `npm test -- --run` — 17 archivos, 143 pruebas aprobadas. `npm run build` — aprobado. `git diff --check` — aprobado.
 - Evidencia asociada a commit `cbee456`. Suite previa: `npm test -- --run` — 17 archivos/143 pruebas; build aprobado. Tras cambio final `aria-label` y `min-height:44`: UI 14/14 y build aprobados; suite total no repetida tras ese cambio.
 
-## Fase 3 — Revisión compacta de orden (iniciada)
+## Fase 3 — Revisión compacta de orden (cerrada)
 
-- [ ] **3.1** Implementar resumen con cliente, cuenta/medidor, dirección, deuda y estado; mostrar ausencias como ausencias, nunca inventar valores.
-- [ ] **3.2** Separar mapa y detalle secundario del resumen; verificar que siguen accesibles y no desplazan datos prioritarios.
-- [ ] **3.3** **QA visual:** inspeccionar/capturar resumen, mapa y detalle en 320×568, 360×640 y 390×844 retrato; documentar legibilidad conjunta de cinco datos, áreas seguras y ausencia de scroll/recortes.
-- [ ] **3.4** **QA funcional y métrica:** desde Jornada cargada, medir toque en orden prioritaria hasta resumen estable con cinco datos, con datos locales; repetir casos de dato ausente. Registrar punto inicial/final y resultado; umbral ≤3 segundos. No incluir autorización ni ejecución.
-- [ ] **3.5** Reunir evidencia, medición y defectos conocidos; revisión `gpt-6-luna`, corregir hallazgos antes de avanzar. Usuario puede inspeccionar.
+- [x] **3.1** Resumen muestra cliente, cuenta/medidor, dirección, deuda y estado; ausencias no se convierten en cero.
+- [x] **3.2** Mapa y detalles secundarios quedan separados y accesibles. Mapa sin coordenadas señala ausencia; con coordenadas muestra un marcador de la orden. Actividad es condicional.
+- [x] **3.3** **QA visual:** a 320×568, 360×640 y 390×844, summary `scrollHeight=clientHeight` y acciones terminan antes de `navTop`. Siete órdenes caben a 320×568. Datos1/2/Kardex caben sin scroll a 320×568; Kardex también en los otros dos tamaños. Datos secundarios: cuatro por página; textos largos paginados; nombre largo envuelto. Sin capturas con datos de clientes en repo.
+- [x] **3.4** **QA funcional y tiempo de apertura:** toque en orden prioritaria desde Jornada cargada hasta vista estable: 300/270/284 ms en los tres tamaños, respectivamente. Es tiempo de apertura/renderizado, no prueba de comprensión humana ≤3 s. Cancelado y `PHYSICAL_UNKNOWN` bloquean; reconexión rotulada «Reconectada».
+- [x] **3.5** Evidencia reunida; revisión `gpt-6-luna` `PASS`; commit `28f6bb4`. Suite 17 archivos/152 pruebas, build y `git diff --check` aprobados.
 
 ## Fase 4 — Captura segura sin scroll y borradores
 
+Almacenamiento de borradores iniciado; fase sigue abierta. Requisitos de seguridad y persistencia abajo siguen vigentes.
+
 - [ ] **4.1** Separar captura en pasos de lectura, GPS, evidencia, excepciones y revisión final; verificar controles/excepciones existentes y secuencia de dominio sin cambios.
-- [ ] **4.2** Añadir persistencia de borradores en store IndexedDB aditivo, claves estables existentes de técnico/dispositivo/orden/acción; verificar apertura de datos previos y no modificación de stores/registros existentes.
+- [ ] **4.2** **En curso:** añadir persistencia de borradores en store IndexedDB aditivo, claves estables existentes de técnico/dispositivo/orden/acción; verificar apertura de datos previos y no modificación de stores/registros existentes.
 - [ ] **4.3** Restaurar tras recarga/cierre campos, evidencia seleccionada o persistida y justificación aplicable; comprobar borrador local no aparece en cola de sincronización ni como operación completada.
 - [ ] **4.4** Retirar borrador solo después de verificar persistencia durable de operación, evidencias y entrada de cola requerida; simular/revisar error de escritura y confirmar permanencia en paso, mensaje claro, sin falso éxito ni limpieza.
 - [ ] **4.5** Confirmar autorización online concluyente, vigente y de un uso inmediatamente antes del corte; comprobar ausencia, rechazo, vencimiento, desconexión y resultado incierto bloquean corte.

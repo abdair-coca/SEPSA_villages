@@ -1,6 +1,6 @@
 # Spec 007 — Estandarización UX con prioridad en Técnico móvil
 
-**Estado:** Fase 2 cerrada; Fase 3 iniciada. Revisión de `gpt-6-luna` confirmó Fase 2 tras corregir un hallazgo P2 de filtros. Usuario puede inspeccionar cada entrega; su aceptación no es gate.
+**Estado:** Fase 1 QA visual independiente pendiente para revisión integrada de Fase 5. Fases 2 y 3 cerradas; Fase 3 recibió `PASS` de `gpt-6-luna`, commit `28f6bb4`. Fase 4 iniciada; almacenamiento de borradores en curso.
 **Tipo:** auditoría UX/UI y rediseño incremental en cinco fases, con revisión visual y funcional por agentes `gpt-6-luna`.
 **Roles:** Técnico y Administrador.
 **Paleta y estilo:** conservar los definidos en [`docs/design.md`](../../design.md).
@@ -25,7 +25,7 @@ La auditoría no concluye que deban desaparecer datos de contexto, controles de 
 
 ## Objetivos medibles
 
-1. **Revisión técnica en ≤3 segundos:** con Jornada ya cargada y órdenes disponibles, desde tocar la orden prioritaria hasta ver un resumen estable con identidad del cliente, cuenta/medidor, dirección, deuda y estado. Se medirá en móvil y con los datos ya disponibles localmente; no incluye descarga inicial ni autorización de corte.
+1. **Revisión técnica en ≤3 segundos:** con Jornada cargada, desde tocar la orden prioritaria hasta ver y revisar cliente, cuenta/medidor, dirección, deuda y estado. La medición de renderizado verifica solo la apertura; la comprensión humana aún requiere prueba de uso. No incluye descarga inicial ni autorización de corte.
 2. **Asignación administrativa en ≤3 segundos:** con la orden elegible visible y el técnico destino ya seleccionado o conocido, llegar desde ese contexto a confirmar la asignación. Buscar una orden desde cero, completar filtros o resolver un bloqueo no forma parte de esta medición.
 3. **Sin scroll vertical en la experiencia técnica:** cada pantalla principal del flujo cabe dentro del viewport disponible, sin contenido crítico cortado. Incluye pantallas de captura con teclado abierto y áreas seguras del dispositivo.
 4. **Menos carga visual:** una acción primaria por vista y sin duplicar badges para repetir un estado ya claro. Conservar texto e indicadores necesarios para comprender conexión, sincronización, bloqueo y resultado.
@@ -86,8 +86,8 @@ Cada fase se entrega como vista funcional ejecutable en la aplicación y evidenc
 |---|---|---|
 | **1. Lenguaje visual compartido** | Patrones comunes aplicados a Admin y Técnico: jerarquía, botones, tarjetas y estados. | Se reconoce el mismo sistema sin cambiar paleta/estilo; bajan los badges repetidos; el flujo administrativo conserva su comportamiento. Evidencia de ambos roles. |
 | **2. Jornada y órdenes en móvil** | Jornada técnica compacta con orden prioritaria, navegación acotada y estados de conexión/sync. **Cerrada.** | Browser local autenticado: Jornada y Mis órdenes sin scroll vertical a 320×568, 360×640 y 390×844 (`scrollHeight=clientHeight`). Filtros en popover 2×3 muestran sus cinco opciones a 320 px sin scroll de página horizontal/vertical; seleccionar opción cierra popover. CTA y paginación visibles. `gpt-6-luna` encontró P2 en filtros; corregido y revisión confirmó lo demás. Sin capturas con datos personales en repo. |
-| **3. Revisión de orden** | Resumen de contexto de la orden; mapa y datos secundarios quedan en vistas separadas. | Los cinco datos prioritarios se entienden de un vistazo; prueba de apertura y revisión ≤3 s desde Jornada cargada, también con datos locales. |
-| **4. Captura segura sin scroll** | Flujo por pasos para lectura, GPS, evidencia, excepciones y revisión final; restauración de borrador. | Ningún paso tiene scroll vertical ni control crítico oculto con teclado/área segura; borrador sobrevive recarga; autorización incierta bloquea corte; falla de persistencia no permite avanzar como éxito. |
+| **3. Revisión de orden — cerrada** | Resumen de contexto de orden; mapa y datos secundarios en vistas separadas. | Evidencia en tres viewports. Tiempo de toque a vista estable medido; no equivale a comprensión humana. Fase revisada `PASS` por `gpt-6-luna`, commit `28f6bb4`. |
+| **4. Captura segura sin scroll — iniciada** | Flujo por pasos para lectura, GPS, evidencia, excepciones y revisión final; restauración de borrador. Almacenamiento de borradores en curso. | Ningún paso tiene scroll vertical ni control crítico oculto con teclado/área segura; borrador sobrevive recarga; autorización incierta bloquea corte; falla de persistencia no permite avanzar como éxito. |
 | **5. Admin y revisión integrada** | Pulido Admin y recorrido conjunto; revisión de mapa, sincronización y vistas técnicas secundarias. | Se preservan filtros, selección múltiple y asignación grupal; confirmación de asignación ≤3 s bajo el contexto definido; experiencia técnica completa validada sin scroll vertical y coherente entre roles. |
 
 ### Protocolo de revisión por fase
@@ -121,6 +121,10 @@ Cada fase se entrega como vista funcional ejecutable en la aplicación y evidenc
 
 ## Estado y siguiente paso
 
-**Estado actual:** Fase 2 cerrada; Fase 3 iniciada. Fase 1 conserva QA visual independiente pendiente; revisión integrada final podrá cubrirla. Fase 3 sigue abierta.
+**Estado actual:** Fases 2 y 3 cerradas; Fase 3 recibió `PASS` de `gpt-6-luna` y corresponde a commit `28f6bb4`. Fase 4 iniciada con almacenamiento de borradores en curso. Fase 1 conserva QA visual independiente pendiente para revisión integrada de Fase 5.
 **Evidencia Fase 2:** código asociado a commit `cbee456`. Suite previa: `npm test -- --run`, 17 archivos/143 pruebas; build aprobado. Tras último ajuste `aria-label` y `min-height:44`: UI 14/14 y build aprobados. No consta suite total posterior a ese ajuste. Revisión en browser local autenticado confirmó medidas de viewport indicadas arriba; no se guardaron capturas con datos personales en repo.
-**Siguiente paso:** completar y verificar Fase 3 según criterios; no declarar terminada hasta reunir evidencia y revisión requeridas. El usuario puede inspeccionar la entrega en cualquier momento.
+**Evidencia Fase 3:** summary muestra cinco datos; ausencia no se representa como cero. Órdenes canceladas y `PHYSICAL_UNKNOWN` bloquean. Reconexión aparece rotulada «Reconectada». Mapa sin coordenadas comunica ausencia; con coordenadas muestra un marcador de la orden. Actividad aparece condicionalmente. Datos secundarios muestran cuatro por página, textos largos paginados y nombre largo envuelto. A 320×568 caben siete órdenes. En 320×568, 360×640 y 390×844, summary tiene `scrollHeight=clientHeight` y acciones terminan antes del inicio de navegación. Datos1/2/Kardex caben sin scroll a 320×568; Kardex también en los otros dos tamaños. Toque en Jornada cargada hasta vista estable: 300/270/284 ms, respectivamente. Esta métrica no demuestra comprensión humana en ≤3 s. No se guardaron capturas con datos de clientes en el repositorio.
+
+**Validación reportada:** suite 17 archivos/152 pruebas, build y `git diff --check` aprobados.
+
+**Siguiente paso:** completar almacenamiento/restauración segura de borradores y verificaciones de Fase 4. Mantener todos los requisitos de persistencia, cola aislada, limpieza tras escritura durable y autorización online concluyente, vigente y de un solo uso. No avanzar hasta revisión requerida.
