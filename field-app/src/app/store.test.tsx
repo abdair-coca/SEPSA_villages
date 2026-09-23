@@ -15,7 +15,7 @@ afterEach(async () => {
   for (const databaseName of databaseNames.splice(0)) await deleteFieldDatabase(databaseName);
 });
 
-function setup(name: string, configureDemoGrants = false): { store: AppStore; repository: IndexedDbLocalRepository; connectivity: MockConnectivity; transport: MockSyncTransport } {
+function setup(name: string, configureDemoGrants = false): { store: AppStore; repository: IndexedDbLocalRepository; connectivity: MockConnectivity; transport: MockSyncTransport; authorization: MockAuthorizationAdapter } {
   databaseNames.push(name);
   const repository = new IndexedDbLocalRepository({ dbName: name, technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID });
   repositories.push(repository);
@@ -27,7 +27,7 @@ function setup(name: string, configureDemoGrants = false): { store: AppStore; re
     ? (action: "CUT" | "RECONNECTION", order: Parameters<typeof prepareDemoExternalValidation>[1], operationId: string, now: string) => prepareDemoExternalValidation(action, order, operationId, now, { authorization, enablement })
     : undefined;
   const store = createAppStore({ repository, authorization, enablement, connectivity, transport, seedPackage: createDemoPackage("2026-09-12T10:00:00.000Z"), prepareExternalValidation });
-  return { store, repository, connectivity, transport };
+  return { store, repository, connectivity, transport, authorization };
 }
 
 describe("field app store", () => {
@@ -97,6 +97,31 @@ describe("field app store", () => {
     expect(await store.executeCut("ORD-24017", { exceptionReason: "Sin foto", fieldCapture: validFieldCapture() })).toBe(false);
     expect(await store.loadCaptureDraft("ORD-24017", "CUT")).toMatchObject({ reading: { value: 123.45 } });
     expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")?.status).toBe("GENERADO");
+  });
+
+  it("accepts a durably saved cut intent while server consumption is deferred", async () => {
+    const { store, repository, authorization } = setup("store-cut-deferred-consumption", true);
+    const requestCut = authorization.requestCut.bind(authorization);
+    authorization.requestCut = async (input) => {
+      const response = await requestCut(input);
+      return response.grant
+        ? { ...response, grant: { ...response.grant, consumption: "deferred" } }
+        : response;
+    };
+    await store.init();
+    await store.saveCaptureDraft("ORD-24017", "CUT", { reading: { value: 1234 } });
+
+    const completed = await store.executeCut("ORD-24017", {
+      exceptionReason: "saltar_control_fotos: prueba local",
+      fieldCapture: validFieldCapture(),
+    });
+
+    expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")).toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED" });
+    expect(store.getSnapshot().syncItems).toMatchObject([expect.objectContaining({ action: "CUT", status: "synced" })]);
+    const item = store.getSnapshot().syncItems.find((candidate) => candidate.action === "CUT");
+    expect(item && await repository.getRecord(item.operationId)).toMatchObject({ status: "CONFIRMED" });
+    expect(completed).toBe(true);
+    expect(await store.loadCaptureDraft("ORD-24017", "CUT")).toBeUndefined();
   });
 
   it("removes visit draft only after durable record and sync queue can be read", async () => {

@@ -276,7 +276,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           exceptionReason: input.exceptionReason,
           fieldCapture: input.fieldCapture,
         });
-        const committed = result.outcome === "executed" || (result.outcome === "duplicate" && result.operation.status === "CONFIRMED");
+        const committed = result.outcome === "executed" || result.outcome === "pending_sync" || (result.outcome === "duplicate" && result.operation.status === "CONFIRMED");
         if (committed) await finishDraftIfCommitted(orderId, "CUT", result.operation.operationId, input);
         const refreshed = await refreshAfterCommit();
         if (refreshed) update({ message: messageForCut(result, snapshot.mode) });
@@ -344,9 +344,13 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   async function finishDraftIfCommitted(orderId: string, action: ActionKind, operationId: string, input: ActionInput): Promise<void> {
     const record = await dependencies.repository.getRecord(operationId);
     const items = await dependencies.repository.listSyncItems();
-    const queued = items.some((item) => item.operationId === operationId && item.orderId === orderId);
+    const queued = items.some((item) => item.operationId === operationId && item.orderId === orderId && item.action === action);
     const evidenceExpected = Boolean(input.file || input.evidence);
-    if (!record || !queued || record.orderId !== orderId || record.technicianId !== technicianId || record.deviceId !== deviceId || (action !== "VISIT" && (record.kind === "VISIT" || record.status !== "CONFIRMED")) || (evidenceExpected && !record.evidenceRefs.length) || !(await evidenceIsDurable(record))) {
+    const confirmed = record?.kind === "VISIT"
+      ? action === "VISIT"
+      : Boolean(record && record.kind === action && record.status === "CONFIRMED" && record.physicalStatus === "CONFIRMED");
+    const durableCutIntent = action === "CUT" && record?.kind === "CUT" && record.status === "INTENT_PERSISTED" && record.physicalStatus === "CLAIMED";
+    if (!record || !queued || record.orderId !== orderId || record.technicianId !== technicianId || record.deviceId !== deviceId || (!confirmed && !durableCutIntent) || (evidenceExpected && !record.evidenceRefs.length) || !(await evidenceIsDurable(record))) {
       throw new Error("No pudimos verificar el guardado local. Revise pendientes antes de repetir la acción.");
     }
     // Draft cleanup is best effort after durable operation, evidence and queue verification.

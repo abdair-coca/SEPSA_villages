@@ -6,7 +6,7 @@ import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, Mock
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
 import type { SyncItem } from "../ports";
-import { adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import { adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, CutCompletionDialog, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -75,6 +75,26 @@ describe("capture wizard QA recovery", () => {
     expect(markup).toContain(">elegir foto</button>");
     expect(markup).toContain('accept="image/jpeg,image/png,.jpg,.jpeg,.png"');
     expect(markup).toContain("medidor.jpg");
+  });
+
+  it("distinguishes confirmed, pending, and uncertain cut completion accessibly", () => {
+    const confirmed = renderToStaticMarkup(<CutCompletionDialog outcome="confirmed" onDismiss={() => undefined} />).toLocaleLowerCase();
+    const pending = renderToStaticMarkup(<CutCompletionDialog outcome="pending" onDismiss={() => undefined} />).toLocaleLowerCase();
+    const review = renderToStaticMarkup(<CutCompletionDialog outcome="review" onDismiss={() => undefined} />).toLocaleLowerCase();
+    expect(confirmed).toContain('role="dialog"');
+    expect(confirmed).toContain("corte confirmado");
+    expect(confirmed).toContain(">listo</button>");
+    expect(pending).toContain("pendiente de confirmación del servidor");
+    expect(pending).toContain("no repita la acción");
+    expect(review).toContain("revisión humana requerida");
+    expect(review).toContain("no repita la acción");
+  });
+
+  it("reports durable cut as pending when order refresh leaves a stale snapshot", () => {
+    const order = createDemoPackage("2026-09-12T10:00:00.000Z").orders[0];
+    expect(cutCompletionOutcome(true, { ...order, status: "GENERADO", physicalStatus: "NONE" })).toBe("pending");
+    expect(cutCompletionOutcome(true, { ...order, physicalStatus: "PHYSICAL_UNKNOWN" })).toBe("review");
+    expect(cutCompletionOutcome(false, { ...order, status: "GENERADO", physicalStatus: "NONE" })).toBeUndefined();
   });
 });
 

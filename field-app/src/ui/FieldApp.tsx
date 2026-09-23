@@ -765,6 +765,7 @@ function OrderDetail({
   onBack: () => void;
 }) {
   const [draft, setDraft] = useState<ActionKind | null>(initialAction === "VISIT" && !isManualVisitAllowed(order) ? null : initialAction ?? null);
+  const [cutCompletion, setCutCompletion] = useState<"confirmed" | "pending" | "review">();
   const [mobileView, setMobileView] = useState<OrderReviewView>("review");
   const [kardexIndex, setKardexIndex] = useState(0);
   const [detailsPageIndex, setDetailsPageIndex] = useState(0);
@@ -920,18 +921,42 @@ function OrderDetail({
           blocked={order.physicalStatus === "PHYSICAL_UNKNOWN" || order.status === "ANULADO"}
           onCancel={() => setDraft(null)}
           onSubmit={async (input) => {
-            const completed = draft === "VISIT"
-              ? await store.registerVisit(order.orderId, input).then(() => true)
-              : draft === "CUT"
-                ? await store.executeCut(order.orderId, input)
-                : await store.executeReconnection(order.orderId, input);
+            let completed: boolean;
+            if (draft === "VISIT") {
+              await store.registerVisit(order.orderId, input);
+              completed = true;
+            } else if (draft === "CUT") {
+              const durable = await store.executeCut(order.orderId, input);
+              const finalOrder = store.getSnapshot().orders.find((candidate) => candidate.orderId === order.orderId);
+              const outcome = cutCompletionOutcome(durable, finalOrder);
+              if (outcome) setCutCompletion(outcome);
+              completed = Boolean(outcome);
+            } else {
+              completed = await store.executeReconnection(order.orderId, input);
+            }
             if (completed) setDraft(null);
             return completed;
           }}
         />
       ) : null}
+      {cutCompletion ? <CutCompletionDialog outcome={cutCompletion} onDismiss={() => setCutCompletion(undefined)} /> : null}
     </section>
   );
+}
+
+export function CutCompletionDialog({ outcome, onDismiss }: { outcome: "confirmed" | "pending" | "review"; onDismiss: () => void }) {
+  const content = {
+    confirmed: { title: "Corte confirmado", message: "La orden figura como ejecutada y confirmada." },
+    pending: { title: "Corte guardado", message: "Intención guardada en este dispositivo. Ejecución pendiente de confirmación del servidor. No repita la acción." },
+    review: { title: "Resultado incierto", message: "Revisión humana requerida. No repita la acción." },
+  }[outcome];
+  return <div className="cut-completion-backdrop"><section className={`cut-completion cut-completion--${outcome}`} role="dialog" aria-modal="true" aria-labelledby="cut-completion-title" aria-describedby="cut-completion-message"><h2 id="cut-completion-title">{content.title}</h2><p id="cut-completion-message">{content.message}</p><button type="button" className="primary-action" onClick={onDismiss}>Listo</button></section></div>;
+}
+
+export function cutCompletionOutcome(durable: boolean, order?: WorkOrder): "confirmed" | "pending" | "review" | undefined {
+  if (order?.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED") return "confirmed";
+  if (order?.physicalStatus === "PHYSICAL_UNKNOWN") return "review";
+  return durable ? "pending" : undefined;
 }
 
 function MobileOrderReview({
@@ -1494,7 +1519,7 @@ function ActionForm({
         {!loading && activeStep === "review" ? <div className="capture-wizard__review">
           {kind === "CUT" ? <><p>Lectura: {content.reading?.value ?? "No disponible"} kWh · {content.cutType ?? "RED"}</p><p>GPS: {gpsException ? "Excepción justificada" : content.location?.status === "CAPTURED" ? "Capturado" : "No disponible"}</p></> : null}
           <p>Evidencia: {photoException ? "Excepción justificada" : file?.name ?? "No disponible"}</p>
-          {kind === "CUT" ? <p>El corte requiere autorización online concluyente y vigente. Sin ella, queda bloqueado.</p> : <p>El resultado se guarda primero en este dispositivo.</p>}
+          {kind === "CUT" ? <p className="capture-wizard__authorization-note">El corte requiere autorización online concluyente y vigente. Sin ella, queda bloqueado.</p> : <p>El resultado se guarda primero en este dispositivo.</p>}
         </div> : null}
       </div>
       {formError ? <p className="form-error capture-wizard__error" role="alert">{formError}</p> : null}
