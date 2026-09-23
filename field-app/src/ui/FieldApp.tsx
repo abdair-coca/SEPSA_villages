@@ -18,12 +18,13 @@ export interface FieldAppProps {
   onLogout?: () => void;
 }
 
-type NavigationTab = "home" | "orders" | "map";
+type NavigationTab = "home" | "orders" | "map" | "queue";
 
 const navigationItems: Array<{ tab: NavigationTab; label: string; icon: ReactNode }> = [
   { tab: "home", label: "Inicio", icon: <IconRoute /> },
   { tab: "orders", label: "Mis órdenes", icon: <IconDocument /> },
   { tab: "map", label: "Mapa", icon: <IconMap /> },
+  { tab: "queue", label: "Pendientes", icon: <IconRefresh /> },
 ];
 
 export function FieldApp({
@@ -320,7 +321,8 @@ function Workbench({
 
 function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; store: AppStore; orders: WorkOrder[]; onOpenIncident: (orderId: string) => void }) {
   const filteredOrders = selectVisibleOrders(state);
-  const focusOrders = state.query.trim() || state.filter !== "ALL" ? sortOrdersForNext(filteredOrders) : orders;
+  const eligibleOrders = state.query.trim() || state.filter !== "ALL" ? filteredOrders : orders;
+  const focusOrders = orderJourneyOrders(eligibleOrders);
   const [focusedOrderId, setFocusedOrderId] = useState<string>();
   const currentOrder = focusOrders.find((order) => order.orderId === focusedOrderId) ?? focusOrders[0];
   const currentIndex = currentOrder ? focusOrders.findIndex((order) => order.orderId === currentOrder.orderId) : -1;
@@ -350,8 +352,8 @@ function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; 
           mode={state.mode}
           position={currentIndex + 1}
           total={focusOrders.length}
-          onPrevious={() => setFocusedOrderId(focusOrders[currentIndex - 1]?.orderId)}
-          onNext={() => setFocusedOrderId(focusOrders[currentIndex + 1]?.orderId)}
+          onPrevious={() => setFocusedOrderId(adjacentJourneyOrder(focusOrders, currentIndex, -1)?.orderId)}
+          onNext={() => setFocusedOrderId(adjacentJourneyOrder(focusOrders, currentIndex, 1)?.orderId)}
           onOpen={() => openOrder(currentOrder.orderId)}
           onShowMap={() => openMap(currentOrder.orderId)}
           onMarkIncident={() => onOpenIncident(currentOrder.orderId)}
@@ -393,7 +395,7 @@ function HomeSecondaryCards({ state, store }: { state: AppState; store: AppStore
         <p>{pendingItems.length ? "Operaciones guardadas en este dispositivo." : "No hay operaciones pendientes."}</p>
         {pendingItems.length ? <button type="button" className="home-secondary-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>Ver cola completa <span aria-hidden="true">→</span></button> : null}
       </CollapsibleCard>
-      <CollapsibleCard open={activityOpen} onToggle={() => setActivityOpen((value) => !value)} icon={<IconClock />} title="Actividad reciente" meta={`${state.activity.length} eventos`} hint="Sin actividad local registrada.">
+      <CollapsibleCard open={activityOpen} onToggle={() => setActivityOpen((value) => !value)} icon={<IconClock />} title="Actividad reciente" meta={`${state.activity.length} eventos`} hint={state.activity.length ? "Últimos registros de este dispositivo." : "Sin actividad local registrada."}>
         {recentActivity.length ? <div className="home-activity-list">{recentActivity.map((entry) => <button type="button" className="home-activity-item" key={entry.record.operationId} onClick={() => { store.setTab("orders"); store.selectOrder(entry.record.orderId); }}><i /><span><strong>{activityLabel(entry.record.kind)}</strong><small>{formatActivityTime(entry.record.recordedAt)}</small></span></button>)}</div> : <p>Sin actividad local registrada.</p>}
         <button type="button" className="home-secondary-link" onClick={() => setActivityOpen(true)}>Ver todas <span aria-hidden="true">→</span></button>
       </CollapsibleCard>
@@ -413,15 +415,17 @@ function CollapsibleCard({ open, onToggle, icon, title, meta, hint, children }: 
 }
 
 function DesktopNavigation({ activeTab, onNavigate, pending }: { activeTab: AppState["tab"]; onNavigate: (tab: NavigationTab) => void; pending: number }) {
-  return <nav className="desktop-navigation" aria-label="Navegación principal de escritorio"><span className="desktop-navigation__context">Jornada técnica</span><div className="desktop-navigation__items">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "desktop-navigation__item desktop-navigation__item--active" : "desktop-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "orders" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</div></nav>;
+  return <nav className="desktop-navigation" aria-label="Navegación principal de escritorio"><span className="desktop-navigation__context">Jornada técnica</span><div className="desktop-navigation__items">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "desktop-navigation__item desktop-navigation__item--active" : "desktop-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "queue" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</div></nav>;
 }
 
 function BottomNavigation({ activeTab, onNavigate, pending }: { activeTab: AppState["tab"]; onNavigate: (tab: "home" | "orders" | "map" | "queue") => void; pending: number }) {
-  return <nav className="bottom-navigation" aria-label="Navegación principal">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "bottom-navigation__item bottom-navigation__item--active" : "bottom-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "orders" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</nav>;
+  return <nav className="bottom-navigation" aria-label="Navegación principal">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "bottom-navigation__item bottom-navigation__item--active" : "bottom-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "queue" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</nav>;
 }
 
 function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void }) {
-  const ordersPerPage = 5;
+  const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
+  const [filtersOpen, setFiltersOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 760px)").matches);
+  const ordersPerPage = isCompactViewport ? 1 : 5;
   const [ordersPage, setOrdersPage] = useState(1);
   const generatedCount = state.orders.filter((order) => order.status === "GENERADO").length;
   const executedCount = state.orders.filter((order) => order.status === "EJECUTADO").length;
@@ -439,8 +443,21 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppSt
     { value: "REVIEW", label: "Revisión", count: reviewCount },
   ];
   useEffect(() => { setOrdersPage(1); }, [state.query, state.filter]);
+  useEffect(() => {
+    let previousCompactViewport = window.matchMedia("(max-width: 760px)").matches;
+    const updateViewport = () => {
+      const compactViewport = window.matchMedia("(max-width: 760px)").matches;
+      setIsCompactViewport(compactViewport);
+      if (compactViewport !== previousCompactViewport) setFiltersOpen(!compactViewport);
+      previousCompactViewport = compactViewport;
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
   useEffect(() => { setOrdersPage((page) => Math.min(page, ordersPageCount)); }, [orders.length, ordersPageCount]);
-  return <section className="orders-panel orders-tray" aria-label="Mis órdenes"><div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div><OrderFilters state={state} store={store} filters={filters} /><div className="order-cards-list">{pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => store.selectOrder(order.orderId)} />)}{!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}</div><div className="order-pagination" aria-label="Paginación de órdenes"><span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span><div className="order-pagination__controls"><button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button><span>Página {ordersPage} de {ordersPageCount}</span><button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button></div></div>{!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}</section>;
+  const selectedFilter = filters.find((filter) => filter.value === state.filter)?.label ?? "Todas";
+  return <section className="orders-panel orders-tray" aria-label="Mis órdenes"><div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div><OrderFilters state={state} store={store} filters={filters} compactViewport={isCompactViewport} filtersOpen={filtersOpen} onFiltersOpenChange={setFiltersOpen} selectedFilter={selectedFilter} /><div className="order-cards-list">{pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => store.selectOrder(order.orderId)} />)}{!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}</div><div className="order-pagination" aria-label="Paginación de órdenes"><span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span><div className="order-pagination__controls"><button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button><span>Página {ordersPage} de {ordersPageCount}</span><button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button></div></div>{!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}</section>;
 }
 
 function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
@@ -580,7 +597,7 @@ function MetricCard({ value, label, tone, icon }: { value: number; label: string
   return <div className={`metric-card metric-card--${tone}`}><span className="metric-card__icon">{icon}</span><span className="metric-card__content"><strong>{value}</strong><span>{label}</span></span></div>;
 }
 
-function OrderFilters({ state, store, filters }: { state: AppState; store: AppStore; filters: Array<{ value: OrderFilter; label: string; count?: number }> }) {
+function OrderFilters({ state, store, filters, compactViewport, filtersOpen, onFiltersOpenChange, selectedFilter }: { state: AppState; store: AppStore; filters: Array<{ value: OrderFilter; label: string; count?: number }>; compactViewport: boolean; filtersOpen: boolean; onFiltersOpenChange: (open: boolean) => void; selectedFilter: string }) {
   return (
     <div className="order-filters">
       <div className="search-bar-wrap">
@@ -590,12 +607,17 @@ function OrderFilters({ state, store, filters }: { state: AppState; store: AppSt
         </label>
         {state.query ? <button type="button" className="search-clear-btn" onClick={() => store.setQuery("")} aria-label="Limpiar búsqueda">×</button> : null}
       </div>
-      <div className="filter-row" role="tablist" aria-label="Filtrar órdenes">
-        {filters.map((filter) => {
-          const isActive = state.filter === filter.value;
-          return <button key={filter.value} type="button" role="tab" aria-selected={isActive} className={isActive ? "filter-chip filter-chip--active" : "filter-chip"} onClick={() => store.setFilter(filter.value)}><span>{filter.label}</span>{filter.count !== undefined ? <span className="chip-count">{filter.count}</span> : null}</button>;
-        })}
-      </div>
+      <details className={`order-filter-disclosure ${compactViewport ? "order-filter-disclosure--compact" : ""}`} open={filtersOpen} onToggle={(event) => onFiltersOpenChange(event.currentTarget.open)}>
+        <summary aria-label={`Filtros de órdenes. Filtro activo: ${selectedFilter}`} aria-controls="order-filter-options" aria-expanded={filtersOpen}>
+          <span>Filtros</span><span className="order-filter-disclosure__current">{selectedFilter}</span>
+        </summary>
+        <div className="filter-row" id="order-filter-options" role="group" aria-label="Filtrar órdenes">
+          {filters.map((filter) => {
+            const isActive = state.filter === filter.value;
+            return <button key={filter.value} type="button" aria-label={`${filter.label}${filter.count === undefined ? "" : `: ${filter.count}`}`} aria-pressed={isActive} className={isActive ? "filter-chip filter-chip--active" : "filter-chip"} onClick={() => { store.setFilter(filter.value); onFiltersOpenChange(false); }}><span>{filter.label}</span>{filter.count !== undefined ? <span className="chip-count">{filter.count}</span> : null}</button>;
+          })}
+        </div>
+      </details>
     </div>
   );
 }
@@ -623,7 +645,7 @@ function CurrentOrderCard({ order, orders, mode, position, total, onPrevious, on
           <p>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)}</p>
           <span className="current-order-card__technical">CUC: {displayValue(order.cuc ? shortTechnicalId(order.cuc) : undefined)}</span>
         </div>
-        <span className={`status-badge status-badge--${orderStatusTone(order)}`}>{fieldOrderStatusLabel(order)}</span>
+        <span className={`status-badge order-status-label status-badge--${orderStatusTone(order)}`}>{fieldOrderStatusLabel(order)}</span>
       </div>
       <div className="current-order-card__data-grid">
         <OrderDataRow icon={<IconPin />} label="Dirección" value={context?.address} emphasis />
@@ -641,8 +663,7 @@ function CurrentOrderCard({ order, orders, mode, position, total, onPrevious, on
         <button type="button" className="current-order-card__map-action" onClick={onShowMap}><IconExpand /> Abrir mapa</button>
       </div>
       <div className="current-order-card__actions">
-        <button type="button" className="primary-action" onClick={onOpen} disabled={!canCut}><IconScissors />{canCut ? "Registrar corte" : "Orden sin acción"}<span aria-hidden="true">→</span></button>
-        <button type="button" className="secondary-action" onClick={onOpen}><IconDocument /> Ver detalle</button>
+        <button type="button" className="primary-action" onClick={onOpen}><IconDocument /> Abrir orden<span aria-hidden="true">→</span></button>
         {canCut ? <button type="button" className="tertiary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button> : null}
       </div>
     </article>
@@ -682,7 +703,7 @@ function OrderCard({ order, selected, onSelect }: {
           {cuc ? <span className="order-card__cuc">CUC {shortTechnicalId(cuc)}</span> : null}
         </div>
         <div className="order-card__badges">
-          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
+          <span className={`status-badge order-status-label status-badge--${orderStatusTone(order)}`}>
             {fieldOrderStatusLabel(order)}
           </span>
         </div>
@@ -750,11 +771,6 @@ function OrderDetail({
         <button type="button" className="btn-back" onClick={onBack}>
           ← Volver a la bandeja de órdenes
         </button>
-        <div className="detail-cuc-badge">
-          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
-            {orderStatusLabel(order.status)}
-          </span>
-        </div>
       </div>
 
       {/* Banner de orden anulada si corresponde */}
@@ -776,7 +792,7 @@ function OrderDetail({
           <p>Cuenta / suministro {order.context?.accountId || order.accountId || "Cuenta no disponible"} · Medidor {order.context?.meterId || "Medidor no disponible"}</p>
         </div>
         <div className="order-detail-header__status">
-          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
+          <span className={`status-badge order-status-label status-badge--${orderStatusTone(order)}`}>
             {orderStatusLabel(order.status)}
           </span>
           <div className="order-detail-identifiers">
@@ -1317,6 +1333,14 @@ function shortHash(hash?: string): string {
 }
 export function sortOrdersForNext(orders: readonly WorkOrder[]): WorkOrder[] {
   return [...orders].sort((left, right) => orderPriority(left) - orderPriority(right));
+}
+
+export function orderJourneyOrders(orders: readonly WorkOrder[]): WorkOrder[] {
+  return sortOrdersForNext(orders);
+}
+
+export function adjacentJourneyOrder(orders: readonly WorkOrder[], currentIndex: number, direction: -1 | 1): WorkOrder | undefined {
+  return orders[currentIndex + direction];
 }
 function orderPriority(order: WorkOrder): number {
   if (order.status === "GENERADO" && order.physicalStatus === "NONE") return 0;

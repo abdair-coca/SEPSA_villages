@@ -5,7 +5,7 @@ import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/index
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
-import { FieldApp, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import { adjacentJourneyOrder, FieldApp, orderJourneyOrders, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -80,6 +80,14 @@ describe("FieldApp SSR shell", () => {
     ];
 
     expect(sortOrdersForNext(orders).map((order) => order.orderId)).toEqual(["pending", "review", "completed", "cancelled"]);
+    expect(orderJourneyOrders(orders).map((order) => order.orderId)).toEqual(["pending", "review", "completed", "cancelled"]);
+    const journey = orderJourneyOrders(orders);
+    expect(journey.at(0)?.orderId).toBe("pending");
+    expect(journey.at(-1)?.orderId).toBe("cancelled");
+    expect(adjacentJourneyOrder(journey, 0, 1)?.orderId).toBe("review");
+    expect(adjacentJourneyOrder(journey, journey.length - 1, -1)?.orderId).toBe("completed");
+    expect(adjacentJourneyOrder(journey, 0, -1)).toBeUndefined();
+    expect(adjacentJourneyOrder(journey, journey.length - 1, 1)).toBeUndefined();
   });
 
   it("renders ready shell, assigned list, detail, and action eligibility", async () => {
@@ -94,7 +102,8 @@ describe("FieldApp SSR shell", () => {
     expect(home).not.toContain("trabajo de hoy");
     expect(home).not.toContain("tu jornada");
     expect(home).not.toContain("primero resuelve la orden actual");
-    expect(home).toContain("ver detalle");
+    expect(home).toContain("abrir orden");
+    expect(home).toContain("mapa");
     expect(home).toContain("marcar incidencia");
 
     store.setTab("orders");
@@ -127,7 +136,11 @@ describe("FieldApp SSR shell", () => {
     expect(markup).toContain("inicio");
     expect(markup).toContain("mis órdenes");
     expect(markup).toContain("mapa");
+    expect(markup).toContain("pendientes");
     expect(markup).toContain("no hay operaciones pendientes.");
+    expect(markup).toContain("abrir orden");
+    expect(markup).not.toContain("registrar corte</button>");
+    expect((markup.match(/class="primary-action/g) ?? []).length).toBe(1);
     expect(markup).not.toContain("pendiente registrar corte");
     expect(markup).not.toContain("home-intro");
     expect(markup).not.toContain("next-order-card");
@@ -171,6 +184,8 @@ describe("FieldApp SSR shell", () => {
     const markup = html(store);
     expect(markup).toContain("resultado incierto");
     expect(markup).toContain("no repetir acción");
+    expect(markup.match(/por ejecutar/g)).toHaveLength(1);
+    expect(markup).toContain("estado físico");
     expect(markup).not.toContain("preparar corte");
     expect(markup).not.toContain("preparar reconexión");
   });
@@ -216,6 +231,18 @@ describe("FieldApp SSR shell", () => {
 
     const firstPage = html(store);
     expect(firstPage).toContain("mostrando 1-5 de 7 órdenes");
+    expect(firstPage).toContain('aria-label="filtrar órdenes"');
+    expect(firstPage).toContain('aria-controls="order-filter-options"');
+    expect(firstPage).toContain('aria-expanded="true"');
+    expect(firstPage).toContain('id="order-filter-options"');
+    expect(firstPage).toContain('role="group" aria-label="filtrar órdenes"');
+    expect(firstPage).toContain('aria-pressed="true"');
+    expect(firstPage).toContain("todas");
+    expect(firstPage).toContain("por ejecutar");
+    expect(firstPage).toContain("ejecutadas");
+    expect(firstPage).toContain("anuladas");
+    expect(firstPage).toContain("revisión");
+    expect(firstPage).toContain("buscar por cuenta, medidor o cliente");
     expect(firstPage).toContain("cliente página 1");
     expect(firstPage).toContain("cliente página 5");
     expect(firstPage).not.toContain("cliente página 6");
@@ -226,6 +253,24 @@ describe("FieldApp SSR shell", () => {
     expect(filtered).toContain("mostrando 1-1 de 1 órdenes");
     expect(filtered).toContain("cliente página 6");
     expect(filtered).not.toContain("cliente página 1");
+
+    store.setQuery("");
+    const reset = html(store);
+    expect(reset).toContain("cliente página 1");
+    expect(reset).toContain("cliente página 5");
+    expect(reset).not.toContain("cliente página 6");
+  });
+
+  it("keeps offline and pending sync state visible in the journey without disabling order access", async () => {
+    const store = await readyStore("ui-offline-journey");
+    store.setMode("offline");
+    await store.registerVisit("ORD-24017", { reason: "Visita local de verificación." });
+    store.setTab("home");
+    const markup = html(store);
+    expect(markup).toContain("sin conexión");
+    expect(markup).toContain("operaciones pendientes");
+    expect(markup).toContain("abrir orden");
+    expect(markup).not.toContain("disabled=\"\">abrir orden");
   });
 
   it("renders back button to tray in fullscreen order detail", async () => {

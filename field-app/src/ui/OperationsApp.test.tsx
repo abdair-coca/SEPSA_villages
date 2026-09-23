@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_SUPPLIES_PAGE_SIZE, filterOptions, findActiveOrderForSupply, formatAdminCoordinates, getAdminFilterOptions, getAdminOrderPage, NO_DATA_FILTER_VALUE } from "./OperationsApp";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AdminOrderDetail, ADMIN_SUPPLIES_PAGE_SIZE, filterOptions, findActiveOrderForSupply, formatAdminCoordinates, getAdminFilterOptions, getAdminOrderPage, NO_DATA_FILTER_VALUE } from "./OperationsApp";
 import { createDemoPackage } from "../app/index";
 import type { DebtorRecord } from "../domain";
 
@@ -26,6 +27,17 @@ describe("admin active order lookup", () => {
     expect(findActiveOrderForSupply([activeOrder], "debtor-1")).toBe(activeOrder);
     expect(findActiveOrderForSupply([activeOrder], "other-debtor", "account-1")).toBe(activeOrder);
     expect(findActiveOrderForSupply([cancelledOrder], "debtor-1", "account-1")).toBeUndefined();
+  });
+});
+
+describe("admin order detail statuses", () => {
+  it("shows order state once and preserves uncertain physical state", () => {
+    const order = { ...createDemoPackage("2026-09-12T10:00:00.000Z").orders[0], physicalStatus: "PHYSICAL_UNKNOWN" as const };
+    const markup = renderToStaticMarkup(<AdminOrderDetail order={order} />).toLocaleLowerCase();
+
+    expect(markup.match(/>generada<\/span>/g)).toHaveLength(1);
+    expect(markup).toContain("estado físico");
+    expect(markup).toContain("físico incierto");
   });
 });
 

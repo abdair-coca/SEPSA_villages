@@ -8183,3 +8183,456 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     justify-items: center;
   }
 }
+.field-app .status-badge.order-status-label,
+.operations-app .order-sheet-status__badge.order-status-label,
+.operations-app .large-status.order-status-label {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-6);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  text-transform: none;
+}
+.operations-app .order-index-item--selected .order-status-label {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .field-app .field-home {
+    gap: var(--space-8);
+  }
+
+  .field-app .operational-summary,
+  .field-app .header-bottom-actions {
+    display: none;
+  }
+
+  .field-app .current-order-card {
+    padding: var(--space-12);
+  }
+
+  .field-app .current-order-card__data-grid,
+  .field-app .current-order-card__readiness,
+  .field-app .current-order-card__map,
+  .field-app .home-secondary-grid > .collapsible-card:first-child {
+    display: none;
+  }
+
+  .field-app .home-secondary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .field-app .collapsible-card__summary {
+    min-height: 48px;
+  }
+
+  .field-app .current-order-card__header {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .field-app .current-order-card__navigation {
+    align-self: center;
+    margin-top: 0;
+  }
+
+  .field-app .current-order-card__actions {
+    display: flex;
+    margin-top: var(--space-8);
+  }
+
+  .field-app .current-order-card__actions .primary-action {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .field-app .orders-tray .order-card:nth-child(n + 2) {
+    display: none;
+  }
+
+  .field-app .orders-tray {
+    padding: var(--space-12);
+  }
+
+  .field-app .orders-tray__heading {
+    align-items: center;
+    flex-direction: row;
+    margin-bottom: var(--space-8);
+  }
+
+  .field-app .orders-tray__heading p {
+    display: none;
+  }
+
+  .field-app .orders-tray .order-card {
+    gap: var(--space-8);
+    padding: var(--space-12);
+  }
+
+  .field-app .orders-tray .order-card__address,
+  .field-app .orders-tray .order-card__route {
+    display: none;
+  }
+
+  .field-app .orders-tray .order-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .field-app .orders-tray .order-pagination__controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .field-app .bottom-navigation {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 700px) and (max-width: 760px) {
+  .field-app .app-header {
+    gap: var(--space-8);
+    padding-top: var(--space-8);
+  }
+
+  .field-app .identity {
+    display: none;
+  }
+
+  .field-app .header-context {
+    margin-top: var(--space-4);
+  }
+
+  .field-app .header-bottom-actions {
+    display: none;
+  }
+
+  .field-app .workbench {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .field-app .workbench:has(.sticky-actions) {
+    padding-bottom: calc(144px + env(safe-area-inset-bottom));
+  }
+
+  .field-app .home-secondary-grid {
+    display: none;
+  }
+
+  .field-app .operational-summary__item:nth-child(3),
+  .field-app .operational-summary__item:nth-child(4) {
+    display: none;
+  }
+
+  .field-app .network-status-text {
+    display: inline;
+  }
+
+  .field-app .current-order-card__identity {
+    gap: var(--space-4);
+  }
+
+  .field-app .current-order-card__technical {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .field-app .workbench:has(> .orders-tray) {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  .field-app .orders-tray .order-filters .search-field {
+    min-height: 40px;
+    margin-bottom: var(--space-4);
+  }
+
+  .field-app .orders-tray .filter-row {
+    flex-wrap: nowrap;
+    gap: var(--space-4);
+    overflow-x: auto;
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-2);
+    scrollbar-width: none;
+  }
+
+  .field-app .orders-tray .filter-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .field-app .orders-tray .filter-chip {
+    min-height: 36px;
+    flex: 0 0 auto;
+    padding-inline: var(--space-8);
+  }
+
+  .field-app .orders-tray .order-card__cuc {
+    display: none;
+  }
+
+  .field-app .orders-tray .order-card__action-btn {
+    min-height: 44px;
+  }
+
+  .field-app .orders-tray .order-pagination {
+    margin-top: var(--space-8);
+  }
+
+  .field-app .orders-tray .order-pagination button {
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: var(--space-8);
+  }
+
+  .field-app .current-order-card__navigation button {
+    position: relative;
+    isolation: isolate;
+    width: 44px;
+    height: 44px;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .field-app .current-order-card__navigation button::before {
+    position: absolute;
+    z-index: -1;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-full);
+    background: #fff;
+    content: "";
+  }
+
+  .field-app .current-order-card__navigation button:hover:not(:disabled) {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .field-app .current-order-card__navigation button:hover:not(:disabled)::before {
+    border-color: #e4ab7a;
+    background: var(--accent-soft);
+  }
+
+  .field-app .current-order-card__navigation button:disabled::before {
+    background: #fafaf8;
+  }
+}
+
+.field-app .status-badge--ready {
+  border-color: var(--sepsa-yellow);
+  color: #8d5319;
+  background: var(--sepsa-yellow-soft);
+}
+
+@media (max-width: 760px) {
+  .field-app:has(.orders-tray) .app-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-8);
+    padding: var(--space-4) 0;
+  }
+
+  .field-app:has(.orders-tray) .identity-block h1 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 24px;
+  }
+
+  .field-app:has(.orders-tray) .identity,
+  .field-app:has(.orders-tray) .header-context,
+  .field-app:has(.orders-tray) .header-top-actions .last-update {
+    display: none;
+  }
+
+  .field-app:has(.orders-tray) .header-meta {
+    display: block;
+  }
+
+  .field-app:has(.orders-tray) .header-top-actions {
+    justify-content: flex-end;
+  }
+
+  .field-app:has(.orders-tray) .network-status-text {
+    display: inline;
+  }
+
+  .field-app:has(.orders-tray) .workbench {
+    padding: var(--space-4) 0 0;
+  }
+
+  .field-app:has(.orders-tray) .workbench:has(> .orders-tray) {
+    padding-bottom: 0;
+  }
+
+  .field-app .orders-tray {
+    gap: var(--space-4);
+    padding: var(--space-8);
+  }
+
+  .field-app .orders-tray__heading {
+    margin-bottom: 0;
+  }
+
+  .field-app .orders-tray__heading .eyebrow,
+  .field-app .orders-tray__heading p {
+    display: none;
+  }
+
+  .field-app .orders-tray__heading h2 {
+    margin: 0;
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  .field-app .orders-tray .order-filters {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .field-app .orders-tray .order-filters .search-field {
+    min-height: 40px;
+    margin: 0;
+  }
+
+  .field-app .order-filter-disclosure > summary {
+    display: flex;
+    min-height: 36px;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+    padding: 0 var(--space-8);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-6);
+    color: var(--ink);
+    background: #fff;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 700;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .field-app .order-filter-disclosure--compact {
+    position: relative;
+    z-index: 5;
+  }
+
+  .field-app .order-filter-disclosure > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .field-app .order-filter-disclosure > summary::after {
+    content: "+";
+    color: var(--accent);
+    font-size: 18px;
+    line-height: 20px;
+  }
+
+  .field-app .order-filter-disclosure[open] > summary::after {
+    content: "−";
+  }
+
+  .field-app .order-filter-disclosure__current {
+    margin-left: auto;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .field-app .order-filter-disclosure:focus-within > summary {
+    outline: 3px solid rgba(232, 93, 4, .26);
+    outline-offset: 2px;
+  }
+
+  .field-app .order-filter-disclosure .filter-row {
+    position: absolute;
+    z-index: 6;
+    top: calc(100% + var(--space-4));
+    right: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-8);
+    margin: 0;
+    padding: var(--space-8);
+    overflow: visible;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-6);
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(23, 32, 51, .16);
+  }
+
+  .field-app .order-filter-disclosure .filter-chip {
+    min-width: 0;
+    min-height: 40px;
+    justify-content: space-between;
+    gap: var(--space-4);
+    white-space: nowrap;
+  }
+
+  .field-app .order-filter-disclosure .filter-chip > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .field-app .orders-tray .order-card {
+    gap: var(--space-4);
+    padding: var(--space-8);
+  }
+
+  .field-app .orders-tray .order-card__header {
+    min-height: 28px;
+  }
+
+  .field-app .orders-tray .order-card__body {
+    gap: var(--space-2);
+  }
+
+  .field-app .orders-tray .order-card__customer {
+    font-size: 16px;
+    line-height: 20px;
+  }
+
+  .field-app .orders-tray .order-card__supply {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app .orders-tray .order-card__footer {
+    gap: var(--space-8);
+    padding-top: var(--space-4);
+  }
+
+  .field-app .orders-tray .order-card__action-btn {
+    min-height: 44px;
+  }
+
+  .field-app .orders-tray .order-pagination {
+    gap: var(--space-4);
+    margin-top: 0;
+  }
+
+  .field-app .orders-tray .order-pagination__controls {
+    min-height: 40px;
+  }
+
+  .field-app .orders-tray .order-pagination button {
+    min-height: 44px;
+  }
+
+  .field-app .bottom-navigation {
+    min-height: calc(64px + env(safe-area-inset-bottom));
+    padding-top: var(--space-4);
+  }
+
+  .field-app .bottom-navigation__item {
+    min-height: 48px;
+  }
+}

@@ -443,21 +443,21 @@ function RecentOrdersPreview({ orders, totalOrders, selectedOrderId, page, total
   return <section className="orders-index admin-recent-orders" aria-labelledby="recent-orders-title"><div className="admin-recent-orders__heading"><div><span className="eyebrow">Actividad</span><h3 id="recent-orders-title">Órdenes recientes</h3></div><span className="admin-recent-orders__count">{totalOrders}</span></div><div className="order-index-list">{orders.map((order) => <OrderRow key={order.orderId} order={order} selected={selectedOrderId === order.orderId} onSelect={() => onSelect(order.orderId)} />)}</div>{!totalOrders ? <p className="activity-empty">Todavía no hay órdenes creadas.</p> : null}{totalPages > 1 ? <nav className="admin-pagination" aria-label="Paginación de órdenes recientes"><button type="button" onClick={() => onPageChange(page - 1)} disabled={page === 1} aria-label="Página anterior">‹</button><span>Página {page} de {totalPages}</span><button type="button" onClick={() => onPageChange(page + 1)} disabled={page === totalPages} aria-label="Página siguiente">›</button></nav> : null}</section>;
 }
 
-function OrderRow({ order, selected, onSelect }: { order: WorkOrder; selected: boolean; onSelect: () => void }) { return <button type="button" className={selected ? "order-index-item order-index-item--selected" : "order-index-item"} onClick={onSelect}><span><strong>Orden de corte · {order.context?.customerName ?? order.accountId ?? "Suministro"}</strong><small>{order.assignedTechnicianId ? `Asignada a ${order.assignedTechnicianName ?? "Técnico asignado"}` : "Sin técnico asignado"} · {formatDate(order.createdAt)}</small></span><span className={`large-status large-status--${statusTone(order)}`}>{orderStatusLabel(order)}</span></button>; }
+function OrderRow({ order, selected, onSelect }: { order: WorkOrder; selected: boolean; onSelect: () => void }) { return <button type="button" className={selected ? "order-index-item order-index-item--selected" : "order-index-item"} onClick={onSelect}><span><strong>Orden de corte · {order.context?.customerName ?? order.accountId ?? "Suministro"}</strong><small>{order.assignedTechnicianId ? `Asignada a ${order.assignedTechnicianName ?? "Técnico asignado"}` : "Sin técnico asignado"} · {formatDate(order.createdAt)}</small></span><span className={`large-status order-status-label large-status--${statusTone(order)}`}>{orderStatusLabel(order)}</span></button>; }
 
-function AdminOrderDetail({ order, onAssign }: { order?: WorkOrder; onAssign?: () => void }) {
+export function AdminOrderDetail({ order, onAssign }: { order?: WorkOrder; onAssign?: () => void }) {
   const [copiedReference, setCopiedReference] = useState(false);
   if (!order) return null;
   const context = order.context;
   const customerName = context?.customerName ?? order.accountId ?? "Suministro";
   const reference = order.cuc ?? order.orderId;
   const assignedTechnician = order.assignedTechnicianName ?? (order.assignedTechnicianId ? "Técnico asignado" : "Sin asignar");
-  const headerStatus = order.physicalStatus === "PHYSICAL_UNKNOWN" ? "Físico incierto" : order.status === "GENERADO" ? "Orden generada" : orderStatusLabel(order);
+  const headerStatus = orderDomainStatusLabel(order.status);
   const copyReference = async () => { try { await navigator.clipboard?.writeText(reference); setCopiedReference(true); window.setTimeout(() => setCopiedReference(false), 1400); } catch { setCopiedReference(false); } };
   return <section className="panel admin-order-detail" aria-labelledby="order-detail-title">
     <header className="order-sheet-header">
       <div className="order-sheet-title"><span className="order-sheet-title__icon"><IconDocument /></span><div><h2 id="order-detail-title">Ficha integral de corte</h2><p>Detalle completo de la orden seleccionada.</p></div></div>
-      <div className="order-sheet-status"><span className={`order-sheet-status__badge order-sheet-status__badge--${statusTone(order)}`}>{order.status === "ANULADO" || order.physicalStatus === "PHYSICAL_UNKNOWN" ? <IconAlertTriangle /> : <IconCheck />}{headerStatus}</span><span>Generada el {formatOrderHeaderDate(order.createdAt)}</span></div>
+      <div className="order-sheet-status"><span className={`order-sheet-status__badge order-status-label order-sheet-status__badge--${statusTone(order)}`}>{order.status === "ANULADO" ? <IconAlertTriangle /> : <IconCheck />}{headerStatus}</span><span>Generada el {formatOrderHeaderDate(order.createdAt)}</span></div>
     </header>
     <div className="order-sheet-reference">
       <span className="order-sheet-reference__icon"><IconDocument /></span>
@@ -472,7 +472,7 @@ function AdminOrderDetail({ order, onAssign }: { order?: WorkOrder; onAssign?: (
         <Data label="Circuito" value={context.circuit} icon="circuit" />
         <Data label="Técnico asignado" value={assignedTechnician} icon="client" />
         <Data label="Deuda total" value={`Bs ${formatMoney(context.debtCents)}`} icon="debt" emphasis />
-        <div className="data-point data-point--with-icon order-sheet-status-field"><AdminDataIcon kind="tariff" /><div className="data-point__content"><span>Estado</span><strong className={`order-sheet-status-value order-sheet-status-value--${statusTone(order)}`}>{orderStatusLabel(order)}</strong></div></div>
+        {order.physicalStatus === "PHYSICAL_UNKNOWN" ? <div className="data-point data-point--with-icon order-sheet-status-field"><AdminDataIcon kind="tariff" /><div className="data-point__content"><span>Estado físico</span><strong className={`order-sheet-status-value order-sheet-status-value--${statusTone(order)}`}>{orderStatusLabel(order)}</strong></div></div> : null}
         <Data label="Área / Localidad" value={joinAdminValues(context.areaName ?? context.area, context.locality)} icon="area" />
       </section>
       <DebtTable entries={context.kardex} total={context.debtCents} />
@@ -512,7 +512,8 @@ function isActiveOrder(order: WorkOrder): boolean { return order.status === "GEN
 export function findActiveOrderForSupply(orders: readonly WorkOrder[], debtorId: string, accountId?: string): WorkOrder | undefined {
   return orders.find((order) => isActiveOrder(order) && (order.debtorId === debtorId || (Boolean(accountId) && order.accountId === accountId)));
 }
-function orderStatusLabel(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "Físico incierto"; return order.status === "GENERADO" ? "Generada" : order.status === "EJECUTADO" ? "Ejecutada" : order.status === "RECONEXIÓN" ? "Reconectada" : "Anulada"; }
+function orderDomainStatusLabel(status: WorkOrder["status"]): string { return status === "GENERADO" ? "Generada" : status === "EJECUTADO" ? "Ejecutada" : status === "RECONEXIÓN" ? "Reconectada" : "Anulada"; }
+function orderStatusLabel(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "Físico incierto"; return orderDomainStatusLabel(order.status); }
 function statusTone(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "review"; return order.status === "GENERADO" ? "ready" : order.status === "EJECUTADO" ? "done" : order.status === "ANULADO" ? "muted" : "active"; }
 function technicianOptionLabel(technician: TechnicianRecord): string { return technician.displayName || technician.username; }
 function isActiveOrderConflict(error: unknown): boolean {
