@@ -1,6 +1,7 @@
 import type {
   OperationRecord,
   EvidenceReference,
+  FieldCapture,
   VisitRecord,
   WorkPackage,
   WorkOrder,
@@ -8,6 +9,28 @@ import type {
 import type { SyncItem } from "./sync";
 
 export type StoredRecord = OperationRecord | VisitRecord;
+
+export type CaptureDraftAction = "VISIT" | "CUT" | "RECONNECTION";
+
+export interface CaptureDraftKey {
+  technicianId: string;
+  deviceId: string;
+  orderId: string;
+  action: CaptureDraftAction;
+}
+
+export type CaptureDraftContent = Partial<Pick<FieldCapture, "cutType" | "nearbyMeters">> & {
+  reading?: Partial<FieldCapture["reading"]>;
+  location?: Partial<FieldCapture["location"]>;
+  evidence?: Array<File | Blob>;
+  exceptionReason?: string;
+  gpsExceptionReason?: string;
+};
+
+export interface CaptureDraft extends CaptureDraftKey {
+  updatedAt: string;
+  content: CaptureDraftContent;
+}
 
 export interface AtomicOperationChange {
   operation?: OperationRecord;
@@ -24,6 +47,9 @@ export type ClaimResult =
   | { status: "rejected"; reason: string; currentOrder?: WorkOrder };
 
 export interface LocalRepository {
+  getCaptureDraft(key: CaptureDraftKey): Promise<CaptureDraft | undefined>;
+  saveCaptureDraft(draft: CaptureDraft): Promise<void>;
+  deleteCaptureDraft(key: CaptureDraftKey): Promise<void>;
   loadAssignedPackage(): Promise<WorkPackage>;
   getOrder(orderId: string): Promise<WorkOrder | undefined>;
   getRecord(operationId: string): Promise<StoredRecord | undefined>;

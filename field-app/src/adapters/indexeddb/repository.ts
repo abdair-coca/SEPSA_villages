@@ -8,6 +8,9 @@ import type {
 } from "../../domain";
 import type {
   AtomicOperationChange,
+  CaptureDraft,
+  CaptureDraftAction,
+  CaptureDraftKey,
   ClaimResult,
   ConflictRecord,
   LocalRepository,
@@ -27,6 +30,8 @@ type StoredOrderOrder = WorkOrder & { __orderId: string };
 type StoredEvidence = EvidenceReference & { __evidenceId: string };
 type StoredPackageEnvelope = WorkPackageEnvelope & { __packageId: string };
 type StoredConflict = ConflictRecord & { conflictId: string; __conflictId: string };
+type StoredCaptureDraft = CaptureDraft & { draftId: string };
+const CAPTURE_DRAFT_ACTIONS: readonly CaptureDraftAction[] = ["VISIT", "CUT", "RECONNECTION"];
 
 export interface IndexedDbRepositoryOptions {
   dbName?: string;
@@ -162,6 +167,45 @@ export class IndexedDbLocalRepository implements LocalRepository {
     await transactionComplete(transaction);
     if (!record || !this.identityMatches(record as { technicianId?: string; deviceId?: string })) return undefined;
     return record as StoredRecord;
+  }
+
+  async getCaptureDraft(key: CaptureDraftKey): Promise<CaptureDraft | undefined> {
+    this.assertDraftScope(key);
+    const draft = await this.readStore<StoredCaptureDraft>("drafts", this.draftKey(key));
+    if (!draft) return undefined;
+    if (!this.identityMatches(draft) || draft.orderId !== key.orderId || draft.action !== key.action) {
+      throw new Error("Capture draft is outside this technician and device scope.");
+    }
+    const { draftId: _draftId, ...captureDraft } = draft;
+    return captureDraft;
+  }
+
+  async saveCaptureDraft(draft: CaptureDraft): Promise<void> {
+    this.assertDraftScope(draft);
+    if (!draft.orderId.trim() || !draft.updatedAt.trim()) {
+      throw new Error("Capture draft requires order identity and update time.");
+    }
+    const key = this.draftKey(draft);
+    const stored: StoredCaptureDraft = { ...structuredClone(draft), draftId: key };
+    const db = await this.dbPromise;
+    const transaction = db.transaction("drafts", "readwrite");
+    const completed = transactionComplete(transaction);
+    try {
+      transaction.objectStore("drafts").put(stored);
+    } catch (error) {
+      transaction.abort();
+      throw error;
+    }
+    await completed;
+  }
+
+  async deleteCaptureDraft(key: CaptureDraftKey): Promise<void> {
+    this.assertDraftScope(key);
+    const db = await this.dbPromise;
+    const transaction = db.transaction("drafts", "readwrite");
+    const completed = transactionComplete(transaction);
+    transaction.objectStore("drafts").delete(this.draftKey(key));
+    await completed;
   }
 
   async claimCut(change: AtomicOperationChange, expectedOrderVersion: number): Promise<ClaimResult> {
@@ -547,6 +591,22 @@ export class IndexedDbLocalRepository implements LocalRepository {
 
   private identityMatches(value: { technicianId?: string; deviceId?: string }): boolean {
     return value.technicianId === this.technicianId && value.deviceId === this.deviceId;
+  }
+
+  private assertDraftScope(key: CaptureDraftKey): void {
+    if (!this.identityMatches(key)) {
+      throw new Error("Capture draft is outside this technician and device scope.");
+    }
+    if (!key.technicianId.trim() || !key.deviceId.trim() || !key.orderId.trim()) {
+      throw new Error("Capture draft requires technician, device, and order identity.");
+    }
+    if (!CAPTURE_DRAFT_ACTIONS.includes(key.action)) {
+      throw new Error("Capture draft action is invalid.");
+    }
+  }
+
+  private draftKey(key: CaptureDraftKey): string {
+    return JSON.stringify([key.technicianId, key.deviceId, key.orderId, key.action]);
   }
 
   private orderKey(orderId: string): string {
