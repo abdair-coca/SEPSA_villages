@@ -1,10 +1,10 @@
 # Tareas 007: estandarización UX con prioridad en Técnico móvil
 
-**Estado:** Fases 2 y 3 cerradas; Fase 3 recibió `PASS` de `gpt-6-luna`, commit `28f6bb4`. Fase 4 iniciada; almacenamiento de borradores en curso. QA visual independiente de Fase 1 sigue pendiente para revisión integrada de Fase 5.
+**Estado:** Fases 2–4 cerradas para QA local disponible. Fase 4: commits `adce142` y `f1772ca`; data-layer `gpt-6-luna` PASS, dos P2 corregidos, re-revisión dirigida PASS; 166/166 pruebas y build aprobados. Teclado móvil nativo y safe area no nula en dispositivo físico siguen pendientes. QA visual independiente de Fase 1 queda para revisión integrada de Fase 5.
 
 Plan maestro: [`plan.md`](plan.md). Fuente de alcance: [`spec.md`](spec.md). Referencia visual: [`docs/design.md`](../../design.md).
 
-Las casillas marcadas son trabajo completado; las pendientes siguen abiertas. Agente `gpt-6-luna` revisa visual y funcionalmente cada fase antes de avance autónomo. Usuario puede inspeccionar entregas; aceptación no es gate. Mantener las cinco fases, evidencia y controles de seguridad.
+Las casillas marcadas son trabajo completado; las pendientes siguen abiertas. `gpt-6-luna` revisó Fase 4 y la fase se cierra para la QA local disponible sin requerir aceptación del usuario. Mantener abierta la validación física indicada.
 
 ## Fase 1 — Lenguaje visual compartido (Admin + Técnico)
 
@@ -46,16 +46,17 @@ Las casillas marcadas son trabajo completado; las pendientes siguen abiertas. Ag
 
 ## Fase 4 — Captura segura sin scroll y borradores
 
-Almacenamiento de borradores iniciado; fase sigue abierta. Requisitos de seguridad y persistencia abajo siguen vigentes.
+Fase revisada y cerrada para QA local disponible. Commits `adce142` (IndexedDB v2 aditivo y borradores scoped) y `f1772ca` (asistente compacto de captura). No se envió ningún corte. Un borrador dummy de QA permanece en browser local para orden `a9587c65…a984`; no es una operación real.
 
-- [ ] **4.1** Separar captura en pasos de lectura, GPS, evidencia, excepciones y revisión final; verificar controles/excepciones existentes y secuencia de dominio sin cambios.
-- [ ] **4.2** **En curso:** añadir persistencia de borradores en store IndexedDB aditivo, claves estables existentes de técnico/dispositivo/orden/acción; verificar apertura de datos previos y no modificación de stores/registros existentes.
-- [ ] **4.3** Restaurar tras recarga/cierre campos, evidencia seleccionada o persistida y justificación aplicable; comprobar borrador local no aparece en cola de sincronización ni como operación completada.
-- [ ] **4.4** Retirar borrador solo después de verificar persistencia durable de operación, evidencias y entrada de cola requerida; simular/revisar error de escritura y confirmar permanencia en paso, mensaje claro, sin falso éxito ni limpieza.
-- [ ] **4.5** Confirmar autorización online concluyente, vigente y de un uso inmediatamente antes del corte; comprobar ausencia, rechazo, vencimiento, desconexión y resultado incierto bloquean corte.
-- [ ] **4.6** **QA visual:** inspeccionar/capturar cada paso en retrato 320×568, 360×640 y 390×844 con safe areas; repetir captura con teclado visible. Registrar input, error de guardado, avance, controles críticos, scroll y recortes.
-- [ ] **4.7** **QA funcional y seguridad de datos:** recorrer lectura/GPS/evidencia/excepciones/revisión; recargar y restaurar borrador, inspeccionar aislamiento de cola, ejercitar fallo de escritura y condiciones de autorización; comparar datos anteriores y verificar que no se perdió ni sobrescribió información.
-- [ ] **4.8** Reunir capturas por paso, escenarios, evidencia de persistencia/cola/autorización y defectos conocidos; revisión `gpt-6-luna`, corregir hallazgos antes de avanzar. Usuario puede inspeccionar.
+- [x] **4.1** Separar captura en pasos de lectura, GPS, evidencia, excepciones y revisión final; controles y secuencia de dominio conservados.
+- [x] **4.2** Añadir persistencia de borradores en IndexedDB v2 aditivo; pruebas confirman migración v1→v2 y preservación de siete stores existentes.
+- [x] **4.3** Pruebas cubren borradores scoped, restauración `Blob`+`File` y separación de la cola de sync.
+- [x] **4.4** Pruebas cubren write fail-closed y limpieza solo tras persistir registro, evidencia y cola requerida.
+- [x] **4.5** Pruebas confirman que autorización incierta bloquea. No se afirma validación física ni cobertura adicional no reportada.
+- [x] **4.6** QA browser: siete pasos a 320×300 con teclado simulado: documento 300/300, cuerpo 190/190, CTA visible; en 320×568, 360×640 y 390×844 documento sin scroll.
+- [x] **4.7** 166/166 pruebas y build aprobados; IAB inicial falló y se recuperó. Sin corte enviado. Borrador dummy permanece en browser local para `a9587c65…a984`; sin operación real.
+- [x] **4.8** Data-layer review `gpt-6-luna` PASS; dos P2 corregidos y re-revisión dirigida PASS. Cierre para QA local disponible.
+- [ ] **4.9 Validación física pendiente:** comprobar teclado móvil nativo y safe area no nula en dispositivo real; browser simulado no sustituye esta verificación.
 
 ## Fase 5 — Pulido Admin y recorrido integrado
 
