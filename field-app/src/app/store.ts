@@ -8,7 +8,7 @@ import {
 } from "../application";
 import { DomainError, generateOperationId, type EvidenceReference, type ConnectivityMode, type FieldCapture, type WorkOrder, type WorkPackage } from "../domain";
 import type { AuthorizationAdapter, EnablementAdapter } from "../ports/authorization";
-import type { ConnectivityPort, LocalRepository, StoredRecord } from "../ports";
+import type { CaptureDraftContent, CaptureDraftKey, ConnectivityPort, LocalRepository, StoredRecord } from "../ports";
 import type { SyncItem } from "../ports/sync";
 import { metadataOnlyEvidence, prepareEvidence, type EvidenceDraft } from "./evidence";
 
@@ -86,9 +86,11 @@ export interface AppStore {
   setTab(tab: AppTab): void;
   selectOrder(orderId: string | null): void;
   setMode(mode: ConnectivityMode): void;
+  loadCaptureDraft(orderId: string, action: ActionKind): Promise<CaptureDraftContent | undefined>;
+  saveCaptureDraft(orderId: string, action: ActionKind, content: CaptureDraftContent): Promise<void>;
   registerVisit(orderId: string, input?: ActionInput): Promise<void>;
-  executeCut(orderId: string, input?: ActionInput): Promise<void>;
-  executeReconnection(orderId: string, input?: ActionInput): Promise<void>;
+  executeCut(orderId: string, input?: ActionInput): Promise<boolean>;
+  executeReconnection(orderId: string, input?: ActionInput): Promise<boolean>;
   sync(): Promise<void>;
 }
 
@@ -203,6 +205,31 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       update({ mode, message: mode === "offline" ? { tone: "warning", text: "Trabajo local activo. Validaciones externas quedan bloqueadas." } : undefined });
       if (wasOffline && mode !== "offline" && snapshot.status === "ready") void requestSync().catch(() => undefined);
     },
+    async loadCaptureDraft(orderId, action) {
+      await ensureReady();
+      getAssignedOrder(orderId);
+      const key = draftKey(orderId, action);
+      const draft = await dependencies.repository.getCaptureDraft(key);
+      if (!draft) return undefined;
+      // A crash may happen after the atomic operation commit but before draft removal.
+      const items = await dependencies.repository.listSyncItems();
+      for (const item of items) {
+        if (item.orderId !== orderId || item.action !== action) continue;
+        const record = await dependencies.repository.getRecord(item.operationId);
+        if (!record || record.technicianId !== technicianId || record.deviceId !== deviceId || Date.parse(record.recordedAt) < Date.parse(draft.updatedAt)) continue;
+        if (action !== "VISIT" && (record.kind !== action || record.status !== "CONFIRMED")) continue;
+        if (action === "VISIT" && record.kind !== "VISIT") continue;
+        if (!(await evidenceIsDurable(record))) continue;
+        await dependencies.repository.deleteCaptureDraft(key).catch(() => undefined);
+        return undefined;
+      }
+      return draft.content;
+    },
+    async saveCaptureDraft(orderId, action, content) {
+      await ensureReady();
+      getAssignedOrder(orderId);
+      await dependencies.repository.saveCaptureDraft({ ...draftKey(orderId, action), updatedAt: now(), content });
+    },
     async registerVisit(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
@@ -223,15 +250,16 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           fieldCapture: input.fieldCapture,
           now: timestamp,
         });
-        await refresh();
-        update({ message: { tone: result.outcome === "duplicate" ? "info" : "success", text: "Visita guardada en el dispositivo, sin afirmar ejecución física." } });
+        await finishDraftIfCommitted(orderId, "VISIT", result.visit.operationId, input);
+        const refreshed = await refreshAfterCommit();
+        if (refreshed) update({ message: { tone: result.outcome === "duplicate" ? "info" : "success", text: "Visita guardada en el dispositivo, sin afirmar ejecución física." } });
       });
       await syncAfterLocalAction();
     },
     async executeCut(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
-      await runWithBusy("CUT", async () => {
+      const completed = await runWithBusy("CUT", async () => {
         const operationId = generateOperationId("cut");
         const timestamp = now();
         const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
@@ -248,15 +276,19 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           exceptionReason: input.exceptionReason,
           fieldCapture: input.fieldCapture,
         });
-        await refresh();
-        update({ message: messageForCut(result, snapshot.mode) });
+        const committed = result.outcome === "executed" || (result.outcome === "duplicate" && result.operation.status === "CONFIRMED");
+        if (committed) await finishDraftIfCommitted(orderId, "CUT", result.operation.operationId, input);
+        const refreshed = await refreshAfterCommit();
+        if (refreshed) update({ message: messageForCut(result, snapshot.mode) });
+        return committed;
       });
       await syncAfterLocalAction();
+      return completed;
     },
     async executeReconnection(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
-      await runWithBusy("RECONNECTION", async () => {
+      const completed = await runWithBusy("RECONNECTION", async () => {
         const operationId = generateOperationId("reconnection");
         const timestamp = now();
         const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
@@ -272,10 +304,14 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           evidence,
           exceptionReason: input.exceptionReason,
         });
-        await refresh();
-        update({ message: messageForReconnection(result, snapshot.mode) });
+        const committed = result.outcome === "executed" || (result.outcome === "duplicate" && result.operation.status === "CONFIRMED");
+        if (committed) await finishDraftIfCommitted(orderId, "RECONNECTION", result.operation.operationId, input);
+        const refreshed = await refreshAfterCommit();
+        if (refreshed) update({ message: messageForReconnection(result, snapshot.mode) });
+        return committed;
       });
       await syncAfterLocalAction();
+      return completed;
     },
     async sync() {
       return requestSync();
@@ -291,6 +327,40 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     const order = snapshot.orders.find((candidate) => candidate.orderId === orderId);
     if (!order || order.assignedTechnicianId !== technicianId) throw new DomainError("Order is not assigned to this technician.", "ORDER_NOT_ASSIGNED");
     return order;
+  }
+
+  function draftKey(orderId: string, action: ActionKind): CaptureDraftKey {
+    return { technicianId, deviceId, orderId, action };
+  }
+
+  async function evidenceIsDurable(record: StoredRecord): Promise<boolean> {
+    for (const evidenceId of record.evidenceRefs) {
+      const evidence = await dependencies.repository.getEvidence?.(evidenceId);
+      if (!evidence?.content || evidence.operationId !== record.operationId) return false;
+    }
+    return true;
+  }
+
+  async function finishDraftIfCommitted(orderId: string, action: ActionKind, operationId: string, input: ActionInput): Promise<void> {
+    const record = await dependencies.repository.getRecord(operationId);
+    const items = await dependencies.repository.listSyncItems();
+    const queued = items.some((item) => item.operationId === operationId && item.orderId === orderId);
+    const evidenceExpected = Boolean(input.file || input.evidence);
+    if (!record || !queued || record.orderId !== orderId || record.technicianId !== technicianId || record.deviceId !== deviceId || (action !== "VISIT" && (record.kind === "VISIT" || record.status !== "CONFIRMED")) || (evidenceExpected && !record.evidenceRefs.length) || !(await evidenceIsDurable(record))) {
+      throw new Error("No pudimos verificar el guardado local. Revise pendientes antes de repetir la acción.");
+    }
+    // Draft cleanup is best effort after durable operation, evidence and queue verification.
+    await dependencies.repository.deleteCaptureDraft(draftKey(orderId, action)).catch(() => undefined);
+  }
+
+  async function refreshAfterCommit(): Promise<boolean> {
+    try {
+      await refresh();
+      return true;
+    } catch {
+      update({ message: { tone: "warning", text: "No pudimos actualizar la vista. Revise pendientes y vuelva a abrir la jornada antes de otra acción." } });
+      return false;
+    }
   }
 
   async function runWithBusy<T>(action: ActionKind | "SYNC", operation: () => Promise<T>): Promise<T> {
@@ -357,9 +427,11 @@ export function createUnavailableAppStore(): AppStore {
     setTab: () => undefined,
     selectOrder: () => undefined,
     setMode: () => undefined,
+    loadCaptureDraft: async () => undefined,
+    saveCaptureDraft: async () => { throw new Error("IndexedDB no está disponible en este dispositivo."); },
     registerVisit: async () => undefined,
-    executeCut: async () => undefined,
-    executeReconnection: async () => undefined,
+    executeCut: async () => false,
+    executeReconnection: async () => false,
     sync: async () => undefined,
   };
 }

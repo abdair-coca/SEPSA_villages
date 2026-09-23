@@ -5,7 +5,7 @@ import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/index
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
-import { adjacentJourneyOrder, FieldApp, fieldOrderStatusLabel, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import { adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -31,11 +31,80 @@ async function readyStore(name: string, seedPackage: WorkPackage = createDemoPac
   return store;
 }
 
+describe("capture wizard QA recovery", () => {
+  it("keeps advancement blocked after draft load failure until retry succeeds", async () => {
+    let attempts = 0;
+    const load = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("IndexedDB transaction failed");
+      return { reading: { value: 42 } };
+    };
+
+    const failed = await loadCaptureDraftSafely(load);
+    expect(failed.status).toBe("error");
+    expect(captureDraftCanAdvance(failed.status)).toBe(false);
+
+    const retried = await loadCaptureDraftSafely(load);
+    expect(retried.status).toBe("ready");
+    expect(captureDraftCanAdvance(retried.status)).toBe(true);
+    if (retried.status === "ready") expect(retried.content.reading?.value).toBe(42);
+  });
+
+  it("keeps cut reading separate from reachable cut settings", () => {
+    expect(captureWizardSteps("CUT", false, false)).toEqual(["reading", "cutSettings", "gps", "evidence", "review"]);
+    expect(captureWizardSteps("CUT", true, true)).toEqual(["reading", "cutSettings", "gps", "gpsException", "evidence", "evidenceException", "review"]);
+  });
+
+  it("replaces technical submit errors with actionable Spanish while preserving uncertain-write warning", () => {
+    const generic = captureSubmitError(new Error("QuotaExceededError: transaction aborted"));
+    expect(generic.message).toBe("No pudimos guardar la operación. Revisa el estado de la orden y las operaciones pendientes antes de reintentar.");
+    expect(generic.message).not.toContain("QuotaExceededError");
+    expect(generic.verificationUncertain).toBe(false);
+
+    const uncertain = captureSubmitError(new Error("No pudimos verificar el guardado local"));
+    expect(uncertain.message).toContain("No pudimos confirmar si la operación quedó guardada");
+    expect(uncertain.message).toContain("Revisa las operaciones pendientes");
+    expect(uncertain.verificationUncertain).toBe(true);
+  });
+
+  it("renders accessible Spanish photo picker and restored evidence filename", () => {
+    const file = new File(["foto"], "medidor.jpg", { type: "image/jpeg" });
+    const markup = renderToStaticMarkup(<EvidencePicker file={file} onSelect={() => undefined} onInvalid={() => undefined} />).toLocaleLowerCase();
+    expect(markup).toContain('aria-label="elegir foto de evidencia"');
+    expect(markup).toContain(">elegir foto</button>");
+    expect(markup).toContain('accept="image/jpeg,image/png,.jpg,.jpeg,.png"');
+    expect(markup).toContain("medidor.jpg");
+  });
+});
+
 function html(store: AppStore): string {
   return renderToStaticMarkup(<FieldApp store={store} />).toLocaleLowerCase();
 }
 
 describe("FieldApp SSR shell", () => {
+  it("restores a real File evidence draft after repository reopen", async () => {
+    const name = "ui-file-draft-reopen";
+    databaseNames.push(name);
+    const first = new IndexedDbLocalRepository({ dbName: name, technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID });
+    repositories.push(first);
+    const packageData = createDemoPackage("2026-09-12T10:00:00.000Z");
+    await first.savePackage(packageData);
+    const selected = new File(["field camera bytes"], "medidor.jpg", { type: "image/jpeg" });
+    await first.saveCaptureDraft({ technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID, orderId: "ORD-24017", action: "CUT", updatedAt: "2026-09-12T10:01:00.000Z", content: { reading: { value: 41 }, evidence: [selected] } });
+    await first.close();
+    repositories.splice(repositories.indexOf(first), 1);
+    const reopened = new IndexedDbLocalRepository({ dbName: name, technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID });
+    repositories.push(reopened);
+    const restored = await reopened.getCaptureDraft({ technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID, orderId: "ORD-24017", action: "CUT" });
+    expect(restored?.content.reading?.value).toBe(41);
+    const savedEvidence = restored?.content.evidence?.[0];
+    expect(savedEvidence).toBeInstanceOf(Blob);
+    const file = restoreEvidenceFile(savedEvidence!);
+    expect(file).toBeInstanceOf(File);
+    expect(file.type).toBe("image/jpeg");
+    expect(await file.text()).toBe("field camera bytes");
+    expect(file.name).toMatch(/medidor\.jpg|evidencia-recuperada\.jpg/);
+  });
   it("syncs every pending queue action before refreshing assigned orders", async () => {
     const events: string[] = [];
     let syncItems = [

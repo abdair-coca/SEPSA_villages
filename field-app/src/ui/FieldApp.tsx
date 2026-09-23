@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ActivityEntry, AppMessage, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
+import type { CaptureDraftContent } from "../ports/repository";
 import { selectVisibleOrders } from "../app/index";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
@@ -906,14 +907,19 @@ function OrderDetail({
         <ActionForm
           kind={draft}
           order={order}
+          store={store}
           technicianName={technicianName}
           busy={state.busyAction === draft}
+          blocked={order.physicalStatus === "PHYSICAL_UNKNOWN" || order.status === "ANULADO"}
           onCancel={() => setDraft(null)}
           onSubmit={async (input) => {
-            if (draft === "VISIT") await store.registerVisit(order.orderId, input);
-            else if (draft === "CUT") await store.executeCut(order.orderId, input);
-            else await store.executeReconnection(order.orderId, input);
-            setDraft(null);
+            const completed = draft === "VISIT"
+              ? await store.registerVisit(order.orderId, input).then(() => true)
+              : draft === "CUT"
+                ? await store.executeCut(order.orderId, input)
+                : await store.executeReconnection(order.orderId, input);
+            if (completed) setDraft(null);
+            return completed;
           }}
         />
       ) : null}
@@ -1243,237 +1249,257 @@ function ActivityPanel({ entries }: { entries: ActivityEntry[] }) {
 }
 
 type ActionKind = "VISIT" | "CUT" | "RECONNECTION";
+export type CaptureWizardStep = "reading" | "cutSettings" | "gps" | "gpsException" | "evidence" | "evidenceException" | "review";
+export type CaptureDraftLoadResult = { status: "ready"; content: CaptureDraftContent } | { status: "error" };
+
+export function captureWizardSteps(kind: ActionKind, gpsException: boolean, photoException: boolean): CaptureWizardStep[] {
+  return (kind === "CUT"
+    ? ["reading", "cutSettings", "gps", ...(gpsException ? ["gpsException"] : []), "evidence", ...(photoException ? ["evidenceException"] : []), "review"]
+    : ["evidence", ...(photoException ? ["evidenceException"] : []), "review"]) as CaptureWizardStep[];
+}
+
+export async function loadCaptureDraftSafely(load: () => Promise<CaptureDraftContent | undefined>): Promise<CaptureDraftLoadResult> {
+  try { return { status: "ready", content: await load() ?? {} }; }
+  catch { return { status: "error" }; }
+}
+
+export function captureDraftCanAdvance(status: CaptureDraftLoadResult["status"] | "loading"): boolean {
+  return status === "ready";
+}
+
+export function captureSubmitError(error: unknown): { message: string; verificationUncertain: boolean } {
+  const verificationUncertain = error instanceof Error && error.message.includes("No pudimos verificar el guardado local");
+  return {
+    verificationUncertain,
+    message: verificationUncertain
+      ? "No pudimos confirmar si la operación quedó guardada en este dispositivo. Revisa las operaciones pendientes antes de reintentar."
+      : "No pudimos guardar la operación. Revisa el estado de la orden y las operaciones pendientes antes de reintentar.",
+  };
+}
+
+export function EvidencePicker({ file, onSelect, onInvalid }: { file?: File; onSelect: (file: File) => void; onInvalid: () => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="file-field">
+      <span>Archivo de evidencia</span>
+      <input
+        ref={input}
+        className="file-field__input"
+        type="file"
+        tabIndex={-1}
+        aria-hidden="true"
+        accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+        onChange={(event) => {
+          const selected = event.target.files?.[0];
+          if (!selected) return;
+          if (selected.type === "image/jpeg" || selected.type === "image/png") onSelect(selected);
+          else onInvalid();
+        }}
+      />
+      <button type="button" className="secondary-action file-field__choose" aria-label="Elegir foto de evidencia" onClick={() => input.current?.click()}>
+        Elegir foto
+      </button>
+      <small aria-live="polite">{file?.name ?? "JPEG o PNG preparado"}</small>
+    </div>
+  );
+}
 
 function ActionForm({
   kind,
   order,
+  store,
   technicianName,
   busy,
+  blocked,
   onCancel,
   onSubmit,
 }: {
   kind: ActionKind;
   order: WorkOrder;
+  store: AppStore;
   technicianName?: string;
   busy: boolean;
+  blocked: boolean;
   onCancel: () => void;
-  onSubmit: (input: ActionInput) => Promise<void>;
+  onSubmit: (input: ActionInput) => Promise<boolean>;
 }) {
-  const [file, setFile] = useState<File | undefined>();
-  const [useException, setUseException] = useState(false);
-  const [exceptionReason, setExceptionReason] = useState("");
+  const [content, setContent] = useState<CaptureDraftContent>({});
+  const contentRef = useRef<CaptureDraftContent>({});
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
+  const [step, setStep] = useState<CaptureWizardStep>(kind === "CUT" ? "reading" : "evidence");
+  const [draftLoadStatus, setDraftLoadStatus] = useState<CaptureDraftLoadResult["status"] | "loading">("loading");
   const [formError, setFormError] = useState("");
-  const [reading, setReading] = useState("");
-  const [cutType, setCutType] = useState<CutType>("RED");
-  const [nearbyMeters, setNearbyMeters] = useState(false);
-  const [location, setLocation] = useState<FieldCapture["location"]>();
-  const [skipLocation, setSkipLocation] = useState(false);
-  const [locationReason, setLocationReason] = useState("");
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const requiresExternal = kind !== "VISIT";
+  const [verificationUncertain, setVerificationUncertain] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const gpsException = content.gpsExceptionReason !== undefined;
+  const photoException = content.exceptionReason !== undefined;
+  const steps = captureWizardSteps(kind, gpsException, photoException);
+  const activeStep = steps.includes(step) ? step : "evidence";
+  const stepIndex = steps.indexOf(activeStep);
+  const file = content.evidence?.[0] ? restoreEvidenceFile(content.evidence[0]) : undefined;
+  const loading = !captureDraftCanAdvance(draftLoadStatus);
+  const loadDraftRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!file && !useException) return setFormError("Adjunte un archivo JPEG/PNG o marque excepción.");
-    if (useException && !exceptionReason.trim()) return setFormError("Escriba una justificación para la excepción.");
-    if (kind === "CUT") {
-      const parsedReading = Number(reading);
-      if (!Number.isFinite(parsedReading) || parsedReading < 0)
-        return setFormError("Ingrese lectura final válida del medidor.");
-      if (!location && !skipLocation) return setFormError("Capture GPS o registre excepción de coordenadas.");
-      if (skipLocation && !locationReason.trim()) return setFormError("Justifique excepción de coordenadas.");
+  useEffect(() => {
+    let active = true;
+    const loadDraft = async () => {
+      setDraftLoadStatus("loading");
+      setFormError("");
+      const result = await loadCaptureDraftSafely(() => store.loadCaptureDraft(order.orderId, kind));
+      if (!active) return;
+      if (result.status === "error") {
+        setDraftLoadStatus("error");
+        return;
+      }
+      const restored = result.content;
+      contentRef.current = restored;
+      setContent(restored);
+      setDraftLoadStatus("ready");
+    };
+    loadDraftRef.current = loadDraft;
+    void loadDraft();
+    return () => { active = false; };
+  }, [kind, order.orderId, store]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const updateViewport = () => {
+      const height = viewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty("--capture-viewport-height", `${height}px`);
+      setKeyboardOpen(height < window.innerHeight - 120);
+    };
+    updateViewport();
+    viewport?.addEventListener("resize", updateViewport);
+    window.addEventListener("resize", updateViewport);
+    return () => {
+      viewport?.removeEventListener("resize", updateViewport);
+      window.removeEventListener("resize", updateViewport);
+      document.documentElement.style.removeProperty("--capture-viewport-height");
+    };
+  }, []);
+
+  function persist(next: CaptureDraftContent): Promise<void> {
+    contentRef.current = next;
+    setContent(next);
+    const save = saveChain.current.then(() => store.saveCaptureDraft(order.orderId, kind, next));
+    saveChain.current = save.catch(() => undefined);
+    void save.then(() => setFormError(""), () => setFormError("No pudimos guardar el borrador en este dispositivo. Reintente."));
+    return save;
+  }
+
+  function change(patch: Partial<CaptureDraftContent>): void {
+    void persist({ ...contentRef.current, ...patch }).catch(() => undefined);
+  }
+
+  function validate(current: CaptureWizardStep, draft: CaptureDraftContent): string | undefined {
+    if (current === "reading" && (draft.reading?.value === undefined || !Number.isFinite(draft.reading.value) || draft.reading.value < 0)) return "Ingrese lectura final válida del medidor.";
+    if (current === "gps" && !draft.location?.latitude && draft.location?.latitude !== 0 && draft.gpsExceptionReason === undefined) return "Capture GPS o registre excepción de coordenadas.";
+    if (current === "gpsException" && !draft.gpsExceptionReason?.trim()) return "Justifique excepción de coordenadas.";
+    if (current === "evidence" && !draft.evidence?.[0] && draft.exceptionReason === undefined) return "Adjunte JPEG/PNG o registre excepción.";
+    if (current === "evidenceException" && !draft.exceptionReason?.trim()) return "Escriba una justificación para la excepción.";
+    return undefined;
+  }
+
+  async function advance() {
+    if (!captureDraftCanAdvance(draftLoadStatus)) return;
+    const problem = validate(activeStep, contentRef.current);
+    if (problem) return setFormError(problem);
+    try {
+      await persist(contentRef.current);
+      setStep(steps[stepIndex + 1]);
+    } catch { /* persist sets actionable error */ }
+  }
+
+  async function submit() {
+    if (!captureDraftCanAdvance(draftLoadStatus)) return;
+    const draft = contentRef.current;
+    for (const required of steps.slice(0, -1)) {
+      const problem = validate(required, draft);
+      if (problem) return setFormError(problem);
     }
-    setFormError("");
     setSubmitting(true);
     try {
-      const fieldCapture =
-        kind === "CUT"
-          ? {
-              reading: {
-                value: Number(reading),
-                unit: "kWh" as const,
-                meterId: order.context?.meterId ?? "",
-                recordedAt: new Date().toISOString(),
-                status: "CAPTURED" as const,
-              },
-              location: location ?? {
-                recordedAt: new Date().toISOString(),
-                status: "BYPASSED" as const,
-                exceptionReason: "saltar_control_coordenadas: " + locationReason,
-              },
-              cutType,
-              nearbyMeters,
-            }
-          : undefined;
-      await onSubmit({
-        file,
-        exceptionReason: useException ? "saltar_control_fotos: " + exceptionReason : undefined,
-        gpsExceptionReason: skipLocation ? "saltar_control_coordenadas: " + locationReason : undefined,
+      await persist(draft);
+      const fieldCapture: FieldCapture | undefined = kind === "CUT" ? {
+        reading: { value: draft.reading!.value!, unit: "kWh", meterId: order.context?.meterId ?? "", recordedAt: new Date().toISOString(), status: "CAPTURED" },
+        location: gpsException
+          ? { recordedAt: new Date().toISOString(), status: "BYPASSED", exceptionReason: `saltar_control_coordenadas: ${draft.gpsExceptionReason}` }
+          : draft.location as FieldCapture["location"],
+        cutType: draft.cutType ?? "RED",
+        nearbyMeters: draft.nearbyMeters ?? false,
+      } : undefined;
+      const completed = await onSubmit({
+        file: photoException ? undefined : file,
+        exceptionReason: photoException ? `saltar_control_fotos: ${draft.exceptionReason}` : undefined,
+        gpsExceptionReason: gpsException ? `saltar_control_coordenadas: ${draft.gpsExceptionReason}` : undefined,
         fieldCapture,
-        reason: requiresExternal
-          ? `Intento de ${actionLabel(kind).toLocaleLowerCase()}`
-          : "Visita de campo sin ejecución",
+        reason: kind === "VISIT" ? "Visita de campo sin ejecución" : `Intento de ${actionLabel(kind).toLocaleLowerCase()}`,
       });
-    } catch {
-      /* Store exposes actionable status. */
-    } finally {
-      setSubmitting(false);
-    }
+      if (!completed) setFormError("Esta acción no concluyó. Revise el estado de la orden y la cola local.");
+    } catch (error) {
+      const failure = captureSubmitError(error);
+      if (failure.verificationUncertain) setVerificationUncertain(true);
+      setFormError(failure.message);
+    } finally { setSubmitting(false); }
   }
 
   function captureLocation() {
     if (!navigator.geolocation) return setFormError("Este dispositivo no ofrece GPS; registre excepción controlada.");
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracyMeters: position.coords.accuracy,
-          recordedAt: new Date().toISOString(),
-          status: "CAPTURED",
-        });
-        setSkipLocation(false);
-        setLocating(false);
-        setFormError("");
-      },
-      () => {
-        setLocating(false);
-        setFormError("No pudimos capturar GPS. Reintente o registre excepción controlada.");
-      }
-    );
+    navigator.geolocation.getCurrentPosition((position) => {
+      change({ location: { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, recordedAt: new Date().toISOString(), status: "CAPTURED" }, gpsExceptionReason: undefined });
+      setLocating(false);
+    }, () => { setLocating(false); setFormError("No pudimos capturar GPS. Reintente o registre excepción controlada."); });
   }
 
+  const title: Record<CaptureWizardStep, string> = { reading: "Lectura", cutSettings: "Datos del corte", gps: "Ubicación GPS", gpsException: "Excepción GPS", evidence: "Evidencia", evidenceException: "Excepción de foto", review: "Revisar y confirmar" };
   return (
-    <form className="action-form" onSubmit={submit}>
-      <div className="form-heading">
-        <div>
-          <span className="eyebrow">{actionLabel(kind)}</span>
-          <h3>Confirmar datos</h3>
-        </div>
-        <button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar formulario">
-          ×
-        </button>
+    <section className={`capture-wizard${keyboardOpen ? " capture-wizard--keyboard" : ""}`} aria-label={`Captura de ${actionLabel(kind).toLocaleLowerCase()}`}>
+      <header className="capture-wizard__header">
+        <button type="button" className="capture-wizard__back" onClick={() => stepIndex ? setStep(steps[stepIndex - 1]) : onCancel()} aria-label="Volver">← Volver</button>
+        <span>{stepIndex + 1} de {steps.length}</span>
+      </header>
+      <div className="capture-wizard__identity"><strong>{order.context?.customerName || "Cliente no disponible"}</strong><span>Medidor {order.context?.meterId || "no disponible"} · {technicianName ?? order.assignedTechnicianId}</span></div>
+      <div className="capture-wizard__body">
+        <h3>{title[activeStep]}</h3>
+        {draftLoadStatus === "loading" ? <p role="status">Abriendo borrador local…</p> : null}
+        {draftLoadStatus === "error" ? <div className="capture-wizard__load-error" role="alert"><p>No pudimos abrir el borrador local. Reintente antes de continuar.</p><button type="button" className="secondary-action" onClick={() => void loadDraftRef.current()}>Reintentar carga del borrador</button></div> : null}
+        {!loading && activeStep === "reading" ? <>
+          <label className="text-field"><span>Lectura final del medidor (kWh)</span><input type="number" inputMode="decimal" min="0" step="0.01" value={content.reading?.value ?? ""} onChange={(event) => change({ reading: event.target.value === "" ? {} : { value: Number(event.target.value) } })} /></label>
+        </> : null}
+        {!loading && activeStep === "cutSettings" ? <>
+          <label className="text-field"><span>Tipo de corte</span><select value={content.cutType ?? "RED"} onChange={(event) => change({ cutType: event.target.value as CutType })}><option value="RED">Red</option><option value="MEDIDOR">Medidor</option><option value="BARRAS">Barras</option><option value="PROTECCION">Protección</option><option value="ACOMETIDA">Acometida</option><option value="FUSIBLES">Fusibles</option></select></label>
+          <label className="checkbox-field"><input type="checkbox" checked={content.nearbyMeters ?? false} onChange={(event) => change({ nearbyMeters: event.target.checked })} /><span>Verifiqué medidores cercanos</span></label>
+        </> : null}
+        {!loading && activeStep === "gps" ? <>
+          <p>{content.location?.status === "CAPTURED" ? `${content.location.latitude?.toFixed(6)}, ${content.location.longitude?.toFixed(6)} · precisión ${Math.round(content.location.accuracyMeters ?? 0)} m` : "Coordenadas no capturadas"}</p>
+          <button type="button" className="secondary-action" disabled={locating} onClick={captureLocation}>{locating ? "Capturando…" : "Capturar GPS"}</button>
+          <label className="checkbox-field"><input type="checkbox" checked={gpsException} onChange={(event) => change(event.target.checked ? { location: undefined, gpsExceptionReason: "" } : { gpsExceptionReason: undefined })} /><span>No puedo capturar coordenadas</span></label>
+        </> : null}
+        {!loading && activeStep === "gpsException" ? <label className="text-field"><span>Justificación de coordenadas</span><textarea rows={2} value={content.gpsExceptionReason ?? ""} onChange={(event) => change({ gpsExceptionReason: event.target.value })} /></label> : null}
+        {!loading && activeStep === "evidence" ? <>
+          <EvidencePicker file={file} onSelect={(selected) => change({ evidence: [selected], exceptionReason: undefined })} onInvalid={() => setFormError("La evidencia debe ser JPEG o PNG.")} />
+          <label className="checkbox-field"><input type="checkbox" checked={photoException} onChange={(event) => change(event.target.checked ? { evidence: [], exceptionReason: "" } : { exceptionReason: undefined })} /><span>No puedo adjuntar evidencia</span></label>
+        </> : null}
+        {!loading && activeStep === "evidenceException" ? <label className="text-field"><span>Justificación obligatoria</span><textarea rows={2} value={content.exceptionReason ?? ""} onChange={(event) => change({ exceptionReason: event.target.value })} /></label> : null}
+        {!loading && activeStep === "review" ? <div className="capture-wizard__review">
+          {kind === "CUT" ? <><p>Lectura: {content.reading?.value ?? "No disponible"} kWh · {content.cutType ?? "RED"}</p><p>GPS: {gpsException ? "Excepción justificada" : content.location?.status === "CAPTURED" ? "Capturado" : "No disponible"}</p></> : null}
+          <p>Evidencia: {photoException ? "Excepción justificada" : file?.name ?? "No disponible"}</p>
+          {kind === "CUT" ? <p>El corte requiere autorización online concluyente y vigente. Sin ella, queda bloqueado.</p> : <p>El resultado se guarda primero en este dispositivo.</p>}
+        </div> : null}
       </div>
-      <p className="form-hint">
-        Orden {order.orderId} · Técnico responsable: {technicianName ?? order.assignedTechnicianId}. La evidencia queda
-        guardada localmente y espera confirmación de sincronización.
-      </p>
-      {kind === "CUT" ? (
-        <fieldset className="capture-fieldset">
-          <legend>Datos obligatorios de campo</legend>
-          <label className="text-field">
-            <span>Lectura final del medidor (kWh)</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={reading}
-              onChange={(event) => setReading(event.target.value)}
-              required
-            />
-          </label>
-          <label className="text-field">
-            <span>Tipo de corte</span>
-            <select value={cutType} onChange={(event) => setCutType(event.target.value as CutType)}>
-              <option value="RED">Red</option>
-              <option value="MEDIDOR">Medidor</option>
-              <option value="BARRAS">Barras</option>
-              <option value="PROTECCION">Protección</option>
-              <option value="ACOMETIDA">Acometida</option>
-              <option value="FUSIBLES">Fusibles</option>
-            </select>
-          </label>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={nearbyMeters}
-              onChange={(event) => setNearbyMeters(event.target.checked)}
-            />
-            <span>Verifiqué medidores cercanos</span>
-          </label>
-          <div className="location-box">
-            <strong>Coordenadas GPS</strong>
-            {location ? (
-              <span>
-                {location.latitude?.toFixed(6)}, {location.longitude?.toFixed(6)} · precisión{" "}
-                {Math.round(location.accuracyMeters ?? 0)} m
-              </span>
-            ) : (
-              <span>No capturadas</span>
-            )}
-            <button
-              type="button"
-              className="secondary-action"
-              onClick={captureLocation}
-              disabled={locating || skipLocation}
-            >
-              {locating ? "Capturando…" : "Capturar GPS"}
-            </button>
-          </div>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={skipLocation}
-              onChange={(event) => {
-                setSkipLocation(event.target.checked);
-                if (event.target.checked) setLocation(undefined);
-              }}
-            />
-            <span>No puedo capturar coordenadas</span>
-          </label>
-          {skipLocation ? (
-            <label className="text-field">
-              <span>Justificación de coordenadas</span>
-              <textarea
-                value={locationReason}
-                onChange={(event) => setLocationReason(event.target.value)}
-                rows={2}
-              />
-            </label>
-          ) : null}
-        </fieldset>
-      ) : null}
-      <label className="file-field">
-        <span>Archivo de evidencia</span>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,.jpg,.jpeg,.png"
-          onChange={(event) => setFile(event.target.files?.[0])}
-        />
-        <small>{file ? file.name : "JPEG o PNG preparado"}</small>
-      </label>
-      <label className="checkbox-field">
-        <input
-          type="checkbox"
-          checked={useException}
-          onChange={(event) => setUseException(event.target.checked)}
-        />
-        <span>No puedo adjuntar evidencia</span>
-      </label>
-      {useException ? (
-        <label className="text-field">
-          <span>Justificación obligatoria</span>
-          <textarea
-            value={exceptionReason}
-            onChange={(event) => setExceptionReason(event.target.value)}
-            rows={3}
-            placeholder="Describa el motivo"
-          />
-        </label>
-      ) : null}
-      {formError ? <p className="form-error" role="alert">{formError}</p> : null}
-      <div className="form-actions">
-        <button type="button" className="secondary-action" onClick={onCancel}>
-          Cancelar
-        </button>
-        <button type="submit" className="primary-action" disabled={busy || submitting}>
-          {busy || submitting ? "Guardando…" : "Confirmar"}
-        </button>
-      </div>
-    </form>
+      {formError ? <p className="form-error capture-wizard__error" role="alert">{formError}</p> : null}
+      <footer className="capture-wizard__footer"><button type="button" className="primary-action" disabled={loading || submitting || busy || blocked || verificationUncertain} onClick={() => void (activeStep === "review" ? submit() : advance())}>{submitting || busy ? "Guardando…" : activeStep === "review" ? kind === "CUT" ? "Confirmar corte" : kind === "VISIT" ? "Guardar visita" : "Confirmar reconexión" : "Continuar"}</button></footer>
+    </section>
   );
+}
+
+export function restoreEvidenceFile(value: File | Blob): File {
+  if (value instanceof File) return value;
+  const extension = value.type === "image/png" ? "png" : "jpg";
+  return new File([value], `evidencia-recuperada.${extension}`, { type: value.type });
 }
 
 function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
