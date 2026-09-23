@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AdminOrderDetail, ADMIN_SUPPLIES_PAGE_SIZE, filterOptions, findActiveOrderForSupply, formatAdminCoordinates, getAdminFilterOptions, getAdminOrderPage, NO_DATA_FILTER_VALUE } from "./OperationsApp";
+import { AdminOrderDetail, AdminSelectionSummary, ADMIN_SUPPLIES_PAGE_SIZE, filterOptions, findActiveOrderForSupply, formatAdminCoordinates, getAdminFilterOptions, getAdminOrderPage, getMissingOrderCreationDebtorIds, NO_DATA_FILTER_VALUE, OrderCreationModal } from "./OperationsApp";
 import { createDemoPackage } from "../app/index";
 import type { DebtorRecord } from "../domain";
 
@@ -58,6 +58,49 @@ describe("admin supply pagination", () => {
 
     expect(getAdminOrderPage(supplies, 1, ADMIN_SUPPLIES_PAGE_SIZE)).toEqual({ items: supplies.slice(0, 7), page: 1, totalPages: 3 });
     expect(getAdminOrderPage(supplies, 2, ADMIN_SUPPLIES_PAGE_SIZE)).toEqual({ items: supplies.slice(7, 14), page: 2, totalPages: 3 });
+  });
+});
+
+describe("admin bulk selection summary", () => {
+  it("shows the total selection and the count on the current page", () => {
+    const markup = renderToStaticMarkup(<AdminSelectionSummary selectedCount={9} visibleSelectedCount={2} />);
+
+    expect(markup).toContain("9 suministros seleccionados");
+    expect(markup).toContain("2 en esta página");
+    expect(markup).toContain("La selección se conserva al cambiar de página.");
+  });
+
+  it("stays out of the way when no supplies are selected", () => {
+    expect(renderToStaticMarkup(<AdminSelectionSummary selectedCount={0} visibleSelectedCount={0} />)).toBe("");
+  });
+});
+
+describe("admin order creation confirmation", () => {
+  it("keeps every selected supply, technician choice, and both confirmation actions in the dialog", () => {
+    const debtors: DebtorRecord[] = [
+      { debtorId: "supply-1", accountId: "account-1", supplyId: "meter-1", customerName: "Client One", address: "Address One", references: "", meterId: "meter-1", area: "A", locality: "Town", route: "1", debtCents: 100, monthsPending: 2, updatedAt: "2026-09-01", source: "SIMULATED", kardex: [] },
+      { debtorId: "supply-2", accountId: "account-2", supplyId: "meter-2", customerName: "Client Two", address: "Address Two", references: "", meterId: "meter-2", area: "A", locality: "Town", route: "1", debtCents: 200, monthsPending: 3, updatedAt: "2026-09-01", source: "SIMULATED", kardex: [] },
+    ];
+    const markup = renderToStaticMarkup(<OrderCreationModal dialog={{ mode: "batch", debtorIds: ["supply-1", "supply-2"] }} debtors={debtors} technicians={[{ userId: "tech-1", username: "tech.one", displayName: "Técnico Uno", role: "TECHNICIAN", enabled: true, source: "PILOT_PROVISIONAL" }]} selectedTechnician="tech-1" busy={false} onTechnicianChange={() => undefined} onCancel={() => undefined} onConfirm={() => undefined} />);
+
+    expect(markup).toContain("Client One");
+    expect(markup).toContain("Client Two");
+    expect(markup).toContain("Asignar a técnico");
+    expect(markup).toContain("Cancelar");
+    expect(markup).toContain("Aceptar y crear órdenes");
+  });
+
+  it("blocks creation when refreshed results no longer contain every selected supply", () => {
+    const dialog = { mode: "batch" as const, debtorIds: ["supply-1", "supply-2"] };
+    const refreshedDebtors: DebtorRecord[] = [
+      { debtorId: "supply-1", accountId: "account-1", supplyId: "meter-1", customerName: "Client One", address: "Address One", references: "", meterId: "meter-1", area: "A", locality: "Town", route: "1", debtCents: 100, monthsPending: 2, updatedAt: "2026-09-01", source: "SIMULATED", kardex: [] },
+    ];
+    const markup = renderToStaticMarkup(<OrderCreationModal dialog={dialog} debtors={refreshedDebtors} technicians={[{ userId: "tech-1", username: "tech.one", displayName: "Técnico Uno", role: "TECHNICIAN", enabled: true, source: "PILOT_PROVISIONAL" }]} selectedTechnician="tech-1" busy={false} onTechnicianChange={() => undefined} onCancel={() => undefined} onConfirm={() => undefined} />);
+
+    expect(getMissingOrderCreationDebtorIds(dialog.debtorIds, refreshedDebtors)).toEqual(["supply-2"]);
+    expect(markup).toContain("ID supply-2");
+    expect(markup).toContain("No se puede confirmar");
+    expect(markup).toMatch(/<button[^>]*disabled="">Aceptar y crear órdenes/);
   });
 });
 
