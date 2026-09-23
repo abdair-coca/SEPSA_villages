@@ -653,8 +653,8 @@ function CurrentOrderCard({ order, orders, mode, position, total, onPrevious, on
       </div>
       <div className="current-order-card__identity">
         <div>
-          <h2>{displayValue(context?.customerName || order.orderId)}</h2>
-          <p>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)}</p>
+          <h2>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)}</h2>
+          <p>{displayValue(context?.customerName || order.orderId)}</p>
           <span className="current-order-card__technical">CUC: {displayValue(order.cuc ? shortTechnicalId(order.cuc) : undefined)}</span>
         </div>
         <span className={`status-badge order-status-label status-badge--${orderStatusTone(order)}`}>{fieldOrderStatusLabel(order)}</span>
@@ -722,8 +722,8 @@ function OrderCard({ order, selected, onSelect }: {
       </div>
 
       <div className="order-card__body">
-        <h3 className="order-card__customer">{customer}</h3>
-        <p className="order-card__supply">Cuenta {account} · Medidor {meter}</p>
+        <h3 className="order-card__customer">Cuenta {account} · Medidor {meter}</h3>
+        <p className="order-card__supply">{customer}</p>
         <p className="order-card__address">
           <IconPin className="card-address-icon" /> {address}
         </p>
@@ -835,8 +835,8 @@ function OrderDetail({
       <header className="order-detail-header">
         <div className="order-detail-header__identity">
           <span className="eyebrow">ORDEN ACTUAL</span>
-          <h2>{order.context?.customerName || order.orderId}</h2>
-          <p>Cuenta / suministro {order.context?.accountId || order.accountId || "Cuenta no disponible"} · Medidor {order.context?.meterId || "Medidor no disponible"}</p>
+          <h2>Cuenta / suministro {order.context?.accountId || order.accountId || "Cuenta no disponible"} · Medidor {order.context?.meterId || "Medidor no disponible"}</h2>
+          <p>{order.context?.customerName || order.orderId}</p>
         </div>
         <div className="order-detail-header__status">
           <span className={`status-badge order-status-label status-badge--${orderStatusTone(order)}`}>
@@ -1028,8 +1028,8 @@ function MobileOrderReview({
       {view === "review" ? (
         <div className="order-review-screen order-review-screen--summary" aria-label="Resumen prioritario de la orden">
           <header className="order-review-identity">
-            <h2>{displayValue(context?.customerName)}</h2>
-            <p>Cuenta {displayValue(account)} · Medidor {displayValue(meter)}</p>
+            <h2>Cuenta {displayValue(account)} · Medidor {displayValue(meter)}</h2>
+            <p>{displayValue(context?.customerName)}</p>
           </header>
           {order.status === "ANULADO" ? (
             <div className="order-review-alert order-review-alert--cancelled" role="alert">
