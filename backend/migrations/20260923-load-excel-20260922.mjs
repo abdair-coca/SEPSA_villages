@@ -6,6 +6,7 @@ import { Pool } from "pg";
 
 const SOURCE = "PILOT_PROVISIONAL";
 const DATASET = "EXCEL_20260922";
+const MIGRATION_ID = "20260923-load-excel-20260922";
 const MIGRATION_LOCK = "sepsa:field-test:excel-20260922";
 const EXPECTED_DEBTOR_COUNT = 99;
 const EXPECTED_ELIGIBLE_COUNT = 10;
@@ -18,7 +19,9 @@ if (!databaseUrl) {
 }
 
 const dataPath = resolve(dirname(fileURLToPath(import.meta.url)), "data", "EXCEL_20260922.json");
-const rows = JSON.parse(await readFile(dataPath, "utf8"));
+const dataText = await readFile(dataPath, "utf8");
+const dataChecksum = createHash("sha256").update(dataText).digest("hex");
+const rows = JSON.parse(dataText);
 validateDataset(rows);
 
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
@@ -28,33 +31,61 @@ try {
   await client.query("BEGIN");
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [MIGRATION_LOCK]);
 
-  const admin = await findRequiredUser(client, ADMIN_USERNAME, "ADMIN");
-  const technician = await findRequiredUser(client, TECHNICIAN_USERNAME, "TECHNICIAN");
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS pilot_migrations (
+      migration_id text PRIMARY KEY,
+      checksum char(64) NOT NULL,
+      details jsonb NOT NULL DEFAULT '{}'::jsonb,
+      applied_at timestamptz NOT NULL DEFAULT now(),
+      source text NOT NULL DEFAULT 'PILOT_PROVISIONAL' CHECK (source = 'PILOT_PROVISIONAL')
+    )
+  `);
 
-  for (const row of rows) {
-    await upsertDebtor(client, row);
+  const previous = await client.query(
+    "SELECT checksum, details FROM pilot_migrations WHERE migration_id = $1",
+    [MIGRATION_ID],
+  );
+  if (previous.rows[0]) {
+    if (previous.rows[0].checksum !== dataChecksum) {
+      throw new Error(`Migration ${MIGRATION_ID} was already applied with a different data checksum.`);
+    }
+    await client.query("COMMIT");
+    console.log(JSON.stringify({ migration: MIGRATION_ID, alreadyApplied: true, details: previous.rows[0].details }));
+  } else {
+    const admin = await findRequiredUser(client, ADMIN_USERNAME, "ADMIN");
+    const technician = await findRequiredUser(client, TECHNICIAN_USERNAME, "TECHNICIAN");
+
+    for (const row of rows) {
+      await upsertDebtor(client, row);
+    }
+
+    let createdOrders = 0;
+    let assignedExistingOrders = 0;
+    let skippedExistingOrders = 0;
+    for (const row of rows.filter(isEligible)) {
+      const result = await ensureOrder(client, row, admin.user_id, technician.user_id);
+      if (result === "created") createdOrders += 1;
+      if (result === "assigned-existing") assignedExistingOrders += 1;
+      if (result === "skipped-existing") skippedExistingOrders += 1;
+    }
+
+    const details = {
+      dataset: DATASET,
+      debtorRows: rows.length,
+      eligibleRows: rows.filter(isEligible).length,
+      createdOrders,
+      assignedExistingOrders,
+      skippedExistingOrders,
+      assignedTechnician: TECHNICIAN_USERNAME,
+    };
+    await client.query(
+      `INSERT INTO pilot_migrations (migration_id, checksum, details, source)
+       VALUES ($1, $2, $3::jsonb, $4)`,
+      [MIGRATION_ID, dataChecksum, JSON.stringify(details), SOURCE],
+    );
+    await client.query("COMMIT");
+    console.log(JSON.stringify({ migration: MIGRATION_ID, ...details }));
   }
-
-  let createdOrders = 0;
-  let assignedExistingOrders = 0;
-  let skippedExistingOrders = 0;
-  for (const row of rows.filter(isEligible)) {
-    const result = await ensureOrder(client, row, admin.user_id, technician.user_id);
-    if (result === "created") createdOrders += 1;
-    if (result === "assigned-existing") assignedExistingOrders += 1;
-    if (result === "skipped-existing") skippedExistingOrders += 1;
-  }
-
-  await client.query("COMMIT");
-  console.log(JSON.stringify({
-    dataset: DATASET,
-    debtorRows: rows.length,
-    eligibleRows: rows.filter(isEligible).length,
-    createdOrders,
-    assignedExistingOrders,
-    skippedExistingOrders,
-    assignedTechnician: TECHNICIAN_USERNAME,
-  }));
 } catch (error) {
   await client.query("ROLLBACK");
   throw error;

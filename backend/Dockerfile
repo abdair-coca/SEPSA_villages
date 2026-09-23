@@ -15,4 +15,4 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
 EXPOSE 8080
-CMD ["node", "dist/src/server.js"]
+CMD ["sh", "-c", "node migrations/20260923-load-excel-20260922.mjs && node dist/src/server.js"]
