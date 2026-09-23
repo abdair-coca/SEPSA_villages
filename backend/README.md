@@ -32,6 +32,15 @@ $env:DATABASE_URL="postgres://pilot_provisional:pilot_provisional@localhost:1543
 python scripts/import-debtors-xlsx.py "C:\Users\abdai\Downloads\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --dry-run
 ```
 
+For the deployed pilot, the reviewed `EXCEL_20260922` snapshot is available as an idempotent database migration. After deploying the backend image, run it once from the Render shell or another trusted environment with the production `DATABASE_URL`:
+
+```powershell
+$env:DATABASE_URL="<PILOT_PRODUCTION_DATABASE_URL>"
+npm run pilot:migrate:field-test
+```
+
+The migration loads 99 debtor rows and creates 10 eligible `CUT` orders (`DEUDA > 0` and `MESES >= 3`) assigned to `jhonny.moya`. It preserves existing pilot orders, sessions, synchronization records, and audit history. It is protected by a PostgreSQL advisory lock and deterministic identifiers, so rerunning it does not duplicate the dataset or its orders. It does not run automatically when the API starts.
+
 After reviewing the preview, replace only `PILOT_PROVISIONAL` operational data and create eligible `CUT` orders for `jhonny.moya`:
 
 ```powershell
