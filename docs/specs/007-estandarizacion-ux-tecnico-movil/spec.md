@@ -1,6 +1,6 @@
 # Spec 007 — Estandarización UX con prioridad en Técnico móvil
 
-**Estado:** Fase 2 en correcciones. Agente `gpt-6-luna` revisa visual y funcionalmente antes de avanzar. Usuario puede inspeccionar cada entrega; su aceptación ya no es gate.
+**Estado:** Fase 2 cerrada; Fase 3 iniciada. Revisión de `gpt-6-luna` confirmó Fase 2 tras corregir un hallazgo P2 de filtros. Usuario puede inspeccionar cada entrega; su aceptación no es gate.
 **Tipo:** auditoría UX/UI y rediseño incremental en cinco fases, con revisión visual y funcional por agentes `gpt-6-luna`.
 **Roles:** Técnico y Administrador.
 **Paleta y estilo:** conservar los definidos en [`docs/design.md`](../../design.md).
@@ -85,7 +85,7 @@ Cada fase se entrega como vista funcional ejecutable en la aplicación y evidenc
 | Fase | Entrega que se revisará | Criterios visuales y funcionales |
 |---|---|---|
 | **1. Lenguaje visual compartido** | Patrones comunes aplicados a Admin y Técnico: jerarquía, botones, tarjetas y estados. | Se reconoce el mismo sistema sin cambiar paleta/estilo; bajan los badges repetidos; el flujo administrativo conserva su comportamiento. Evidencia de ambos roles. |
-| **2. Jornada y órdenes en móvil** | Jornada técnica compacta con orden prioritaria, navegación acotada y estados de conexión/sync. | Una acción principal por vista; órdenes accesibles sin lista interminable; sin scroll ni recortes a 320×568, 360×640 y 390×844. |
+| **2. Jornada y órdenes en móvil** | Jornada técnica compacta con orden prioritaria, navegación acotada y estados de conexión/sync. **Cerrada.** | Browser local autenticado: Jornada y Mis órdenes sin scroll vertical a 320×568, 360×640 y 390×844 (`scrollHeight=clientHeight`). Filtros en popover 2×3 muestran sus cinco opciones a 320 px sin scroll de página horizontal/vertical; seleccionar opción cierra popover. CTA y paginación visibles. `gpt-6-luna` encontró P2 en filtros; corregido y revisión confirmó lo demás. Sin capturas con datos personales en repo. |
 | **3. Revisión de orden** | Resumen de contexto de la orden; mapa y datos secundarios quedan en vistas separadas. | Los cinco datos prioritarios se entienden de un vistazo; prueba de apertura y revisión ≤3 s desde Jornada cargada, también con datos locales. |
 | **4. Captura segura sin scroll** | Flujo por pasos para lectura, GPS, evidencia, excepciones y revisión final; restauración de borrador. | Ningún paso tiene scroll vertical ni control crítico oculto con teclado/área segura; borrador sobrevive recarga; autorización incierta bloquea corte; falla de persistencia no permite avanzar como éxito. |
 | **5. Admin y revisión integrada** | Pulido Admin y recorrido conjunto; revisión de mapa, sincronización y vistas técnicas secundarias. | Se preservan filtros, selección múltiple y asignación grupal; confirmación de asignación ≤3 s bajo el contexto definido; experiencia técnica completa validada sin scroll vertical y coherente entre roles. |
@@ -121,5 +121,6 @@ Cada fase se entrega como vista funcional ejecutable en la aplicación y evidenc
 
 ## Estado y siguiente paso
 
-**Estado actual:** Fase 2 en correcciones; revisión visual y funcional de `gpt-6-luna` pendiente antes de avanzar. No se marcan fases 2–5 completas.
-**Siguiente paso:** completar correcciones de Fase 2 y revisión de `gpt-6-luna`; luego avanzar autónomamente según protocolo. El usuario puede inspeccionar la entrega en cualquier momento.
+**Estado actual:** Fase 2 cerrada; Fase 3 iniciada. Fase 1 conserva QA visual independiente pendiente; revisión integrada final podrá cubrirla. Fase 3 sigue abierta.
+**Evidencia Fase 2:** código asociado a commit `cbee456`. Suite previa: `npm test -- --run`, 17 archivos/143 pruebas; build aprobado. Tras último ajuste `aria-label` y `min-height:44`: UI 14/14 y build aprobados. No consta suite total posterior a ese ajuste. Revisión en browser local autenticado confirmó medidas de viewport indicadas arriba; no se guardaron capturas con datos personales en repo.
+**Siguiente paso:** completar y verificar Fase 3 según criterios; no declarar terminada hasta reunir evidencia y revisión requeridas. El usuario puede inspeccionar la entrega en cualquier momento.

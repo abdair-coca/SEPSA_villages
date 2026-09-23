@@ -1,6 +1,6 @@
 # Tareas 007: estandarización UX con prioridad en Técnico móvil
 
-**Estado:** Fase 2 en correcciones; `gpt-6-luna` revisa visual y funcionalmente antes de avanzar. Usuario puede inspeccionar cada entrega; aceptación no es gate. Fases 2–5 siguen sin marcarse completas.
+**Estado:** Fase 2 cerrada; Fase 3 iniciada. `gpt-6-luna` revisó Fase 2, halló P2 de filtros ya corregido y confirmó lo demás. Usuario puede inspeccionar; aceptación no es gate.
 
 Plan maestro: [`plan.md`](plan.md). Fuente de alcance: [`spec.md`](spec.md). Referencia visual: [`docs/design.md`](../../design.md).
 
@@ -12,7 +12,7 @@ Las casillas marcadas son trabajo completado; las pendientes siguen abiertas. Ag
 - [x] **1.2** Reutilizar jerarquía, paneles y acciones primarias comunes; unificar la geometría de etiquetas de estado y reducir repeticiones. En Admin, la fila seleccionada cede el estado a la ficha abierta.
 - [ ] **1.3** **QA visual final del usuario:** inspeccionar Admin y Técnico en el navegador y confirmar que la jerarquía, los estados y la paleta corresponden a lo esperado. La revisión preliminar del navegador fue a 300×649 CSS px; el contenedor no permitió validar 320×568, 360×640 y 390×844. No se guardan capturas con datos de clientes en el repositorio.
 - [x] **1.4** **QA funcional:** Técnico recorrió orden siguiente/anterior y detalle. Admin probó búsqueda (28→11 coincidencias), filtro de área, selección individual y selección de dos suministros; se abrió y canceló el modal antes de confirmar creación/asignación. No se ejecutó ninguna operación de negocio sobre los datos cargados.
-- [ ] **1.5** Reunir evidencia, resultados y defectos conocidos; revisión visual/funcional `gpt-6-luna`. Corregir hallazgos de esta fase antes de avanzar. Usuario puede inspeccionar entrega.
+- [ ] **1.5** Reunir evidencia, resultados y defectos conocidos; revisión visual/funcional `gpt-6-luna`. Corregir hallazgos de esta fase antes de avanzar. Usuario puede inspeccionar entrega. **QA visual independiente de Fase 1 sigue pendiente**; integración final puede cubrirla.
 
 ### Evidencia y límites de la Fase 1
 
@@ -25,18 +25,18 @@ Las casillas marcadas son trabajo completado; las pendientes siguen abiertas. Ag
 
 - [x] **2.1** Reordenar Jornada para priorizar una orden y una acción principal; conservar el acceso existente a mapa, sincronización, incidencias y detalle. La cola tiene acceso directo móvil; la actividad continúa disponible en su panel plegable.
 - [x] **2.2** Acotar la navegación/paginación sin omitir ni reordenar órdenes; conservar búsqueda, filtros y cobertura total. La Jornada ordena por prioridad existente; Mis órdenes usa una tarjeta por página en móvil y cinco en escritorio.
-- [ ] **2.3** **QA visual:** agente inspecciona Jornada con navegador en retrato 320×568, 360×640 y 390×844; comprobar safe areas, scroll/recortes, acción primaria y estado de conexión. `gpt-6-luna` revisa evidencia.
+- [x] **2.3** **QA visual:** browser local autenticado. Jornada y Mis órdenes sin scroll vertical en retrato 320×568, 360×640 y 390×844 (`scrollHeight=clientHeight`). Filtros popover 2×3 muestran cinco opciones en 320 px, sin scroll horizontal/vertical de página; selección cierra popover. CTA y paginación visibles. `gpt-6-luna` encontró P2 de filtros, corregido; reviewer confirmó lo demás. No guardar capturas con datos personales en repo.
 - [x] **2.4** **QA funcional automatizado:** 17 archivos/143 pruebas; se verifica prioridad, recorrido desde primera hasta última sin omitir órdenes, filtros/paginación y acceso offline con operación pendiente. Build de producción aprobado. No se modificaron datos persistentes del usuario.
-- [ ] **2.5** Reunir evidencia visual/funcional y límites; `gpt-6-luna` revisa. Corregir hallazgos de Fase 2 antes de avanzar. Usuario puede inspeccionar entrega.
+- [x] **2.5** Reunir evidencia visual/funcional y límites; `gpt-6-luna` revisó, se corrigió hallazgo P2 y confirmó lo demás. Fase 2 cerrada; avanzar a Fase 3 sin gate humano.
 
 ### Evidencia y límites de la Fase 2
 
 - Jornada móvil tiene una acción principal «Abrir orden»; incidencias permanecen como acción secundaria y el mapa está disponible en navegación. La navegación «Pendientes» abre la cola y muestra indicador cuando hay operaciones pendientes; no se bloquea la operación local offline.
 - En móvil la bandeja muestra una orden por página; escritorio mantiene cinco. La búsqueda, los filtros y la secuencia de órdenes se conservan.
 - `npm test -- --run` — 17 archivos, 143 pruebas aprobadas. `npm run build` — aprobado. `git diff --check` — aprobado.
-- **Pendiente:** correcciones de Fase 2 y revisión visual/funcional `gpt-6-luna` en 320×568, 360×640 y 390×844. No se adjuntan capturas ni se afirma ausencia de scroll medida.
+- Evidencia asociada a commit `cbee456`. Suite previa: `npm test -- --run` — 17 archivos/143 pruebas; build aprobado. Tras cambio final `aria-label` y `min-height:44`: UI 14/14 y build aprobados; suite total no repetida tras ese cambio.
 
-## Fase 3 — Revisión compacta de orden
+## Fase 3 — Revisión compacta de orden (iniciada)
 
 - [ ] **3.1** Implementar resumen con cliente, cuenta/medidor, dirección, deuda y estado; mostrar ausencias como ausencias, nunca inventar valores.
 - [ ] **3.2** Separar mapa y detalle secundario del resumen; verificar que siguen accesibles y no desplazan datos prioritarios.
