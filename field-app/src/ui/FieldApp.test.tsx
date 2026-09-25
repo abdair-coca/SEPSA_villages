@@ -6,7 +6,7 @@ import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, Mock
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
 import type { SyncItem } from "../ports";
-import { adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, CutCompletionDialog, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import { ActionCompletionDialog, adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -77,16 +77,25 @@ describe("capture wizard QA recovery", () => {
     expect(markup).toContain("medidor.jpg");
   });
 
-  it("distinguishes confirmed, pending, and uncertain cut completion accessibly", () => {
-    const confirmed = renderToStaticMarkup(<CutCompletionDialog outcome="confirmed" onDismiss={() => undefined} />).toLocaleLowerCase();
-    const pending = renderToStaticMarkup(<CutCompletionDialog outcome="pending" onDismiss={() => undefined} />).toLocaleLowerCase();
-    const review = renderToStaticMarkup(<CutCompletionDialog outcome="review" onDismiss={() => undefined} />).toLocaleLowerCase();
+  it("distinguishes confirmed, saved, blocked, and uncertain completion accessibly", () => {
+    const confirmed = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "CUT", outcome: "confirmed", localSaved: true, operationId: "cut-1", syncStatus: "synced" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const saved = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "CUT", outcome: "saved", localSaved: true, operationId: "cut-2", syncStatus: "pending" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const blocked = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "VISIT", outcome: "blocked", localSaved: true, operationId: "visit-1", syncStatus: "pending" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const blockedAndSynced = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "VISIT", outcome: "blocked", localSaved: true, operationId: "visit-2", syncStatus: "synced" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const review = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "CUT", outcome: "review", localSaved: true, operationId: "cut-3", syncStatus: "failed" }} onDismiss={() => undefined} />).toLocaleLowerCase();
     expect(confirmed).toContain('role="dialog"');
     expect(confirmed).toContain("corte confirmado");
     expect(confirmed).toContain(">listo</button>");
-    expect(pending).toContain("pendiente de confirmación del servidor");
-    expect(pending).toContain("no repita la acción");
-    expect(review).toContain("revisión humana requerida");
+    expect(confirmed).toContain("cut-completion__icon");
+    expect(saved).toContain("datos del corte guardados");
+    expect(saved).toContain("servidor todavía no la confirmó");
+    expect(saved).toContain("cut-completion__icon");
+    expect(blocked).toContain("visita guardada");
+    expect(blocked).toContain("el corte no se ejecutó");
+    expect(blockedAndSynced).toContain("visita confirmada");
+    expect(blockedAndSynced).toContain("fueron confirmados por el servidor");
+    expect(blockedAndSynced).toContain("el corte no se ejecutó");
+    expect(review).toContain("se requiere revisión humana");
     expect(review).toContain("no repita la acción");
   });
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { ActivityEntry, AppMessage, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
+import type { ActionResult, ActivityEntry, AppMessage, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
 import type { CaptureDraftContent } from "../ports/repository";
 import { selectVisibleOrders } from "../app/index";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
@@ -765,7 +765,7 @@ function OrderDetail({
   onBack: () => void;
 }) {
   const [draft, setDraft] = useState<ActionKind | null>(initialAction === "VISIT" && !isManualVisitAllowed(order) ? null : initialAction ?? null);
-  const [cutCompletion, setCutCompletion] = useState<"confirmed" | "pending" | "review">();
+  const [actionCompletion, setActionCompletion] = useState<ActionResult>();
   const [mobileView, setMobileView] = useState<OrderReviewView>("review");
   const [kardexIndex, setKardexIndex] = useState(0);
   const [detailsPageIndex, setDetailsPageIndex] = useState(0);
@@ -923,14 +923,13 @@ function OrderDetail({
           onSubmit={async (input) => {
             let completed: boolean;
             if (draft === "VISIT") {
-              await store.registerVisit(order.orderId, input);
-              completed = true;
+              const result = await store.registerVisit(order.orderId, input);
+              setActionCompletion(result);
+              completed = result.localSaved;
             } else if (draft === "CUT") {
-              const durable = await store.executeCut(order.orderId, input);
-              const finalOrder = store.getSnapshot().orders.find((candidate) => candidate.orderId === order.orderId);
-              const outcome = cutCompletionOutcome(durable, finalOrder);
-              if (outcome) setCutCompletion(outcome);
-              completed = Boolean(outcome);
+              const result = await store.executeCut(order.orderId, input);
+              setActionCompletion(result);
+              completed = result.localSaved;
             } else {
               completed = await store.executeReconnection(order.orderId, input);
             }
@@ -939,18 +938,41 @@ function OrderDetail({
           }}
         />
       ) : null}
-      {cutCompletion ? <CutCompletionDialog outcome={cutCompletion} onDismiss={() => setCutCompletion(undefined)} /> : null}
+      {actionCompletion ? <ActionCompletionDialog result={actionCompletion} onDismiss={() => setActionCompletion(undefined)} /> : null}
     </section>
   );
 }
 
-export function CutCompletionDialog({ outcome, onDismiss }: { outcome: "confirmed" | "pending" | "review"; onDismiss: () => void }) {
-  const content = {
-    confirmed: { title: "Corte confirmado", message: "La orden figura como ejecutada y confirmada." },
-    pending: { title: "Corte guardado", message: "Intención guardada en este dispositivo. Ejecución pendiente de confirmación del servidor. No repita la acción." },
-    review: { title: "Resultado incierto", message: "Revisión humana requerida. No repita la acción." },
-  }[outcome];
-  return <div className="cut-completion-backdrop"><section className={`cut-completion cut-completion--${outcome}`} role="dialog" aria-modal="true" aria-labelledby="cut-completion-title" aria-describedby="cut-completion-message"><h2 id="cut-completion-title">{content.title}</h2><p id="cut-completion-message">{content.message}</p><button type="button" className="primary-action" onClick={onDismiss}>Listo</button></section></div>;
+export function ActionCompletionDialog({ result, onDismiss }: { result: ActionResult; onDismiss: () => void }) {
+  const content = completionDialogContent(result);
+  const showSuccessIcon = result.outcome !== "review";
+  return (
+    <div className="cut-completion-backdrop">
+      <section className={`cut-completion cut-completion--${result.outcome}`} role="dialog" aria-modal="true" aria-labelledby="cut-completion-title" aria-describedby="cut-completion-message">
+        <div className="cut-completion__icon" aria-hidden="true">{showSuccessIcon ? <IconCheckCircle /> : <IconAlertTriangle />}</div>
+        <h2 id="cut-completion-title">{content.title}</h2>
+        <p id="cut-completion-message">{content.message}</p>
+        <button type="button" className="primary-action" onClick={onDismiss}>Listo</button>
+      </section>
+    </div>
+  );
+}
+
+function completionDialogContent(result: ActionResult): { title: string; message: string } {
+  if (result.outcome === "review") return { title: "Resultado incierto", message: "Los datos siguen guardados, pero se requiere revisión humana. No repita la acción." };
+  if (result.requestedAction === "CUT" && result.recordedAction === "VISIT") {
+    return result.syncStatus === "synced"
+      ? { title: "Visita confirmada", message: "La visita y los datos capturados quedaron guardados y fueron confirmados por el servidor. El corte no se ejecutó porque requiere autorización online." }
+      : { title: "Visita guardada", message: "La visita y los datos capturados quedaron guardados en este dispositivo. El corte no se ejecutó porque requiere autorización online. Se enviarán automáticamente cuando haya conexión." };
+  }
+  if (result.recordedAction === "VISIT") {
+    return result.outcome === "confirmed"
+      ? { title: "Visita confirmada", message: "La visita quedó guardada y fue confirmada por el servidor." }
+      : { title: "Visita guardada", message: "La visita quedó guardada en este dispositivo y se subirá automáticamente cuando haya conexión." };
+  }
+  if (result.outcome === "confirmed") return { title: "Corte confirmado", message: "El corte quedó guardado y confirmado por el servidor." };
+  if (result.outcome === "blocked") return { title: "Corte no ejecutado", message: "El corte fue bloqueado por una validación externa. Los datos quedaron guardados y no debe repetir la acción." };
+  return { title: "Datos del corte guardados", message: "La información quedó guardada en este dispositivo. El servidor todavía no la confirmó. No repita la acción." };
 }
 
 export function cutCompletionOutcome(durable: boolean, order?: WorkOrder): "confirmed" | "pending" | "review" | undefined {

@@ -4,6 +4,7 @@ import {
   executeReconnection as runReconnection,
   SyncEngine,
   type CutProcessResult,
+  type OfflineVisitResult,
   type ReconnectionResult,
 } from "../application";
 import { DomainError, generateOperationId, type EvidenceReference, type ConnectivityMode, type FieldCapture, type WorkOrder, type WorkPackage } from "../domain";
@@ -36,6 +37,19 @@ export interface AppMessage {
   tone: "success" | "info" | "warning" | "error";
   text: string;
   transient?: boolean;
+}
+
+export type ActionResultOutcome = "confirmed" | "saved" | "blocked" | "review";
+
+export interface ActionResult {
+  requestedAction: ActionKind;
+  recordedAction: SyncItem["action"];
+  outcome: ActionResultOutcome;
+  localSaved: boolean;
+  operationId?: string;
+  syncStatus?: SyncItem["status"];
+  physicalStatus?: WorkOrder["physicalStatus"];
+  reason?: string;
 }
 
 export interface AppState {
@@ -88,8 +102,8 @@ export interface AppStore {
   setMode(mode: ConnectivityMode): void;
   loadCaptureDraft(orderId: string, action: ActionKind): Promise<CaptureDraftContent | undefined>;
   saveCaptureDraft(orderId: string, action: ActionKind, content: CaptureDraftContent): Promise<void>;
-  registerVisit(orderId: string, input?: ActionInput): Promise<void>;
-  executeCut(orderId: string, input?: ActionInput): Promise<boolean>;
+  registerVisit(orderId: string, input?: ActionInput): Promise<ActionResult>;
+  executeCut(orderId: string, input?: ActionInput): Promise<ActionResult>;
   executeReconnection(orderId: string, input?: ActionInput): Promise<boolean>;
   sync(): Promise<void>;
 }
@@ -233,11 +247,11 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     async registerVisit(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
-      await runWithBusy("VISIT", async () => {
+      const result = await runWithBusy("VISIT", async (): Promise<OfflineVisitResult> => {
         const operationId = generateOperationId("visit");
         const timestamp = now();
         const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
-        const result = await executeOfflineVisit({
+        const visitResult = await executeOfflineVisit({
           repository: dependencies.repository,
           order,
           operationId,
@@ -250,16 +264,18 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           fieldCapture: input.fieldCapture,
           now: timestamp,
         });
-        await finishDraftIfCommitted(orderId, "VISIT", result.visit.operationId, input);
+        await finishDraftIfCommitted(orderId, "VISIT", visitResult.visit.operationId, input);
         const refreshed = await refreshAfterCommit();
-        if (refreshed) update({ message: { tone: result.outcome === "duplicate" ? "info" : "success", text: "Visita guardada en el dispositivo, sin afirmar ejecución física." } });
+        if (refreshed) update({ message: { tone: visitResult.outcome === "duplicate" ? "info" : "success", text: "Visita guardada en el dispositivo, sin afirmar ejecución física." } });
+        return visitResult;
       });
       await syncAfterLocalAction();
+      return actionResultForVisit(result, snapshot);
     },
     async executeCut(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
-      const completed = await runWithBusy("CUT", async () => {
+      const result = await runWithBusy("CUT", async (): Promise<CutProcessResult> => {
         const operationId = generateOperationId("cut");
         const timestamp = now();
         const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
@@ -278,12 +294,15 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
         });
         const committed = result.outcome === "executed" || result.outcome === "pending_sync" || (result.outcome === "duplicate" && result.operation.status === "CONFIRMED");
         if (committed) await finishDraftIfCommitted(orderId, "CUT", result.operation.operationId, input);
+        if (result.outcome === "visit_recorded") {
+          await finishDraftIfCommitted(orderId, "CUT", result.visit.operationId, input, { recordedAction: "VISIT", cleanupDraft: false });
+        }
         const refreshed = await refreshAfterCommit();
         if (refreshed) update({ message: messageForCut(result, snapshot.mode) });
-        return committed;
+        return result;
       });
       await syncAfterLocalAction();
-      return completed;
+      return actionResultForCut(result, snapshot);
     },
     async executeReconnection(orderId, input = {}) {
       await ensureReady();
@@ -341,20 +360,27 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     return true;
   }
 
-  async function finishDraftIfCommitted(orderId: string, action: ActionKind, operationId: string, input: ActionInput): Promise<void> {
+  async function finishDraftIfCommitted(
+    orderId: string,
+    action: ActionKind,
+    operationId: string,
+    input: ActionInput,
+    options: { recordedAction?: SyncItem["action"]; cleanupDraft?: boolean } = {},
+  ): Promise<void> {
     const record = await dependencies.repository.getRecord(operationId);
     const items = await dependencies.repository.listSyncItems();
-    const queued = items.some((item) => item.operationId === operationId && item.orderId === orderId && item.action === action);
+    const recordedAction = options.recordedAction ?? action;
+    const queued = items.some((item) => item.operationId === operationId && item.orderId === orderId && item.action === recordedAction);
     const evidenceExpected = Boolean(input.file || input.evidence);
     const confirmed = record?.kind === "VISIT"
-      ? action === "VISIT"
+      ? recordedAction === "VISIT"
       : Boolean(record && record.kind === action && record.status === "CONFIRMED" && record.physicalStatus === "CONFIRMED");
-    const durableCutIntent = action === "CUT" && record?.kind === "CUT" && record.status === "INTENT_PERSISTED" && record.physicalStatus === "CLAIMED";
+    const durableCutIntent = recordedAction === "CUT" && record?.kind === "CUT" && record.status === "INTENT_PERSISTED" && record.physicalStatus === "CLAIMED";
     if (!record || !queued || record.orderId !== orderId || record.technicianId !== technicianId || record.deviceId !== deviceId || (!confirmed && !durableCutIntent) || (evidenceExpected && !record.evidenceRefs.length) || !(await evidenceIsDurable(record))) {
       throw new Error("No pudimos verificar el guardado local. Revise pendientes antes de repetir la acción.");
     }
     // Draft cleanup is best effort after durable operation, evidence and queue verification.
-    await dependencies.repository.deleteCaptureDraft(draftKey(orderId, action)).catch(() => undefined);
+    if (options.cleanupDraft !== false) await dependencies.repository.deleteCaptureDraft(draftKey(orderId, action)).catch(() => undefined);
   }
 
   async function refreshAfterCommit(): Promise<boolean> {
@@ -418,6 +444,55 @@ export function formatSyncMessage(synced: number): string {
   return `${count} ${count === 1 ? "operación sincronizada" : "operaciones sincronizadas"}`;
 }
 
+function actionResultForVisit(result: OfflineVisitResult, state: AppState): ActionResult {
+  const record = result.visit;
+  const item = state.syncItems.find((candidate) => candidate.operationId === record.operationId);
+  const syncStatus = item?.status ?? record.syncStatus;
+  const outcome: ActionResultOutcome = syncStatus === "synced"
+    ? "confirmed"
+    : item?.manualReview
+      ? "review"
+      : "saved";
+  return {
+    requestedAction: "VISIT",
+    recordedAction: "VISIT",
+    outcome,
+    localSaved: true,
+    operationId: record.operationId,
+    syncStatus,
+    reason: record.reason,
+  };
+}
+
+function actionResultForCut(result: CutProcessResult, state: AppState): ActionResult {
+  const record = "visit" in result ? result.visit : result.operation;
+  const operationId = record?.operationId;
+  const item = operationId ? state.syncItems.find((candidate) => candidate.operationId === operationId) : undefined;
+  const syncStatus = item?.status ?? record?.syncStatus;
+  const order = state.orders.find((candidate) => candidate.orderId === record?.orderId);
+  const recordedAction = record?.kind === "VISIT" ? "VISIT" : "CUT";
+  const localSaved = Boolean(record);
+  const serverConfirmed = recordedAction === "CUT"
+    && syncStatus === "synced"
+    && order?.status === "EJECUTADO"
+    && order.physicalStatus === "CONFIRMED";
+  let outcome: ActionResultOutcome;
+  if (serverConfirmed) outcome = "confirmed";
+  else if (result.outcome === "physical_unknown" || result.outcome === "recovery_required" || item?.manualReview || (recordedAction === "CUT" && item?.uncertain && syncStatus === "failed")) outcome = "review";
+  else if (result.outcome === "visit_recorded" || result.outcome === "blocked") outcome = "blocked";
+  else outcome = "saved";
+  return {
+    requestedAction: "CUT",
+    recordedAction,
+    outcome,
+    localSaved,
+    operationId,
+    syncStatus,
+    physicalStatus: order?.physicalStatus ?? (record && record.kind !== "VISIT" ? record.physicalStatus : undefined),
+    reason: result.outcome === "blocked" ? result.reason : record && "reason" in record ? record.reason : undefined,
+  };
+}
+
 export function createUnavailableAppStore(): AppStore {
   const snapshot: AppState = { status: "error", error: "IndexedDB no está disponible en este dispositivo.", orders: [], syncItems: [], activity: [], selectedOrderId: null, query: "", filter: "ALL", tab: "home", mode: "offline" };
   return {
@@ -433,8 +508,8 @@ export function createUnavailableAppStore(): AppStore {
     setMode: () => undefined,
     loadCaptureDraft: async () => undefined,
     saveCaptureDraft: async () => { throw new Error("IndexedDB no está disponible en este dispositivo."); },
-    registerVisit: async () => undefined,
-    executeCut: async () => false,
+    registerVisit: async () => ({ requestedAction: "VISIT", recordedAction: "VISIT", outcome: "review", localSaved: false }),
+    executeCut: async () => ({ requestedAction: "CUT", recordedAction: "CUT", outcome: "review", localSaved: false }),
     executeReconnection: async () => false,
     sync: async () => undefined,
   };

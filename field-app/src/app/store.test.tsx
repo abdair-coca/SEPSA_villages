@@ -84,7 +84,13 @@ describe("field app store", () => {
     await store.init();
     store.setMode("offline");
     await store.saveCaptureDraft("ORD-24017", "CUT", { reading: { value: 123.45 }, exceptionReason: "Sin foto" });
-    expect(await store.executeCut("ORD-24017", { exceptionReason: "Sin foto", fieldCapture: validFieldCapture() })).toBe(false);
+    await expect(store.executeCut("ORD-24017", { exceptionReason: "Sin foto", fieldCapture: validFieldCapture() })).resolves.toMatchObject({
+      requestedAction: "CUT",
+      recordedAction: "VISIT",
+      outcome: "blocked",
+      localSaved: true,
+      syncStatus: "pending",
+    });
     expect(await store.loadCaptureDraft("ORD-24017", "CUT")).toMatchObject({ reading: { value: 123.45 } });
     expect(store.getSnapshot().syncItems).toMatchObject([{ action: "VISIT", status: "pending" }]);
     expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")?.status).toBe("GENERADO");
@@ -94,7 +100,13 @@ describe("field app store", () => {
     const { store } = setup("store-draft-no-grant");
     await store.init();
     await store.saveCaptureDraft("ORD-24017", "CUT", { reading: { value: 123.45 } });
-    expect(await store.executeCut("ORD-24017", { exceptionReason: "Sin foto", fieldCapture: validFieldCapture() })).toBe(false);
+    await expect(store.executeCut("ORD-24017", { exceptionReason: "Sin foto", fieldCapture: validFieldCapture() })).resolves.toMatchObject({
+      requestedAction: "CUT",
+      recordedAction: "VISIT",
+      outcome: "blocked",
+      localSaved: true,
+      syncStatus: "synced",
+    });
     expect(await store.loadCaptureDraft("ORD-24017", "CUT")).toMatchObject({ reading: { value: 123.45 } });
     expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")?.status).toBe("GENERADO");
   });
@@ -120,7 +132,13 @@ describe("field app store", () => {
     expect(store.getSnapshot().syncItems).toMatchObject([expect.objectContaining({ action: "CUT", status: "synced" })]);
     const item = store.getSnapshot().syncItems.find((candidate) => candidate.action === "CUT");
     expect(item && await repository.getRecord(item.operationId)).toMatchObject({ status: "CONFIRMED" });
-    expect(completed).toBe(true);
+    expect(completed).toMatchObject({
+      requestedAction: "CUT",
+      recordedAction: "CUT",
+      outcome: "confirmed",
+      localSaved: true,
+      syncStatus: "synced",
+    });
     expect(await store.loadCaptureDraft("ORD-24017", "CUT")).toBeUndefined();
   });
 
@@ -240,6 +258,20 @@ describe("field app store", () => {
     expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")).toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED" });
     expect(store.getSnapshot().syncItems).toMatchObject([{ action: "CUT", status: "synced" }]);
     expect(transport.sent).toHaveLength(1);
+  });
+
+  it("keeps an online cut locally saved when the server does not acknowledge it", async () => {
+    const { store, transport, repository } = setup("store-online-cut-sync-failure", true);
+    await store.init();
+    transport.send = async () => { throw new Error("Servidor temporalmente no disponible."); };
+
+    const result = await store.executeCut("ORD-24017", { exceptionReason: "Referencia de demostración.", fieldCapture: validFieldCapture() });
+
+    expect(result).toMatchObject({ requestedAction: "CUT", recordedAction: "CUT", outcome: "review", localSaved: true, syncStatus: "failed" });
+    expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")).toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED" });
+    const item = store.getSnapshot().syncItems.find((candidate) => candidate.action === "CUT");
+    expect(item).toMatchObject({ status: "failed", uncertain: true });
+    expect(item && await repository.getRecord(item.operationId)).toMatchObject({ syncStatus: "failed" });
   });
 
   it("rejects manual visit after a confirmed cut", async () => {
