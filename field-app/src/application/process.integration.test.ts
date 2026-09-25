@@ -4,6 +4,8 @@ import { DomainError, type OperationRecord, type WorkOrder, type WorkPackage } f
 import { ResponseLostError, TimeoutError } from "../ports/authorization";
 import type {
   AtomicOperationChange,
+  CaptureDraft,
+  CaptureDraftKey,
   ClaimResult,
   LocalRepository,
   StoredRecord,
@@ -27,6 +29,19 @@ class MemoryRepository implements LocalRepository {
   readonly updates: AtomicOperationChange[] = [];
   private readonly records = new Map<string, StoredRecord>();
   private readonly orders = new Map<string, WorkOrder>();
+  private readonly drafts = new Map<string, CaptureDraft>();
+
+  async getCaptureDraft(key: CaptureDraftKey) {
+    return this.drafts.get(JSON.stringify([key.technicianId, key.deviceId, key.orderId, key.action]));
+  }
+
+  async saveCaptureDraft(draft: CaptureDraft) {
+    this.drafts.set(JSON.stringify([draft.technicianId, draft.deviceId, draft.orderId, draft.action]), draft);
+  }
+
+  async deleteCaptureDraft(key: CaptureDraftKey) {
+    this.drafts.delete(JSON.stringify([key.technicianId, key.deviceId, key.orderId, key.action]));
+  }
 
   seed(record: StoredRecord, currentOrder?: WorkOrder) {
     this.records.set(record.operationId, record);

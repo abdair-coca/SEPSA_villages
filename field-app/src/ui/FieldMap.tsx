@@ -198,7 +198,8 @@ export function FieldMap({
 
         const markerColor = isCancelled ? "#64748b" : isExecuted ? "#16a34a" : "#e85d04";
 
-        const debtBs = order.context?.debtCents ? (order.context.debtCents / 100).toFixed(2) : "0.00";
+        const debtCents = order.context?.debtCents;
+        const debt = typeof debtCents === "number" ? `Bs ${(debtCents / 100).toFixed(2)}` : "Dato no disponible";
         const account = order.context?.accountId || order.accountId || "S/C";
         const meter = order.context?.meterId || "S/M";
         const customer = order.context?.customerName || order.orderId;
@@ -219,7 +220,7 @@ export function FieldMap({
           <strong>Cuenta ${account}</strong>
           <span>${customer}</span>
           <span>Medidor ${meter}</span>
-          <span>Deuda: Bs ${debtBs} · <strong>${order.status}</strong></span>
+          <span>Deuda: ${debt} · <strong>${order.status}</strong></span>
         `;
 
         const viewBtn = document.createElement("button");

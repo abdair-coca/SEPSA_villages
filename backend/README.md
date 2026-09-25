@@ -32,6 +32,14 @@ $env:DATABASE_URL="postgres://pilot_provisional:pilot_provisional@localhost:1543
 python scripts/import-debtors-xlsx.py "C:\Users\abdai\Downloads\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --dry-run
 ```
 
+For the deployed pilot, the reviewed `EXCEL_20260922` snapshot is available as an idempotent database migration. The Docker image runs this migration before starting the API, so the Free Render service does not require Shell access:
+
+```text
+node migrations/20260923-load-excel-20260922.mjs
+```
+
+The migration loads 99 debtor rows and creates 10 eligible `CUT` orders (`DEUDA > 0` and `MESES >= 3`) assigned to `jhonny.moya`. It preserves existing pilot orders, sessions, synchronization records, and audit history. It is protected by a PostgreSQL advisory lock and deterministic identifiers, so rerunning it does not duplicate the dataset or its orders. In the Docker image it runs automatically before the API starts; `npm run pilot:migrate:field-test` remains available for a trusted manual run.
+
 After reviewing the preview, replace only `PILOT_PROVISIONAL` operational data and create eligible `CUT` orders for `jhonny.moya`:
 
 ```powershell

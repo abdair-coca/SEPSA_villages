@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ActivityEntry, AppMessage, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
+import type { CaptureDraftContent } from "../ports/repository";
 import { selectVisibleOrders } from "../app/index";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
@@ -18,12 +19,14 @@ export interface FieldAppProps {
   onLogout?: () => void;
 }
 
-type NavigationTab = "home" | "orders" | "map";
+type NavigationTab = "home" | "orders" | "map" | "queue";
+type OrderReviewView = "review" | "details" | "map" | "activity";
 
 const navigationItems: Array<{ tab: NavigationTab; label: string; icon: ReactNode }> = [
   { tab: "home", label: "Inicio", icon: <IconRoute /> },
   { tab: "orders", label: "Mis órdenes", icon: <IconDocument /> },
   { tab: "map", label: "Mapa", icon: <IconMap /> },
+  { tab: "queue", label: "Pendientes", icon: <IconRefresh /> },
 ];
 
 export function FieldApp({
@@ -206,7 +209,7 @@ function Header({
   onLogout?: () => void;
 }) {
   const modeLabel =
-    state.mode === "online" ? "Conectada" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
+    state.mode === "online" ? "Red disponible" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
 
   return (
     <header className="app-header">
@@ -275,6 +278,7 @@ function Workbench({
   const visibleOrders = selectVisibleOrders(state);
   const selectedOrder = state.orders.find((order) => order.orderId === state.selectedOrderId);
   const [pendingAction, setPendingAction] = useState<{ orderId: string; kind: ActionKind } | null>(null);
+  const [returnToJourney, setReturnToJourney] = useState(false);
 
   const openIncident = (orderId: string) => {
     const order = state.orders.find((candidate) => candidate.orderId === orderId);
@@ -286,6 +290,7 @@ function Workbench({
   const prioritizedOrders = sortOrdersForNext(state.orders);
   const navigate = (tab: "home" | "orders" | "map" | "queue") => {
     setPendingAction(null);
+    setReturnToJourney(false);
     store.selectOrder(null);
     store.setTab(tab);
   };
@@ -298,16 +303,16 @@ function Workbench({
         enableReconnection={enableReconnection}
         technicianName={technicianName}
         initialAction={pendingAction?.orderId === selectedOrder.orderId ? pendingAction.kind : null}
-        onBack={() => { setPendingAction(null); store.selectOrder(null); }}
+        onBack={() => { setPendingAction(null); store.selectOrder(null); if (returnToJourney) store.setTab("home"); setReturnToJourney(false); }}
       />
     ) : (
-      <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} />
+      <OrdersPanel state={state} orders={visibleOrders} store={store} onRefreshAssigned={onRefreshAssigned} onOpenOrder={() => setReturnToJourney(false)} />
     )
     : state.tab === "map"
       ? <MapPanel state={state} store={store} />
       : state.tab === "queue"
         ? <QueuePanel state={state} store={store} />
-        : <FieldHome state={state} store={store} orders={prioritizedOrders} onOpenIncident={openIncident} />;
+        : <FieldHome state={state} store={store} orders={prioritizedOrders} onOpenIncident={openIncident} onReviewOrder={() => setReturnToJourney(true)} />;
 
   return (
     <main className="workbench">
@@ -318,9 +323,10 @@ function Workbench({
   );
 }
 
-function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; store: AppStore; orders: WorkOrder[]; onOpenIncident: (orderId: string) => void }) {
+function FieldHome({ state, store, orders, onOpenIncident, onReviewOrder }: { state: AppState; store: AppStore; orders: WorkOrder[]; onOpenIncident: (orderId: string) => void; onReviewOrder: () => void }) {
   const filteredOrders = selectVisibleOrders(state);
-  const focusOrders = state.query.trim() || state.filter !== "ALL" ? sortOrdersForNext(filteredOrders) : orders;
+  const eligibleOrders = state.query.trim() || state.filter !== "ALL" ? filteredOrders : orders;
+  const focusOrders = orderJourneyOrders(eligibleOrders);
   const [focusedOrderId, setFocusedOrderId] = useState<string>();
   const currentOrder = focusOrders.find((order) => order.orderId === focusedOrderId) ?? focusOrders[0];
   const currentIndex = currentOrder ? focusOrders.findIndex((order) => order.orderId === currentOrder.orderId) : -1;
@@ -331,6 +337,7 @@ function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; 
   }, [currentOrder, focusedOrderId]);
 
   const openOrder = (orderId: string) => {
+    onReviewOrder();
     store.setTab("orders");
     store.selectOrder(orderId);
   };
@@ -350,8 +357,8 @@ function FieldHome({ state, store, orders, onOpenIncident }: { state: AppState; 
           mode={state.mode}
           position={currentIndex + 1}
           total={focusOrders.length}
-          onPrevious={() => setFocusedOrderId(focusOrders[currentIndex - 1]?.orderId)}
-          onNext={() => setFocusedOrderId(focusOrders[currentIndex + 1]?.orderId)}
+          onPrevious={() => setFocusedOrderId(adjacentJourneyOrder(focusOrders, currentIndex, -1)?.orderId)}
+          onNext={() => setFocusedOrderId(adjacentJourneyOrder(focusOrders, currentIndex, 1)?.orderId)}
           onOpen={() => openOrder(currentOrder.orderId)}
           onShowMap={() => openMap(currentOrder.orderId)}
           onMarkIncident={() => onOpenIncident(currentOrder.orderId)}
@@ -393,7 +400,7 @@ function HomeSecondaryCards({ state, store }: { state: AppState; store: AppStore
         <p>{pendingItems.length ? "Operaciones guardadas en este dispositivo." : "No hay operaciones pendientes."}</p>
         {pendingItems.length ? <button type="button" className="home-secondary-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>Ver cola completa <span aria-hidden="true">→</span></button> : null}
       </CollapsibleCard>
-      <CollapsibleCard open={activityOpen} onToggle={() => setActivityOpen((value) => !value)} icon={<IconClock />} title="Actividad reciente" meta={`${state.activity.length} eventos`} hint="Sin actividad local registrada.">
+      <CollapsibleCard open={activityOpen} onToggle={() => setActivityOpen((value) => !value)} icon={<IconClock />} title="Actividad reciente" meta={`${state.activity.length} eventos`} hint={state.activity.length ? "Últimos registros de este dispositivo." : "Sin actividad local registrada."}>
         {recentActivity.length ? <div className="home-activity-list">{recentActivity.map((entry) => <button type="button" className="home-activity-item" key={entry.record.operationId} onClick={() => { store.setTab("orders"); store.selectOrder(entry.record.orderId); }}><i /><span><strong>{activityLabel(entry.record.kind)}</strong><small>{formatActivityTime(entry.record.recordedAt)}</small></span></button>)}</div> : <p>Sin actividad local registrada.</p>}
         <button type="button" className="home-secondary-link" onClick={() => setActivityOpen(true)}>Ver todas <span aria-hidden="true">→</span></button>
       </CollapsibleCard>
@@ -413,15 +420,17 @@ function CollapsibleCard({ open, onToggle, icon, title, meta, hint, children }: 
 }
 
 function DesktopNavigation({ activeTab, onNavigate, pending }: { activeTab: AppState["tab"]; onNavigate: (tab: NavigationTab) => void; pending: number }) {
-  return <nav className="desktop-navigation" aria-label="Navegación principal de escritorio"><span className="desktop-navigation__context">Jornada técnica</span><div className="desktop-navigation__items">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "desktop-navigation__item desktop-navigation__item--active" : "desktop-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "orders" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</div></nav>;
+  return <nav className="desktop-navigation" aria-label="Navegación principal de escritorio"><span className="desktop-navigation__context">Jornada técnica</span><div className="desktop-navigation__items">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "desktop-navigation__item desktop-navigation__item--active" : "desktop-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "queue" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</div></nav>;
 }
 
 function BottomNavigation({ activeTab, onNavigate, pending }: { activeTab: AppState["tab"]; onNavigate: (tab: "home" | "orders" | "map" | "queue") => void; pending: number }) {
-  return <nav className="bottom-navigation" aria-label="Navegación principal">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "bottom-navigation__item bottom-navigation__item--active" : "bottom-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "orders" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</nav>;
+  return <nav className="bottom-navigation" aria-label="Navegación principal">{navigationItems.map((item) => <button type="button" key={item.tab} className={activeTab === item.tab ? "bottom-navigation__item bottom-navigation__item--active" : "bottom-navigation__item"} onClick={() => onNavigate(item.tab)} aria-current={activeTab === item.tab ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.tab === "queue" && pending ? <i aria-label={`${pending} operaciones pendientes`} /> : null}</button>)}</nav>;
 }
 
-function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void }) {
-  const ordersPerPage = 5;
+function OrdersPanel({ state, orders, store, onRefreshAssigned, onOpenOrder }: { state: AppState; orders: WorkOrder[]; store: AppStore; onRefreshAssigned?: () => void; onOpenOrder: () => void }) {
+  const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
+  const [filtersOpen, setFiltersOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 760px)").matches);
+  const ordersPerPage = isCompactViewport ? 1 : 5;
   const [ordersPage, setOrdersPage] = useState(1);
   const generatedCount = state.orders.filter((order) => order.status === "GENERADO").length;
   const executedCount = state.orders.filter((order) => order.status === "EJECUTADO").length;
@@ -439,8 +448,21 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned }: { state: AppSt
     { value: "REVIEW", label: "Revisión", count: reviewCount },
   ];
   useEffect(() => { setOrdersPage(1); }, [state.query, state.filter]);
+  useEffect(() => {
+    let previousCompactViewport = window.matchMedia("(max-width: 760px)").matches;
+    const updateViewport = () => {
+      const compactViewport = window.matchMedia("(max-width: 760px)").matches;
+      setIsCompactViewport(compactViewport);
+      if (compactViewport !== previousCompactViewport) setFiltersOpen(!compactViewport);
+      previousCompactViewport = compactViewport;
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
   useEffect(() => { setOrdersPage((page) => Math.min(page, ordersPageCount)); }, [orders.length, ordersPageCount]);
-  return <section className="orders-panel orders-tray" aria-label="Mis órdenes"><div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div><OrderFilters state={state} store={store} filters={filters} /><div className="order-cards-list">{pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => store.selectOrder(order.orderId)} />)}{!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}</div><div className="order-pagination" aria-label="Paginación de órdenes"><span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span><div className="order-pagination__controls"><button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button><span>Página {ordersPage} de {ordersPageCount}</span><button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button></div></div>{!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}</section>;
+  const selectedFilter = filters.find((filter) => filter.value === state.filter)?.label ?? "Todas";
+  return <section className="orders-panel orders-tray" aria-label="Mis órdenes"><div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div><OrderFilters state={state} store={store} filters={filters} compactViewport={isCompactViewport} filtersOpen={filtersOpen} onFiltersOpenChange={setFiltersOpen} selectedFilter={selectedFilter} /><div className="order-cards-list">{pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => { onOpenOrder(); store.selectOrder(order.orderId); }} />)}{!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}</div><div className="order-pagination" aria-label="Paginación de órdenes"><span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span><div className="order-pagination__controls"><button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button><span>Página {ordersPage} de {ordersPageCount}</span><button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button></div></div>{!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}</section>;
 }
 
 function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
@@ -467,7 +489,14 @@ function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
     catch (error) { setMapDownloadError(error instanceof Error ? error.message : "No pudimos descargar el mapa para trabajo offline."); }
     finally { setIsDownloadingMap(false); setDownloadProgress(null); }
   };
-  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools"><div className="map-page__download">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} aria-busy={isDownloadingMap} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}<span className="map-page__download-hint">{isMapCachedState ? "Disponible sin conexión en este dispositivo." : "Guarda esta zona antes de salir a terreno."}</span></div>{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
+  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><CompactNetworkStatus mode={state.mode} /><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools"><div className="map-page__download">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} aria-busy={isDownloadingMap} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}<span className="map-page__download-hint">{isMapCachedState ? "Disponible sin conexión en este dispositivo." : "Guarda esta zona antes de salir a terreno."}</span></div>{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
+}
+
+export function CompactNetworkStatus({ mode }: { mode: ConnectivityMode }) {
+  const label = mode === "offline" ? "Sin conexión" : mode === "weak" ? "Señal débil" : "Red disponible";
+  return <span className={`compact-network-status compact-network-status--${mode}`} role="status">
+    <span className={`network-dot network-dot--${mode}`} aria-hidden="true" />{label}
+  </span>;
 }
 
 function DesktopRightRail({
@@ -580,22 +609,27 @@ function MetricCard({ value, label, tone, icon }: { value: number; label: string
   return <div className={`metric-card metric-card--${tone}`}><span className="metric-card__icon">{icon}</span><span className="metric-card__content"><strong>{value}</strong><span>{label}</span></span></div>;
 }
 
-function OrderFilters({ state, store, filters }: { state: AppState; store: AppStore; filters: Array<{ value: OrderFilter; label: string; count?: number }> }) {
+function OrderFilters({ state, store, filters, compactViewport, filtersOpen, onFiltersOpenChange, selectedFilter }: { state: AppState; store: AppStore; filters: Array<{ value: OrderFilter; label: string; count?: number }>; compactViewport: boolean; filtersOpen: boolean; onFiltersOpenChange: (open: boolean) => void; selectedFilter: string }) {
   return (
     <div className="order-filters">
       <div className="search-bar-wrap">
         <label className="search-field" htmlFor="order-search">
           <IconSearch className="search-field-icon" />
-          <input id="order-search" type="search" value={state.query} onChange={(event) => store.setQuery(event.target.value)} placeholder="Buscar por cuenta, medidor o cliente" />
+          <input id="order-search" type="search" value={state.query} onChange={(event) => store.setQuery(event.target.value)} placeholder="Buscar por cuenta, medidor, cliente, ruta o correlativo" />
         </label>
         {state.query ? <button type="button" className="search-clear-btn" onClick={() => store.setQuery("")} aria-label="Limpiar búsqueda">×</button> : null}
       </div>
-      <div className="filter-row" role="tablist" aria-label="Filtrar órdenes">
-        {filters.map((filter) => {
-          const isActive = state.filter === filter.value;
-          return <button key={filter.value} type="button" role="tab" aria-selected={isActive} className={isActive ? "filter-chip filter-chip--active" : "filter-chip"} onClick={() => store.setFilter(filter.value)}><span>{filter.label}</span>{filter.count !== undefined ? <span className="chip-count">{filter.count}</span> : null}</button>;
-        })}
-      </div>
+      <details className={`order-filter-disclosure ${compactViewport ? "order-filter-disclosure--compact" : ""}`} open={filtersOpen} onToggle={(event) => onFiltersOpenChange(event.currentTarget.open)}>
+        <summary aria-label={`Filtros de órdenes. Filtro activo: ${selectedFilter}`} aria-controls="order-filter-options" aria-expanded={filtersOpen}>
+          <span>Filtros</span><span className="order-filter-disclosure__current">{selectedFilter}</span>
+        </summary>
+        <div className="filter-row" id="order-filter-options" role="group" aria-label="Filtrar órdenes">
+          {filters.map((filter) => {
+            const isActive = state.filter === filter.value;
+            return <button key={filter.value} type="button" aria-label={`${filter.label}${filter.count === undefined ? "" : `: ${filter.count}`}`} aria-pressed={isActive} className={isActive ? "filter-chip filter-chip--active" : "filter-chip"} onClick={() => { store.setFilter(filter.value); onFiltersOpenChange(false); }}><span>{filter.label}</span>{filter.count !== undefined ? <span className="chip-count">{filter.count}</span> : null}</button>;
+          })}
+        </div>
+      </details>
     </div>
   );
 }
@@ -619,11 +653,11 @@ function CurrentOrderCard({ order, orders, mode, position, total, onPrevious, on
       </div>
       <div className="current-order-card__identity">
         <div>
-          <h2>{displayValue(context?.customerName || order.orderId)}</h2>
-          <p>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)}</p>
+          <h2>Cuenta {displayValue(context?.accountId || order.accountId)} · Medidor {displayValue(context?.meterId)}</h2>
+          <p>{displayValue(context?.customerName || order.orderId)}</p>
           <span className="current-order-card__technical">CUC: {displayValue(order.cuc ? shortTechnicalId(order.cuc) : undefined)}</span>
         </div>
-        <span className={`status-badge status-badge--${orderStatusTone(order)}`}>{fieldOrderStatusLabel(order)}</span>
+        <span className={`status-badge order-status-label status-badge--${orderStatusTone(order)}`}>{fieldOrderStatusLabel(order)}</span>
       </div>
       <div className="current-order-card__data-grid">
         <OrderDataRow icon={<IconPin />} label="Dirección" value={context?.address} emphasis />
@@ -641,8 +675,7 @@ function CurrentOrderCard({ order, orders, mode, position, total, onPrevious, on
         <button type="button" className="current-order-card__map-action" onClick={onShowMap}><IconExpand /> Abrir mapa</button>
       </div>
       <div className="current-order-card__actions">
-        <button type="button" className="primary-action" onClick={onOpen} disabled={!canCut}><IconScissors />{canCut ? "Registrar corte" : "Orden sin acción"}<span aria-hidden="true">→</span></button>
-        <button type="button" className="secondary-action" onClick={onOpen}><IconDocument /> Ver detalle</button>
+        <button type="button" className="primary-action" onClick={onOpen}><IconDocument /> Abrir orden<span aria-hidden="true">→</span></button>
         {canCut ? <button type="button" className="tertiary-action" onClick={onMarkIncident}><IconAlertTriangle /> Marcar incidencia</button> : null}
       </div>
     </article>
@@ -665,7 +698,7 @@ function OrderCard({ order, selected, onSelect }: {
   const customer = order.context?.customerName || order.orderId;
   const address = order.context?.address || "Dirección no especificada";
   const route = order.context?.route || "Ruta —";
-  const debt = formatDebt(order.context?.debtCents) ?? "Bs 0.00";
+  const debt = formatDebt(order.context?.debtCents) ?? "Dato no disponible";
   const monthsPending = order.context?.monthsPending;
   const cuc = order.cuc;
 
@@ -682,15 +715,15 @@ function OrderCard({ order, selected, onSelect }: {
           {cuc ? <span className="order-card__cuc">CUC {shortTechnicalId(cuc)}</span> : null}
         </div>
         <div className="order-card__badges">
-          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
+          <span className={`status-badge order-status-label status-badge--${orderStatusTone(order)}`}>
             {fieldOrderStatusLabel(order)}
           </span>
         </div>
       </div>
 
       <div className="order-card__body">
-        <h3 className="order-card__customer">{customer}</h3>
-        <p className="order-card__supply">Cuenta {account} · Medidor {meter}</p>
+        <h3 className="order-card__customer">Cuenta {account} · Medidor {meter}</h3>
+        <p className="order-card__supply">{customer}</p>
         <p className="order-card__address">
           <IconPin className="card-address-icon" /> {address}
         </p>
@@ -732,6 +765,11 @@ function OrderDetail({
   onBack: () => void;
 }) {
   const [draft, setDraft] = useState<ActionKind | null>(initialAction === "VISIT" && !isManualVisitAllowed(order) ? null : initialAction ?? null);
+  const [cutCompletion, setCutCompletion] = useState<"confirmed" | "pending" | "review">();
+  const [mobileView, setMobileView] = useState<OrderReviewView>("review");
+  const [kardexIndex, setKardexIndex] = useState(0);
+  const [detailsPageIndex, setDetailsPageIndex] = useState(0);
+  const [activityPageIndex, setActivityPageIndex] = useState(0);
   const isCancelled = order.status === "ANULADO";
   const canCut = order.status === "GENERADO" && order.physicalStatus === "NONE";
   const canRegisterVisit = isManualVisitAllowed(order);
@@ -740,21 +778,46 @@ function OrderDetail({
     : undefined;
 
   useEffect(() => {
+    setMobileView("review");
+    setKardexIndex(0);
+    setDetailsPageIndex(0);
+    setActivityPageIndex(0);
+  }, [order.orderId]);
+
+  useEffect(() => {
     if (initialAction && (initialAction !== "VISIT" || canRegisterVisit)) setDraft(initialAction);
   }, [canRegisterVisit, initialAction]);
 
   return (
     <section className="detail-panel panel detail-panel--fullscreen" aria-label={`Detalle de ${order.orderId}`}>
+      <MobileOrderReview
+        order={order}
+        mode={state.mode}
+        entries={state.activity.filter((entry) => entry.record.orderId === order.orderId)}
+        view={mobileView}
+        onViewChange={setMobileView}
+        onBack={onBack}
+        canCut={canCut}
+        canRegisterVisit={canRegisterVisit}
+        canReconnect={enableReconnection && order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED"}
+        busy={Boolean(state.busyAction)}
+        onCut={() => setDraft("CUT")}
+        onVisit={() => setDraft("VISIT")}
+        onReconnect={() => setDraft("RECONNECTION")}
+        kardexIndex={kardexIndex}
+        onKardexIndexChange={setKardexIndex}
+        detailsPageIndex={detailsPageIndex}
+        onDetailsPageIndexChange={setDetailsPageIndex}
+        activityPageIndex={activityPageIndex}
+        onActivityPageIndexChange={setActivityPageIndex}
+        hidden={Boolean(draft)}
+      />
+      <div className="order-detail-legacy">
       {/* Barra superior de retorno */}
       <div className="detail-navigation-bar">
         <button type="button" className="btn-back" onClick={onBack}>
           ← Volver a la bandeja de órdenes
         </button>
-        <div className="detail-cuc-badge">
-          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
-            {orderStatusLabel(order.status)}
-          </span>
-        </div>
       </div>
 
       {/* Banner de orden anulada si corresponde */}
@@ -772,11 +835,11 @@ function OrderDetail({
       <header className="order-detail-header">
         <div className="order-detail-header__identity">
           <span className="eyebrow">ORDEN ACTUAL</span>
-          <h2>{order.context?.customerName || order.orderId}</h2>
-          <p>Cuenta / suministro {order.context?.accountId || order.accountId || "Cuenta no disponible"} · Medidor {order.context?.meterId || "Medidor no disponible"}</p>
+          <h2>Cuenta / suministro {order.context?.accountId || order.accountId || "Cuenta no disponible"} · Medidor {order.context?.meterId || "Medidor no disponible"}</h2>
+          <p>{order.context?.customerName || order.orderId}</p>
         </div>
         <div className="order-detail-header__status">
-          <span className={`status-badge status-badge--${orderStatusTone(order)}`}>
+          <span className={`status-badge order-status-label status-badge--${orderStatusTone(order)}`}>
             {orderStatusLabel(order.status)}
           </span>
           <div className="order-detail-identifiers">
@@ -846,24 +909,282 @@ function OrderDetail({
           ) : null}
         </div>
       </div>
+      </div>
 
       {draft ? (
         <ActionForm
           kind={draft}
           order={order}
+          store={store}
           technicianName={technicianName}
           busy={state.busyAction === draft}
+          blocked={order.physicalStatus === "PHYSICAL_UNKNOWN" || order.status === "ANULADO"}
           onCancel={() => setDraft(null)}
           onSubmit={async (input) => {
-            if (draft === "VISIT") await store.registerVisit(order.orderId, input);
-            else if (draft === "CUT") await store.executeCut(order.orderId, input);
-            else await store.executeReconnection(order.orderId, input);
-            setDraft(null);
+            let completed: boolean;
+            if (draft === "VISIT") {
+              await store.registerVisit(order.orderId, input);
+              completed = true;
+            } else if (draft === "CUT") {
+              const durable = await store.executeCut(order.orderId, input);
+              const finalOrder = store.getSnapshot().orders.find((candidate) => candidate.orderId === order.orderId);
+              const outcome = cutCompletionOutcome(durable, finalOrder);
+              if (outcome) setCutCompletion(outcome);
+              completed = Boolean(outcome);
+            } else {
+              completed = await store.executeReconnection(order.orderId, input);
+            }
+            if (completed) setDraft(null);
+            return completed;
           }}
         />
       ) : null}
+      {cutCompletion ? <CutCompletionDialog outcome={cutCompletion} onDismiss={() => setCutCompletion(undefined)} /> : null}
     </section>
   );
+}
+
+export function CutCompletionDialog({ outcome, onDismiss }: { outcome: "confirmed" | "pending" | "review"; onDismiss: () => void }) {
+  const content = {
+    confirmed: { title: "Corte confirmado", message: "La orden figura como ejecutada y confirmada." },
+    pending: { title: "Corte guardado", message: "Intención guardada en este dispositivo. Ejecución pendiente de confirmación del servidor. No repita la acción." },
+    review: { title: "Resultado incierto", message: "Revisión humana requerida. No repita la acción." },
+  }[outcome];
+  return <div className="cut-completion-backdrop"><section className={`cut-completion cut-completion--${outcome}`} role="dialog" aria-modal="true" aria-labelledby="cut-completion-title" aria-describedby="cut-completion-message"><h2 id="cut-completion-title">{content.title}</h2><p id="cut-completion-message">{content.message}</p><button type="button" className="primary-action" onClick={onDismiss}>Listo</button></section></div>;
+}
+
+export function cutCompletionOutcome(durable: boolean, order?: WorkOrder): "confirmed" | "pending" | "review" | undefined {
+  if (order?.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED") return "confirmed";
+  if (order?.physicalStatus === "PHYSICAL_UNKNOWN") return "review";
+  return durable ? "pending" : undefined;
+}
+
+function MobileOrderReview({
+  order, mode, entries, view, onViewChange, onBack, canCut, canRegisterVisit, canReconnect, busy,
+  onCut, onVisit, onReconnect, kardexIndex, onKardexIndexChange, detailsPageIndex, onDetailsPageIndexChange,
+  activityPageIndex, onActivityPageIndexChange, hidden,
+}: {
+  order: WorkOrder;
+  mode: ConnectivityMode;
+  entries: ActivityEntry[];
+  view: OrderReviewView;
+  onViewChange: (view: OrderReviewView) => void;
+  onBack: () => void;
+  canCut: boolean;
+  canRegisterVisit: boolean;
+  canReconnect: boolean;
+  busy: boolean;
+  onCut: () => void;
+  onVisit: () => void;
+  onReconnect: () => void;
+  kardexIndex: number;
+  onKardexIndexChange: (index: number) => void;
+  detailsPageIndex: number;
+  onDetailsPageIndexChange: (index: number) => void;
+  activityPageIndex: number;
+  onActivityPageIndexChange: (index: number) => void;
+  hidden: boolean;
+}) {
+  const context = order.context;
+  const kardex = context?.kardex ?? [];
+  const currentKardex = kardex[kardexIndex];
+  const activityPages = orderActivityReviewPages(entries);
+  const currentActivityPage = activityPages[activityPageIndex];
+  const status = fieldOrderStatusLabel(order);
+  const debt = formatDebt(context?.debtCents);
+  const account = context?.accountId || order.accountId;
+  const meter = context?.meterId;
+  const detailFields = context ? [
+    { label: "Referencia", value: context.references },
+    { label: "Ruta", value: context.route },
+    { label: "Circuito", value: context.circuit },
+    { label: "Localidad", value: context.locality },
+    { label: "Estado del suministro", value: context.supplyStatus === "A" ? "Activo" : context.supplyStatus },
+    { label: "Fuente y actualización", value: `${context.source === "SIMULATED" ? "Simulada" : "Provisional"} · ${formatDate(context.updatedAt)}` },
+    { label: "Tarifa", value: context.tariff },
+    { label: "Coordenadas", value: hasCadastralCoordinates(context) ? `${context.cadastralLatitude!.toFixed(6)}, ${context.cadastralLongitude!.toFixed(6)}` : undefined },
+  ] : [];
+  const detailPages = paginateReviewFields(detailFields);
+  const detailsPageCount = detailPages.length;
+  const showKardex = detailsPageIndex === detailsPageCount;
+  const detailPageLabel = showKardex ? "Kardex" : `Datos ${detailsPageIndex + 1} de ${detailsPageCount}`;
+
+  return (
+    <section className="order-review-mobile" aria-label="Revisión de orden" hidden={hidden}>
+      <div className="order-review-toolbar">
+        <button type="button" className="order-review-back" onClick={onBack}>← Volver</button>
+        <span>Orden {shortTechnicalId(order.orderId)}</span>
+      </div>
+      <nav className="order-review-navigation" aria-label="Vistas de la orden">
+        {([
+          ["review", "Resumen"], ["details", "Datos"], ["map", "Mapa"], ["activity", "Actividad"],
+        ] as const).filter(([target]) => target !== "activity" || entries.length > 0).map(([target, label]) => (
+          <button key={target} type="button" aria-pressed={view === target} onClick={() => onViewChange(target)}>
+            {label}{target === "activity" && entries.length ? ` ${entries.length}` : ""}
+          </button>
+        ))}
+      </nav>
+
+      {view === "review" ? (
+        <div className="order-review-screen order-review-screen--summary" aria-label="Resumen prioritario de la orden">
+          <header className="order-review-identity">
+            <h2>Cuenta {displayValue(account)} · Medidor {displayValue(meter)}</h2>
+            <p>{displayValue(context?.customerName)}</p>
+          </header>
+          {order.status === "ANULADO" ? (
+            <div className="order-review-alert order-review-alert--cancelled" role="alert">
+              <strong>Corte bloqueado</strong>
+              <span>{order.cancellation?.detectedAt ? `Regularización registrada ${formatDate(order.cancellation.detectedAt)}. No registrar corte ni visita.` : "No registrar corte ni visita."}</span>
+            </div>
+          ) : null}
+          {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
+            <div className="order-review-alert order-review-alert--unknown" role="alert">
+              <strong>No repetir acción</strong>
+              <span>Revisión humana requerida.</span>
+            </div>
+          ) : null}
+          <div className="order-review-facts">
+            <div className="order-review-fact order-review-fact--address"><span>Dirección</span><strong>{displayValue(context?.address)}</strong></div>
+            <div className="order-review-fact"><span>Deuda</span><strong className="order-review-debt">{displayValue(debt)}</strong><small>{context?.monthsPending === undefined ? "Dato no disponible" : `${context.monthsPending} facturas pendientes`}</small></div>
+            <div className="order-review-fact"><span>Estado</span><strong>{status}</strong>{order.physicalStatus !== "NONE" ? <small>Físico: {physicalStatusLabel(order.physicalStatus)}</small> : null}</div>
+          </div>
+          <div className="order-review-actions">
+            {canCut ? <button type="button" className="primary-action" disabled={busy} onClick={onCut}><IconScissors />Registrar corte</button> : null}
+            {canReconnect ? <button type="button" className="primary-action" disabled={busy} onClick={onReconnect}>Preparar reconexión</button> : null}
+            {canRegisterVisit && canCut ? <button type="button" className="order-review-secondary-action" disabled={busy} onClick={onVisit}>Registrar visita</button> : null}
+            {!canCut && !canReconnect && !canRegisterVisit ? <p className="order-review-no-action">Sin acciones disponibles para este estado.</p> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {view === "details" ? (
+        <section className="order-review-screen order-review-screen--details" aria-label="Datos secundarios de la orden">
+          <h2>Datos del suministro</h2>
+          {context ? <>
+            {!showKardex ? <div className="order-review-detail-grid">
+              {detailPages[detailsPageIndex]?.map((field) => <ReviewData key={field.label} label={field.label} value={field.value} />)}
+            </div> : null}
+            {showKardex ? <section className="order-review-kardex" aria-label="Kardex de deuda">
+              <div><strong>Kardex</strong><span>{kardex.length ? `${kardexIndex + 1} de ${kardex.length}` : "No disponible"}</span></div>
+              {currentKardex ? <p>{currentKardex.period} · {formatDebt(currentKardex.amountCents) ?? "Dato no disponible"} · {currentKardex.status === "PENDING" ? "Pendiente" : "Pagado"} · {currentKardex.daysLate ?? "Dato no disponible"} días mora</p> : <p>Historial no disponible en paquete local.</p>}
+              {kardex.length > 1 ? <div className="order-review-pager"><button type="button" disabled={kardexIndex <= 0} onClick={() => onKardexIndexChange(kardexIndex - 1)}>Anterior</button><button type="button" disabled={kardexIndex >= kardex.length - 1} onClick={() => onKardexIndexChange(kardexIndex + 1)}>Siguiente</button></div> : null}
+            </section> : null}
+            <div className="order-review-pager" aria-label="Páginas de datos">
+              <button type="button" disabled={detailsPageIndex <= 0} onClick={() => onDetailsPageIndexChange(detailsPageIndex - 1)}>Anterior</button>
+              <span>{detailPageLabel}</span>
+              <button type="button" disabled={detailsPageIndex >= detailsPageCount} onClick={() => onDetailsPageIndexChange(detailsPageIndex + 1)}>Siguiente</button>
+            </div>
+          </> : <p className="order-review-no-action">Datos operativos no disponibles en este paquete local.</p>}
+        </section>
+      ) : null}
+
+      {view === "map" ? <OrderReviewMap order={order} mode={mode} onViewChange={onViewChange} /> : null}
+
+      {view === "activity" && activityPages.length > 0 ? (
+        <section className="order-review-screen order-review-screen--activity" aria-label="Actividad de la orden">
+          <article className="order-review-activity-page" aria-live="polite">
+            <h3>{currentActivityPage?.title}</h3>
+            <p>{currentActivityPage?.text}</p>
+          </article>
+          {activityPages.length > 1 ? <div className="order-review-pager"><button type="button" disabled={activityPageIndex <= 0} onClick={() => onActivityPageIndexChange(activityPageIndex - 1)}>Anterior</button><span>{activityPageIndex + 1} de {activityPages.length}</span><button type="button" disabled={activityPageIndex >= activityPages.length - 1} onClick={() => onActivityPageIndexChange(activityPageIndex + 1)}>Siguiente</button></div> : null}
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+export function OrderReviewMap({
+  order,
+  mode,
+  onViewChange,
+}: {
+  order: WorkOrder;
+  mode: ConnectivityMode;
+  onViewChange: (view: OrderReviewView) => void;
+}) {
+  const context = order.context;
+  const hasCoordinates = hasCadastralCoordinates(context);
+
+  return (
+    <section className="order-review-screen order-review-screen--map" aria-label="Mapa de ubicación">
+      <div className="order-review-map-address"><strong>{displayValue(context?.address)}</strong><span>{displayValue(context?.references)}</span></div>
+      {hasCoordinates ? (
+        <FieldMap orders={[order]} selectedOrderId={order.orderId} onSelectOrder={() => onViewChange("details")} mode={mode} />
+      ) : (
+        <div className="field-map-container field-map-container--empty" aria-label="Ubicación de esta orden no disponible">
+          <div className="field-map-empty" role="status">
+            <IconMap />
+            <strong>Ubicación de esta orden no disponible</strong>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReviewData({ label, value }: { label: string; value?: string }) {
+  return <div className="order-review-fact"><span>{label}</span><strong>{displayValue(value)}</strong></div>;
+}
+
+export function paginateReviewFields(fields: readonly { label: string; value?: string }[], pageSize = 4): Array<Array<{ label: string; value?: string }>> {
+  const pages: Array<Array<{ label: string; value?: string }>> = [];
+  let currentPage: Array<{ label: string; value?: string }> = [];
+  const flush = () => {
+    if (!currentPage.length) return;
+    pages.push(currentPage);
+    currentPage = [];
+  };
+  for (const field of fields) {
+    if ((field.value?.length ?? 0) > 120) {
+      flush();
+      const chunks = splitReviewText(field.value ?? "");
+      chunks.forEach((value, index) => pages.push([{ label: `${field.label} · parte ${index + 1} de ${chunks.length}`, value }]));
+      continue;
+    }
+    currentPage.push(field);
+    if (currentPage.length === pageSize) flush();
+  }
+  flush();
+  return pages;
+}
+
+interface OrderActivityReviewPage {
+  title: string;
+  text: string;
+}
+
+export function orderActivityReviewPages(entries: readonly ActivityEntry[]): OrderActivityReviewPage[] {
+  return entries.flatMap((entry) => {
+    const pages: OrderActivityReviewPage[] = [];
+    const appendText = (title: string, text: string) => {
+      const chunks = splitReviewText(text);
+      chunks.forEach((chunk, index) => pages.push({
+        title: chunks.length > 1 ? `${title} · parte ${index + 1} de ${chunks.length}` : title,
+        text: chunk,
+      }));
+    };
+    const kind = activityLabel(entry.record.kind);
+    appendText(kind, `${formatDate(entry.record.recordedAt)} · ${activityDetail(entry.record)}`);
+    const exception = activityException(entry.record);
+    if (exception) appendText("Excepción", exception);
+    entry.evidence.forEach((evidence, index) => {
+      appendText(`Evidencia ${index + 1}`, `${evidence.mimeType} · ${evidence.width} × ${evidence.height} · Guardada localmente · SHA-256 ${evidence.contentHash}`);
+    });
+    return pages;
+  });
+}
+
+function splitReviewText(value: string, maxLength = 120): string[] {
+  const chunks: string[] = [];
+  let remaining = value;
+  while (remaining.length > maxLength) {
+    let splitAt = remaining.lastIndexOf(" ", maxLength);
+    if (splitAt <= 0) splitAt = maxLength;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt);
+  }
+  if (remaining || chunks.length === 0) chunks.push(remaining);
+  return chunks;
 }
 
 function OperationalContext({ context }: { context: NonNullable<WorkOrder["context"]> }) {
@@ -960,242 +1281,272 @@ function ActivityPanel({ entries }: { entries: ActivityEntry[] }) {
 }
 
 type ActionKind = "VISIT" | "CUT" | "RECONNECTION";
+export type CaptureWizardStep = "reading" | "cutSettings" | "gps" | "gpsException" | "evidence" | "evidenceException" | "review";
+export type CaptureDraftLoadResult = { status: "ready"; content: CaptureDraftContent } | { status: "error" };
+
+export function captureWizardSteps(kind: ActionKind, gpsException: boolean, photoException: boolean): CaptureWizardStep[] {
+  return (kind === "CUT"
+    ? ["reading", "cutSettings", "gps", ...(gpsException ? ["gpsException"] : []), "evidence", ...(photoException ? ["evidenceException"] : []), "review"]
+    : ["evidence", ...(photoException ? ["evidenceException"] : []), "review"]) as CaptureWizardStep[];
+}
+
+export async function loadCaptureDraftSafely(load: () => Promise<CaptureDraftContent | undefined>): Promise<CaptureDraftLoadResult> {
+  try { return { status: "ready", content: await load() ?? {} }; }
+  catch { return { status: "error" }; }
+}
+
+export function captureDraftCanAdvance(status: CaptureDraftLoadResult["status"] | "loading"): boolean {
+  return status === "ready";
+}
+
+export function captureSubmitError(error: unknown): { message: string; verificationUncertain: boolean } {
+  const verificationUncertain = error instanceof Error && error.message.includes("No pudimos verificar el guardado local");
+  return {
+    verificationUncertain,
+    message: verificationUncertain
+      ? "No pudimos confirmar si la operación quedó guardada en este dispositivo. Revisa las operaciones pendientes antes de reintentar."
+      : "No pudimos guardar la operación. Revisa el estado de la orden y las operaciones pendientes antes de reintentar.",
+  };
+}
+
+export function EvidencePicker({ file, onSelect, onInvalid }: { file?: File; onSelect: (file: File) => void; onInvalid: () => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="file-field">
+      <span>Archivo de evidencia</span>
+      <input
+        ref={input}
+        className="file-field__input"
+        type="file"
+        tabIndex={-1}
+        aria-hidden="true"
+        accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+        onChange={(event) => {
+          const selected = event.target.files?.[0];
+          if (!selected) return;
+          if (selected.type === "image/jpeg" || selected.type === "image/png") onSelect(selected);
+          else onInvalid();
+        }}
+      />
+      <button type="button" className="secondary-action file-field__choose" aria-label="Elegir foto de evidencia" onClick={() => input.current?.click()}>
+        Elegir foto
+      </button>
+      <small aria-live="polite">{file?.name ?? "JPEG o PNG preparado"}</small>
+    </div>
+  );
+}
 
 function ActionForm({
   kind,
   order,
+  store,
   technicianName,
   busy,
+  blocked,
   onCancel,
   onSubmit,
 }: {
   kind: ActionKind;
   order: WorkOrder;
+  store: AppStore;
   technicianName?: string;
   busy: boolean;
+  blocked: boolean;
   onCancel: () => void;
-  onSubmit: (input: ActionInput) => Promise<void>;
+  onSubmit: (input: ActionInput) => Promise<boolean>;
 }) {
-  const [file, setFile] = useState<File | undefined>();
-  const [useException, setUseException] = useState(false);
-  const [exceptionReason, setExceptionReason] = useState("");
+  const [content, setContent] = useState<CaptureDraftContent>({});
+  const contentRef = useRef<CaptureDraftContent>({});
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
+  const [step, setStep] = useState<CaptureWizardStep>(kind === "CUT" ? "reading" : "evidence");
+  const [draftLoadStatus, setDraftLoadStatus] = useState<CaptureDraftLoadResult["status"] | "loading">("loading");
   const [formError, setFormError] = useState("");
-  const [reading, setReading] = useState("");
-  const [cutType, setCutType] = useState<CutType>("RED");
-  const [nearbyMeters, setNearbyMeters] = useState(false);
-  const [location, setLocation] = useState<FieldCapture["location"]>();
-  const [skipLocation, setSkipLocation] = useState(false);
-  const [locationReason, setLocationReason] = useState("");
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const requiresExternal = kind !== "VISIT";
+  const [verificationUncertain, setVerificationUncertain] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const gpsException = content.gpsExceptionReason !== undefined;
+  const photoException = content.exceptionReason !== undefined;
+  const steps = captureWizardSteps(kind, gpsException, photoException);
+  const activeStep = steps.includes(step) ? step : "evidence";
+  const stepIndex = steps.indexOf(activeStep);
+  const file = content.evidence?.[0] ? restoreEvidenceFile(content.evidence[0]) : undefined;
+  const loading = !captureDraftCanAdvance(draftLoadStatus);
+  const loadDraftRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!file && !useException) return setFormError("Adjunte un archivo JPEG/PNG o marque excepción.");
-    if (useException && !exceptionReason.trim()) return setFormError("Escriba una justificación para la excepción.");
-    if (kind === "CUT") {
-      const parsedReading = Number(reading);
-      if (!Number.isFinite(parsedReading) || parsedReading < 0)
-        return setFormError("Ingrese lectura final válida del medidor.");
-      if (!location && !skipLocation) return setFormError("Capture GPS o registre excepción de coordenadas.");
-      if (skipLocation && !locationReason.trim()) return setFormError("Justifique excepción de coordenadas.");
+  useEffect(() => {
+    let active = true;
+    const loadDraft = async () => {
+      setDraftLoadStatus("loading");
+      setFormError("");
+      const result = await loadCaptureDraftSafely(() => store.loadCaptureDraft(order.orderId, kind));
+      if (!active) return;
+      if (result.status === "error") {
+        setDraftLoadStatus("error");
+        return;
+      }
+      const restored = result.content;
+      contentRef.current = restored;
+      setContent(restored);
+      setDraftLoadStatus("ready");
+    };
+    loadDraftRef.current = loadDraft;
+    void loadDraft();
+    return () => { active = false; };
+  }, [kind, order.orderId, store]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const updateViewport = () => {
+      const height = viewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty("--capture-viewport-height", `${height}px`);
+      setKeyboardOpen(height < window.innerHeight - 120);
+    };
+    updateViewport();
+    viewport?.addEventListener("resize", updateViewport);
+    window.addEventListener("resize", updateViewport);
+    return () => {
+      viewport?.removeEventListener("resize", updateViewport);
+      window.removeEventListener("resize", updateViewport);
+      document.documentElement.style.removeProperty("--capture-viewport-height");
+    };
+  }, []);
+
+  function persist(next: CaptureDraftContent): Promise<void> {
+    contentRef.current = next;
+    setContent(next);
+    const save = saveChain.current.then(() => store.saveCaptureDraft(order.orderId, kind, next));
+    saveChain.current = save.catch(() => undefined);
+    void save.then(() => setFormError(""), () => setFormError("No pudimos guardar el borrador en este dispositivo. Reintente."));
+    return save;
+  }
+
+  function change(patch: Partial<CaptureDraftContent>): void {
+    void persist({ ...contentRef.current, ...patch }).catch(() => undefined);
+  }
+
+  function validate(current: CaptureWizardStep, draft: CaptureDraftContent): string | undefined {
+    if (current === "reading" && (draft.reading?.value === undefined || !Number.isFinite(draft.reading.value) || draft.reading.value < 0)) return "Ingrese lectura final válida del medidor.";
+    if (current === "gps" && !draft.location?.latitude && draft.location?.latitude !== 0 && draft.gpsExceptionReason === undefined) return "Capture GPS o registre excepción de coordenadas.";
+    if (current === "gpsException" && !draft.gpsExceptionReason?.trim()) return "Justifique excepción de coordenadas.";
+    if (current === "evidence" && !draft.evidence?.[0] && draft.exceptionReason === undefined) return "Adjunte JPEG/PNG o registre excepción.";
+    if (current === "evidenceException" && !draft.exceptionReason?.trim()) return "Escriba una justificación para la excepción.";
+    return undefined;
+  }
+
+  async function advance() {
+    if (!captureDraftCanAdvance(draftLoadStatus)) return;
+    const problem = validate(activeStep, contentRef.current);
+    if (problem) return setFormError(problem);
+    try {
+      await persist(contentRef.current);
+      setStep(steps[stepIndex + 1]);
+    } catch { /* persist sets actionable error */ }
+  }
+
+  async function submit() {
+    if (!captureDraftCanAdvance(draftLoadStatus)) return;
+    const draft = contentRef.current;
+    for (const required of steps.slice(0, -1)) {
+      const problem = validate(required, draft);
+      if (problem) return setFormError(problem);
     }
-    setFormError("");
     setSubmitting(true);
     try {
-      const fieldCapture =
-        kind === "CUT"
-          ? {
-              reading: {
-                value: Number(reading),
-                unit: "kWh" as const,
-                meterId: order.context?.meterId ?? "",
-                recordedAt: new Date().toISOString(),
-                status: "CAPTURED" as const,
-              },
-              location: location ?? {
-                recordedAt: new Date().toISOString(),
-                status: "BYPASSED" as const,
-                exceptionReason: "saltar_control_coordenadas: " + locationReason,
-              },
-              cutType,
-              nearbyMeters,
-            }
-          : undefined;
-      await onSubmit({
-        file,
-        exceptionReason: useException ? "saltar_control_fotos: " + exceptionReason : undefined,
-        gpsExceptionReason: skipLocation ? "saltar_control_coordenadas: " + locationReason : undefined,
+      await persist(draft);
+      const fieldCapture: FieldCapture | undefined = kind === "CUT" ? {
+        reading: { value: draft.reading!.value!, unit: "kWh", meterId: order.context?.meterId ?? "", recordedAt: new Date().toISOString(), status: "CAPTURED" },
+        location: gpsException
+          ? { recordedAt: new Date().toISOString(), status: "BYPASSED", exceptionReason: `saltar_control_coordenadas: ${draft.gpsExceptionReason}` }
+          : draft.location as FieldCapture["location"],
+        cutType: draft.cutType ?? "RED",
+        nearbyMeters: draft.nearbyMeters ?? false,
+      } : undefined;
+      const completed = await onSubmit({
+        file: photoException ? undefined : file,
+        exceptionReason: photoException ? `saltar_control_fotos: ${draft.exceptionReason}` : undefined,
+        gpsExceptionReason: gpsException ? `saltar_control_coordenadas: ${draft.gpsExceptionReason}` : undefined,
         fieldCapture,
-        reason: requiresExternal
-          ? `Intento de ${actionLabel(kind).toLocaleLowerCase()}`
-          : "Visita de campo sin ejecución",
+        reason: kind === "VISIT" ? "Visita de campo sin ejecución" : `Intento de ${actionLabel(kind).toLocaleLowerCase()}`,
       });
-    } catch {
-      /* Store exposes actionable status. */
-    } finally {
-      setSubmitting(false);
-    }
+      if (!completed) setFormError("Esta acción no concluyó. Revise el estado de la orden y la cola local.");
+    } catch (error) {
+      const failure = captureSubmitError(error);
+      if (failure.verificationUncertain) setVerificationUncertain(true);
+      setFormError(failure.message);
+    } finally { setSubmitting(false); }
   }
 
   function captureLocation() {
     if (!navigator.geolocation) return setFormError("Este dispositivo no ofrece GPS; registre excepción controlada.");
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracyMeters: position.coords.accuracy,
-          recordedAt: new Date().toISOString(),
-          status: "CAPTURED",
-        });
-        setSkipLocation(false);
-        setLocating(false);
-        setFormError("");
-      },
-      () => {
-        setLocating(false);
-        setFormError("No pudimos capturar GPS. Reintente o registre excepción controlada.");
-      }
-    );
+    navigator.geolocation.getCurrentPosition((position) => {
+      change({ location: { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, recordedAt: new Date().toISOString(), status: "CAPTURED" }, gpsExceptionReason: undefined });
+      setLocating(false);
+    }, () => { setLocating(false); setFormError("No pudimos capturar GPS. Reintente o registre excepción controlada."); });
   }
 
+  const title: Record<CaptureWizardStep, string> = { reading: "Lectura", cutSettings: "Datos del corte", gps: "Ubicación GPS", gpsException: "Excepción GPS", evidence: "Evidencia", evidenceException: "Excepción de foto", review: "Revisar y confirmar" };
   return (
-    <form className="action-form" onSubmit={submit}>
-      <div className="form-heading">
-        <div>
-          <span className="eyebrow">{actionLabel(kind)}</span>
-          <h3>Confirmar datos</h3>
-        </div>
-        <button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar formulario">
-          ×
-        </button>
+    <section className={`capture-wizard${keyboardOpen ? " capture-wizard--keyboard" : ""}`} aria-label={`Captura de ${actionLabel(kind).toLocaleLowerCase()}`}>
+      <header className="capture-wizard__header">
+        <button type="button" className="capture-wizard__back" onClick={() => stepIndex ? setStep(steps[stepIndex - 1]) : onCancel()} aria-label="Volver">← Volver</button>
+        <span>{stepIndex + 1} de {steps.length}</span>
+      </header>
+      <div className="capture-wizard__identity"><strong>{order.context?.customerName || "Cliente no disponible"}</strong><span>Medidor {order.context?.meterId || "no disponible"} · {technicianName ?? order.assignedTechnicianId}</span></div>
+      <div className="capture-wizard__body">
+        <h3>{title[activeStep]}</h3>
+        {draftLoadStatus === "loading" ? <p role="status">Abriendo borrador local…</p> : null}
+        {draftLoadStatus === "error" ? <div className="capture-wizard__load-error" role="alert"><p>No pudimos abrir el borrador local. Reintente antes de continuar.</p><button type="button" className="secondary-action" onClick={() => void loadDraftRef.current()}>Reintentar carga del borrador</button></div> : null}
+        {!loading && activeStep === "reading" ? <>
+          <label className="text-field"><span>Lectura final del medidor (kWh)</span><input type="number" inputMode="decimal" min="0" step="0.01" value={content.reading?.value ?? ""} onChange={(event) => change({ reading: event.target.value === "" ? {} : { value: Number(event.target.value) } })} /></label>
+        </> : null}
+        {!loading && activeStep === "cutSettings" ? <>
+          <label className="text-field"><span>Tipo de corte</span><select value={content.cutType ?? "RED"} onChange={(event) => change({ cutType: event.target.value as CutType })}><option value="RED">Red</option><option value="MEDIDOR">Medidor</option><option value="BARRAS">Barras</option><option value="PROTECCION">Protección</option><option value="ACOMETIDA">Acometida</option><option value="FUSIBLES">Fusibles</option></select></label>
+          <label className="checkbox-field"><input type="checkbox" checked={content.nearbyMeters ?? false} onChange={(event) => change({ nearbyMeters: event.target.checked })} /><span>Verifiqué medidores cercanos</span></label>
+        </> : null}
+        {!loading && activeStep === "gps" ? <>
+          <p>{content.location?.status === "CAPTURED" ? `${content.location.latitude?.toFixed(6)}, ${content.location.longitude?.toFixed(6)} · precisión ${Math.round(content.location.accuracyMeters ?? 0)} m` : "Coordenadas no capturadas"}</p>
+          <button type="button" className="secondary-action" disabled={locating} onClick={captureLocation}>{locating ? "Capturando…" : "Capturar GPS"}</button>
+          <label className="checkbox-field"><input type="checkbox" checked={gpsException} onChange={(event) => change(event.target.checked ? { location: undefined, gpsExceptionReason: "" } : { gpsExceptionReason: undefined })} /><span>No puedo capturar coordenadas</span></label>
+        </> : null}
+        {!loading && activeStep === "gpsException" ? <label className="text-field"><span>Justificación de coordenadas</span><textarea rows={2} value={content.gpsExceptionReason ?? ""} onChange={(event) => change({ gpsExceptionReason: event.target.value })} /></label> : null}
+        {!loading && activeStep === "evidence" ? <>
+          <EvidencePicker file={file} onSelect={(selected) => change({ evidence: [selected], exceptionReason: undefined })} onInvalid={() => setFormError("La evidencia debe ser JPEG o PNG.")} />
+          <label className="checkbox-field"><input type="checkbox" checked={photoException} onChange={(event) => change(event.target.checked ? { evidence: [], exceptionReason: "" } : { exceptionReason: undefined })} /><span>No puedo adjuntar evidencia</span></label>
+        </> : null}
+        {!loading && activeStep === "evidenceException" ? <label className="text-field"><span>Justificación obligatoria</span><textarea rows={2} value={content.exceptionReason ?? ""} onChange={(event) => change({ exceptionReason: event.target.value })} /></label> : null}
+        {!loading && activeStep === "review" ? <div className="capture-wizard__review">
+          {kind === "CUT" ? <><p>Lectura: {content.reading?.value ?? "No disponible"} kWh · {content.cutType ?? "RED"}</p><p>GPS: {gpsException ? "Excepción justificada" : content.location?.status === "CAPTURED" ? "Capturado" : "No disponible"}</p></> : null}
+          <p>Evidencia: {photoException ? "Excepción justificada" : file?.name ?? "No disponible"}</p>
+          {kind === "CUT" ? <p className="capture-wizard__authorization-note">El corte requiere autorización online concluyente y vigente. Sin ella, queda bloqueado.</p> : <p>El resultado se guarda primero en este dispositivo.</p>}
+        </div> : null}
       </div>
-      <p className="form-hint">
-        Orden {order.orderId} · Técnico responsable: {technicianName ?? order.assignedTechnicianId}. La evidencia queda
-        guardada localmente y espera confirmación de sincronización.
-      </p>
-      {kind === "CUT" ? (
-        <fieldset className="capture-fieldset">
-          <legend>Datos obligatorios de campo</legend>
-          <label className="text-field">
-            <span>Lectura final del medidor (kWh)</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={reading}
-              onChange={(event) => setReading(event.target.value)}
-              required
-            />
-          </label>
-          <label className="text-field">
-            <span>Tipo de corte</span>
-            <select value={cutType} onChange={(event) => setCutType(event.target.value as CutType)}>
-              <option value="RED">Red</option>
-              <option value="MEDIDOR">Medidor</option>
-              <option value="BARRAS">Barras</option>
-              <option value="PROTECCION">Protección</option>
-              <option value="ACOMETIDA">Acometida</option>
-              <option value="FUSIBLES">Fusibles</option>
-            </select>
-          </label>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={nearbyMeters}
-              onChange={(event) => setNearbyMeters(event.target.checked)}
-            />
-            <span>Verifiqué medidores cercanos</span>
-          </label>
-          <div className="location-box">
-            <strong>Coordenadas GPS</strong>
-            {location ? (
-              <span>
-                {location.latitude?.toFixed(6)}, {location.longitude?.toFixed(6)} · precisión{" "}
-                {Math.round(location.accuracyMeters ?? 0)} m
-              </span>
-            ) : (
-              <span>No capturadas</span>
-            )}
-            <button
-              type="button"
-              className="secondary-action"
-              onClick={captureLocation}
-              disabled={locating || skipLocation}
-            >
-              {locating ? "Capturando…" : "Capturar GPS"}
-            </button>
-          </div>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={skipLocation}
-              onChange={(event) => {
-                setSkipLocation(event.target.checked);
-                if (event.target.checked) setLocation(undefined);
-              }}
-            />
-            <span>No puedo capturar coordenadas</span>
-          </label>
-          {skipLocation ? (
-            <label className="text-field">
-              <span>Justificación de coordenadas</span>
-              <textarea
-                value={locationReason}
-                onChange={(event) => setLocationReason(event.target.value)}
-                rows={2}
-              />
-            </label>
-          ) : null}
-        </fieldset>
-      ) : null}
-      <label className="file-field">
-        <span>Archivo de evidencia</span>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,.jpg,.jpeg,.png"
-          onChange={(event) => setFile(event.target.files?.[0])}
-        />
-        <small>{file ? file.name : "JPEG o PNG preparado"}</small>
-      </label>
-      <label className="checkbox-field">
-        <input
-          type="checkbox"
-          checked={useException}
-          onChange={(event) => setUseException(event.target.checked)}
-        />
-        <span>No puedo adjuntar evidencia</span>
-      </label>
-      {useException ? (
-        <label className="text-field">
-          <span>Justificación obligatoria</span>
-          <textarea
-            value={exceptionReason}
-            onChange={(event) => setExceptionReason(event.target.value)}
-            rows={3}
-            placeholder="Describa el motivo"
-          />
-        </label>
-      ) : null}
-      {formError ? <p className="form-error" role="alert">{formError}</p> : null}
-      <div className="form-actions">
-        <button type="button" className="secondary-action" onClick={onCancel}>
-          Cancelar
-        </button>
-        <button type="submit" className="primary-action" disabled={busy || submitting}>
-          {busy || submitting ? "Guardando…" : "Confirmar"}
-        </button>
-      </div>
-    </form>
+      {formError ? <p className="form-error capture-wizard__error" role="alert">{formError}</p> : null}
+      <footer className="capture-wizard__footer"><button type="button" className="primary-action" disabled={loading || submitting || busy || blocked || verificationUncertain} onClick={() => void (activeStep === "review" ? submit() : advance())}>{submitting || busy ? "Guardando…" : activeStep === "review" ? kind === "CUT" ? "Confirmar corte" : kind === "VISIT" ? "Guardar visita" : "Confirmar reconexión" : "Continuar"}</button></footer>
+    </section>
   );
 }
 
-function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
+export function restoreEvidenceFile(value: File | Blob): File {
+  if (value instanceof File) return value;
+  const extension = value.type === "image/png" ? "png" : "jpg";
+  return new File([value], `evidencia-recuperada.${extension}`, { type: value.type });
+}
+
+export function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
+  const [requestedPage, setRequestedPage] = useState(1);
+  const [showFullDetails, setShowFullDetails] = useState(false);
   const items = [...state.syncItems].sort(
     (left, right) => Number(right.status !== "synced") - Number(left.status !== "synced")
+  );
+  const canSendPending = items.some((item) =>
+    (item.status === "pending" || item.status === "failed") && !item.manualReview && !item.uncertain
+  );
+  const canRunQueueSync = isUsable(state.mode) && state.busyAction !== "SYNC";
+  const { page, pageCount, item: mobileItem } = queuePageItem(items, requestedPage);
+  const renderItem = (item: import("../ports").SyncItem, mobile: boolean) => (
+    <QueueItem key={item.operationId} item={item} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} onViewFullDetails={() => setShowFullDetails(true)} canRetry={!mobile || canRunQueueSync} canVerify={canRunQueueSync} mobile={mobile} />
   );
   return (
     <section className="queue-panel panel" aria-label="Cola de sincronización">
@@ -1204,20 +1555,38 @@ function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
           <div className="eyebrow">TRAZABILIDAD LOCAL</div>
           <h2>Cola de sincronización</h2>
         </div>
+        <CompactNetworkStatus mode={state.mode} />
         <div className="queue-panel__actions">
           <button type="button" className="toolbar-action" onClick={() => store.setTab("orders")}>Volver a mis órdenes</button>
-          <button className="sync-button" disabled={!isUsable(state.mode) || state.busyAction === "SYNC"} onClick={() => void store.sync()}>
+          {canSendPending ? <button className="sync-button" disabled={!isUsable(state.mode) || state.busyAction === "SYNC"} onClick={() => void store.sync()}>
             {state.busyAction === "SYNC" ? "Enviando pendientes…" : "Enviar operaciones pendientes"}
-          </button>
+          </button> : null}
         </div>
       </div>
       <p className="queue-intro">Los registros permanecen en este dispositivo hasta recibir confirmación válida.</p>
       {items.length ? (
-        <div className="queue-list">
-          {items.map((item) => (
-            <QueueItem key={item.operationId} item={item} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} />
-          ))}
-        </div>
+        <>
+          {showFullDetails && mobileItem ? <section className="queue-full-details" aria-label="Detalle completo de operación">
+            <button type="button" className="queue-item__detail" onClick={() => setShowFullDetails(false)}>Volver a cola</button>
+            <h3>Detalle de operación</h3>
+            <p><strong>Identificador:</strong> <span className="queue-full-details__technical" title={mobileItem.operationId}>{mobileItem.operationId}</span></p>
+            {mobileItem.orderId ? <p><strong>Orden:</strong> {mobileItem.orderId}</p> : null}
+            {state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName ? <p><strong>Cliente:</strong> {state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName}</p> : null}
+            <p><strong>Estado:</strong> {syncStatusLabel(mobileItem.status)}</p>
+            <p><strong>Fecha:</strong> {formatDate(mobileItem.updatedAt)}</p>
+            <p><strong>Intentos:</strong> {mobileItem.attempts}</p>
+            {mobileItem.errorCode ? <p className="queue-error"><strong>Error:</strong> {mobileItem.errorCode}</p> : null}
+            {queueReviewMessage(mobileItem) ? <p className="queue-review">{queueReviewMessage(mobileItem)}</p> : null}
+          </section> : <>
+            <div className="queue-list queue-list--desktop">{items.map((item) => renderItem(item, false))}</div>
+            <div className="queue-list queue-list--mobile" aria-label="Operación de cola">{mobileItem ? renderItem(mobileItem, true) : null}</div>
+          </>}
+          <nav className="queue-pagination" aria-label="Paginación de cola">
+            <button type="button" onClick={() => setRequestedPage(Math.max(1, page - 1))} disabled={page <= 1}>Anterior</button>
+            <span aria-live="polite">Operación {page} de {pageCount}</span>
+            <button type="button" onClick={() => setRequestedPage(Math.min(pageCount, page + 1))} disabled={page >= pageCount}>Siguiente</button>
+          </nav>
+        </>
       ) : (
         <div className="empty-state">
           <strong>Cola despejada</strong>
@@ -1228,32 +1597,46 @@ function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
   );
 }
 
-function QueueItem({ item, order, onRetry, onViewOrder }: { item: import("../ports").SyncItem; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void }) {
-  const manualReview = item.manualReview || item.uncertain;
+export function queuePageItem(items: import("../ports").SyncItem[], requestedPage: number) {
+  const pageCount = Math.max(1, items.length);
+  const page = Number.isFinite(requestedPage) ? Math.min(pageCount, Math.max(1, Math.trunc(requestedPage))) : 1;
+  return { page, pageCount, item: items[page - 1] };
+}
+
+function QueueItem({ item, order, onRetry, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: import("../ports").SyncItem; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
+  const manualReview = Boolean(item.manualReview);
+  const uncertain = Boolean(item.uncertain);
+  const protectedFromRetry = manualReview || uncertain;
+  const reviewMessage = queueReviewMessage(item);
   return (
     <article className="queue-item">
       <div className="queue-item__header">
-        <div><strong>{queueActionLabel(item.action)}</strong><span className="queue-item__customer">{order?.context?.customerName || `Orden ${shortTechnicalId(item.orderId ?? "sin orden")}`}</span></div>
+        <div><strong>{queueActionLabel(item.action)}</strong><span className="queue-item__customer" title={`${order?.context?.customerName || "Cliente no disponible"} · ${item.orderId ?? "Orden no disponible"}`} aria-label={`Cliente ${order?.context?.customerName || "no disponible"}; orden ${item.orderId ?? "no disponible"}`}>{order?.context?.customerName || "Cliente no disponible"} · {item.orderId ?? "Orden no disponible"}</span></div>
         <span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span>
       </div>
       <div className="queue-item__meta">
         <span>{formatDate(item.updatedAt)}</span>
         <span>{item.attempts} intento(s)</span>
-        <span className="technical-id">Operación {shortTechnicalId(item.operationId)}</span>
+        <span className="technical-id" title={item.operationId} aria-label={`Identificador completo de operación: ${item.operationId}`}>Operación {shortTechnicalId(item.operationId)}</span>
       </div>
-      {item.errorCode ? (
-        <p className="queue-error">
-          {manualReview ? "Requiere revisión humana. " : "Último aviso: "}
-          {item.errorCode}
-        </p>
-      ) : null}
-      {manualReview ? <p className="queue-review">Resultado incierto: no reenviar automáticamente.</p> : null}
+      {mobile && reviewMessage ? <p className="queue-review queue-review--mobile">{reviewMessage}</p> : null}
+      {mobile && item.errorCode && item.errorCode.length <= 36 ? <p className="queue-error queue-error--mobile">Error: {item.errorCode}</p> : null}
       <div className="queue-item__actions">
-        {item.status !== "synced" && !manualReview ? <button type="button" className="queue-item__retry" onClick={onRetry}>Reintentar</button> : null}
+        {(item.status === "pending" || item.status === "failed") && !protectedFromRetry ? <button type="button" className="queue-item__retry" disabled={!canRetry} onClick={onRetry}>Reintentar</button> : null}
+        {mobile && item.status === "failed" && uncertain && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar estado</button> : null}
+        {mobile && (item.errorCode || manualReview || uncertain) ? <button type="button" className="queue-item__detail" onClick={onViewFullDetails}>Ver error y contexto</button> : null}
+        {!mobile && item.errorCode ? <p className="queue-error">{manualReview ? "Requiere revisión humana. " : "Último aviso: "}{item.errorCode}</p> : null}
+        {!mobile && reviewMessage ? <p className="queue-review">{reviewMessage}</p> : null}
         {item.orderId ? <button type="button" className="queue-item__detail" onClick={() => onViewOrder(item.orderId ?? "")}>Ver detalle</button> : null}
       </div>
     </article>
   );
+}
+
+export function queueReviewMessage(item: Pick<import("../ports").SyncItem, "manualReview" | "uncertain">): string | undefined {
+  if (item.manualReview) return "Revisión humana · no reenviar";
+  if (item.uncertain) return "Resultado incierto: verificar estado podría continuar sincronización según el motor.";
+  return undefined;
 }
 
 function EmptyOrders({ hasAnyOrders, onRefresh, onShowMap }: { hasAnyOrders: boolean; onRefresh: () => void; onShowMap: () => void }) {
@@ -1318,6 +1701,14 @@ function shortHash(hash?: string): string {
 export function sortOrdersForNext(orders: readonly WorkOrder[]): WorkOrder[] {
   return [...orders].sort((left, right) => orderPriority(left) - orderPriority(right));
 }
+
+export function orderJourneyOrders(orders: readonly WorkOrder[]): WorkOrder[] {
+  return sortOrdersForNext(orders);
+}
+
+export function adjacentJourneyOrder(orders: readonly WorkOrder[], currentIndex: number, direction: -1 | 1): WorkOrder | undefined {
+  return orders[currentIndex + direction];
+}
 function orderPriority(order: WorkOrder): number {
   if (order.status === "GENERADO" && order.physicalStatus === "NONE") return 0;
   if (order.physicalStatus === "PHYSICAL_UNKNOWN") return 1;
@@ -1345,9 +1736,9 @@ function orderStatusLabel(status: WorkOrder["status"]): string {
     ? "Reconectada"
     : "Anulada";
 }
-function fieldOrderStatusLabel(order: WorkOrder): string {
+export function fieldOrderStatusLabel(order: WorkOrder): string {
   if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "En revisión";
-  return order.status === "ANULADO" ? "Anulada" : order.status === "GENERADO" ? "Por ejecutar" : "Ejecutada";
+  return order.status === "ANULADO" ? "Anulada" : order.status === "GENERADO" ? "Por ejecutar" : order.status === "RECONEXIÓN" ? "Reconectada" : "Ejecutada";
 }
 function physicalStatusLabel(status: WorkOrder["physicalStatus"]): string {
   return status === "NONE"

@@ -2,8 +2,8 @@ import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
 import { createVisit } from "../../domain";
 import type { EvidenceReference, OperationRecord, WorkOrder, WorkPackage } from "../../domain";
-import { IndexedDbLocalRepository, createSimulatedPackageEnvelope, deleteFieldDatabase } from ".";
-import type { AtomicOperationChange } from "../../ports";
+import { FIELD_DB_VERSION, FIELD_STORES, IndexedDbLocalRepository, createSimulatedPackageEnvelope, deleteFieldDatabase, openFieldDatabase } from ".";
+import type { AtomicOperationChange, CaptureDraft, CaptureDraftKey } from "../../ports";
 
 const dbNames: string[] = [];
 const repositories: IndexedDbLocalRepository[] = [];
@@ -59,7 +59,121 @@ function change(operationId: string, nextOrder: WorkOrder = orderFor({ physicalS
   };
 }
 
+function draft(overrides: Partial<CaptureDraft> = {}): CaptureDraft {
+  const key: CaptureDraftKey = { technicianId: "tech-1", deviceId: "device-1", orderId: "order-1", action: "CUT" };
+  return {
+    ...key,
+    updatedAt: "2026-09-12T09:00:00.000Z",
+    content: { reading: { value: 123 } },
+    ...overrides,
+  };
+}
+
+function openVersionOneDatabase(name: string): Promise<IDBDatabase> {
+  const keyPaths: Record<string, string> = {
+    package: "packageId",
+    orders: "orderId",
+    operations: "operationId",
+    visits: "operationId",
+    evidence: "evidenceId",
+    sync: "operationId",
+    conflicts: "conflictId",
+  };
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(name, 1);
+    request.onupgradeneeded = () => {
+      for (const [store, keyPath] of Object.entries(keyPaths)) request.result.createObjectStore(store, { keyPath });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 describe("IndexedDB local repository", () => {
+  it("upgrades a v1 database by adding drafts and preserves all seven stores and records", async () => {
+    const dbName = "draft-upgrade-v1";
+    dbNames.push(dbName);
+    const oldDb = await openVersionOneDatabase(dbName);
+    const expected: Array<{ store: string; keyPath: string; value: Record<string, string> }> = [
+      { store: "package", keyPath: "packageId", value: { packageId: "package-v1", retained: "package" } },
+      { store: "orders", keyPath: "orderId", value: { orderId: "order-v1", retained: "orders" } },
+      { store: "operations", keyPath: "operationId", value: { operationId: "operation-v1", retained: "operations" } },
+      { store: "visits", keyPath: "operationId", value: { operationId: "visit-v1", retained: "visits" } },
+      { store: "evidence", keyPath: "evidenceId", value: { evidenceId: "evidence-v1", retained: "evidence" } },
+      { store: "sync", keyPath: "operationId", value: { operationId: "sync-v1", retained: "sync" } },
+      { store: "conflicts", keyPath: "conflictId", value: { conflictId: "conflict-v1", retained: "conflicts" } },
+    ];
+    const seed = oldDb.transaction(expected.map((entry) => entry.store), "readwrite");
+    for (const entry of expected) seed.objectStore(entry.store).put(entry.value);
+    await new Promise<void>((resolve, reject) => {
+      seed.oncomplete = () => resolve();
+      seed.onerror = () => reject(seed.error);
+      seed.onabort = () => reject(seed.error);
+    });
+    oldDb.close();
+
+    const repository = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });
+    repositories.push(repository);
+    const upgraded = await openFieldDatabase(dbName);
+    expect(upgraded.version).toBe(FIELD_DB_VERSION);
+    expect([...upgraded.objectStoreNames].sort()).toEqual([...FIELD_STORES].sort());
+    const read = upgraded.transaction([...expected.map((entry) => entry.store), "drafts"], "readonly");
+    for (const entry of expected) {
+      await expect(new Promise((resolve, reject) => {
+        const request = read.objectStore(entry.store).get(entry.value[entry.keyPath]);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      })).resolves.toEqual(entry.value);
+    }
+    expect(await new Promise<number>((resolve, reject) => {
+      const request = read.objectStore("drafts").count();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    })).toBe(0);
+    upgraded.close();
+  });
+
+  it("stores scoped drafts by action and identity, reopens with Blob evidence, and keeps them out of sync", async () => {
+    const dbName = "capture-draft-crud";
+    dbNames.push(dbName);
+    const first = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });
+    const otherTechnician = new IndexedDbLocalRepository({ dbName, technicianId: "tech-2", deviceId: "device-1" });
+    const otherDevice = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-2" });
+    repositories.push(first, otherTechnician, otherDevice);
+    const original = draft({ content: { reading: { value: 123 }, evidence: [new Blob(["photo-bytes"], { type: "image/jpeg" })] } });
+    await first.saveCaptureDraft(original);
+    await first.saveCaptureDraft(draft({ action: "VISIT", content: { exceptionReason: "partial visit" } }));
+    await first.saveCaptureDraft(draft({ action: "RECONNECTION", content: { location: { latitude: -19.5 } } }));
+
+    expect(await first.getCaptureDraft(original)).toMatchObject({ technicianId: "tech-1", deviceId: "device-1", orderId: "order-1", action: "CUT", content: { reading: { value: 123 } } });
+    expect(await otherTechnician.getCaptureDraft({ ...original, technicianId: "tech-2" })).toBeUndefined();
+    expect(await otherDevice.getCaptureDraft({ ...original, deviceId: "device-2" })).toBeUndefined();
+    await expect(first.getCaptureDraft({ ...original, technicianId: "tech-2" })).rejects.toThrow(/scope/);
+    await expect(first.listSyncItems()).resolves.toEqual([]);
+    await first.close();
+
+    const reopened = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });
+    repositories.push(reopened);
+    const restored = await reopened.getCaptureDraft(original);
+    expect(restored?.content.evidence?.[0]).toBeInstanceOf(Blob);
+    await expect((restored?.content.evidence?.[0] as Blob).text()).resolves.toBe("photo-bytes");
+    await reopened.deleteCaptureDraft(original);
+    await expect(reopened.getCaptureDraft(original)).resolves.toBeUndefined();
+    await expect(reopened.getCaptureDraft({ ...original, action: "VISIT" })).resolves.toBeDefined();
+    await expect(reopened.getCaptureDraft({ ...original, action: "RECONNECTION" })).resolves.toBeDefined();
+  });
+
+  it("rejects a failed draft write and preserves the previous saved draft", async () => {
+    const { dbName } = packageFor("draft-save-failure");
+    const repository = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });
+    repositories.push(repository);
+    const previous = draft();
+    await repository.saveCaptureDraft(previous);
+    const invalid = draft({ content: { exceptionReason: (() => "not cloneable") as unknown as string } });
+    await expect(repository.saveCaptureDraft(invalid)).rejects.toBeTruthy();
+    await expect(repository.getCaptureDraft(previous)).resolves.toMatchObject({ content: previous.content });
+  });
+
   it("survives close and reopen with last valid package and durable queue", async () => {
     const { dbName, workPackage } = packageFor("restart");
     const first = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });
