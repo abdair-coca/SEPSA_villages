@@ -270,14 +270,6 @@ export function IconDocument({ className = "icon", ...props }: SVGProps<SVGSVGEl
   );
 }
 
-export function IconPhone({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>
-      <path d="M7 4h3l1.5 4-2 1.5a12 12 0 0 0 5 5l1.5-2 4 1.5v3c0 1-1 2-2 2C11.4 19.6 4.4 12.6 4 6c0-1 1-2 3-2Z" />
-    </svg>
-  );
-}
-
 export function IconUser({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>

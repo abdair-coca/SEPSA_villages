@@ -5,8 +5,9 @@ import { selectVisibleOrders } from "../app/index";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
+import { AppHeader } from "./AppHeader";
 import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconExpand, IconMap, IconPhone, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch, IconUser } from "./Icons";
+import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch, IconUser } from "./Icons";
 import { Notification } from "./Notification";
 
 export interface FieldAppProps {
@@ -129,6 +130,7 @@ export function FieldApp({
   };
 
   const pending = pendingCount(state.syncItems);
+  const modeLabel = state.mode === "online" ? "Red disponible" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
   const openPendingQueue = () => {
     if (state.message) setDismissedMessage(state.message);
     store.selectOrder(null);
@@ -137,16 +139,50 @@ export function FieldApp({
 
   return (
     <div className="field-app">
-      <Header
-        state={state}
-        isProbingNetwork={isProbingNetwork}
-        onRetryConnection={handleRetryConnection}
-        isRefreshingAssigned={isRefreshingAssigned}
-        onRefreshAssigned={() => void handleRefreshAssigned()}
-        technicianId={technicianId}
-        technicianName={technicianName}
-        deviceId={deviceId}
+      <AppHeader
+        variant="field"
         onLogout={onLogout}
+        context={
+          <>
+            <span>Técnico:</span>
+            <strong>{technicianName ?? technicianId}</strong>
+            <span className="header-context__separator" aria-hidden="true">|</span>
+            <span className="header-device">Dispositivo: {shortTechnicalId(deviceId)}</span>
+          </>
+        }
+        actions={
+          <div className="header-meta">
+            <div className="header-top-actions">
+              <span className={`network-status-badge network-status-badge--${state.mode}`}>
+                <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
+                <span className="network-status-text">{modeLabel}</span>
+              </span>
+              <LastUpdateDisplay
+                timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
+                isRefreshing={isProbingNetwork || isRefreshingAssigned}
+                onRefresh={() => void handleRefreshAssigned()}
+              />
+              {onLogout ? <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button> : null}
+            </div>
+            <div className="header-bottom-actions">
+              <button
+                type="button"
+                className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
+                onClick={handleRetryConnection}
+                disabled={isProbingNetwork}
+                title="Reintentar envío de operaciones pendientes"
+                aria-label="Reintentar envío"
+              >
+                <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
+                <span>{isProbingNetwork ? "Probando…" : "Reintentar envío"}</span>
+              </button>
+              <button type="button" className="header-refresh-button" onClick={() => void handleRefreshAssigned()} disabled={isRefreshingAssigned}>
+                <IconDownload />
+                <span>{isRefreshingAssigned ? "Enviando y actualizando…" : "Enviar pendientes y actualizar"}</span>
+              </button>
+            </div>
+          </div>
+        }
       />
       {state.message && !(state.message.transient && dismissedMessage === state.message) ? (
         <Notification
@@ -185,81 +221,6 @@ export async function syncThenRefreshAssigned(store: AppStore, refreshAssigned: 
       : `El servidor no confirmó ${remaining.length} operación(es) pendiente(s). Los registros y evidencias siguen guardados en este dispositivo.`);
   }
   await refreshAssigned();
-}
-
-function Header({
-  state,
-  isProbingNetwork,
-  onRetryConnection,
-  isRefreshingAssigned,
-  onRefreshAssigned,
-  technicianId,
-  technicianName,
-  deviceId,
-  onLogout,
-}: {
-  state: AppState;
-  isProbingNetwork: boolean;
-  onRetryConnection: () => void;
-  isRefreshingAssigned: boolean;
-  onRefreshAssigned?: () => void;
-  technicianId: string;
-  technicianName?: string;
-  deviceId: string;
-  onLogout?: () => void;
-}) {
-  const modeLabel =
-    state.mode === "online" ? "Red disponible" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
-
-  return (
-    <header className="app-header">
-      <div className="identity-block">
-        <div className="identity-brand-row">
-          <div className="field-brand"><strong>SEPSA</strong><span>CAMPO</span></div>
-          {onLogout ? <button type="button" className="header-profile-button" onClick={onLogout} aria-label="Cerrar sesión"><IconUser /></button> : null}
-        </div>
-        <h1>Jornada de campo</h1>
-        <p className="identity">Órdenes asignadas, ejecución de cortes y sincronización en terreno.</p>
-        <div className="header-context">
-          <span>Técnico:</span>
-          <strong>{technicianName ?? technicianId}</strong>
-           <span className="header-context__separator" aria-hidden="true">|</span>
-           <span className="header-device">Dispositivo: {shortTechnicalId(deviceId)}</span>
-        </div>
-      </div>
-      <div className="header-meta">
-        <div className="header-top-actions">
-          <span className={`network-status-badge network-status-badge--${state.mode}`}>
-            <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
-            <span className="network-status-text">{modeLabel}</span>
-          </span>
-          <LastUpdateDisplay
-            timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
-            isRefreshing={isProbingNetwork || isRefreshingAssigned}
-            onRefresh={onRefreshAssigned ?? onRetryConnection}
-          />
-          {onLogout ? <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button> : null}
-        </div>
-        <div className="header-bottom-actions">
-          <button
-            type="button"
-            className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
-            onClick={onRetryConnection}
-            disabled={isProbingNetwork}
-            title="Reintentar envío de operaciones pendientes"
-            aria-label="Reintentar envío"
-          >
-            <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
-            <span>{isProbingNetwork ? "Probando…" : "Reintentar envío"}</span>
-          </button>
-          <button type="button" className="header-refresh-button" onClick={onRefreshAssigned} disabled={isRefreshingAssigned}>
-            <IconDownload />
-            <span>{isRefreshingAssigned ? "Enviando y actualizando…" : "Enviar pendientes y actualizar"}</span>
-          </button>
-        </div>
-      </div>
-    </header>
-  );
 }
 
 function Workbench({

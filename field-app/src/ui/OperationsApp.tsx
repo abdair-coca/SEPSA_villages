@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { generateOperationId, type AuditEvent, type DebtorRecord, type Session, type TechnicianRecord, type WorkOrder } from "../domain";
 import type { OperationsAuthorityPort } from "../ports";
+import { AppHeader } from "./AppHeader";
 import { IconAlertTriangle, IconCheck, IconDocument, IconSearch } from "./Icons";
 
 interface OperationsAppProps {
@@ -306,28 +307,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
 
   return (
     <div className="operations-app">
-      <div className="admin-topbar">
-        <div className="admin-topbar__inner">
-          <div className="admin-brand-lockup">
-            <span className="admin-brand-mark" aria-hidden="true" />
-            <strong>SEPSA</strong>
-            <span>Sistema de Operaciones</span>
-          </div>
-          <div className="admin-topbar__tools">
-            <span className="admin-environment"><span className="admin-environment__dot" aria-hidden="true" />Administración <strong>{session.authenticity}</strong></span>
-            <span className="admin-notification" role="img" aria-label="Notificaciones" />
-            <span className="admin-avatar" aria-hidden="true">{initials(session.displayName ?? session.username)}</span>
-            <div className="admin-user-summary"><strong>{session.displayName ?? session.username}</strong><span>Admin</span></div>
-            <button className="admin-logout-link" type="button" onClick={onLogout}>Cerrar sesión</button>
-          </div>
-        </div>
-      </div>
-       <header className="operations-header admin-header">
-         <div className="admin-brand">
-           <h1>Centro de control de órdenes de corte</h1>
-           <p>Busca suministros con mora, genera órdenes y asigna técnicos.</p>
-         </div>
-       </header>
+      <AppHeader variant="admin" session={session} onLogout={onLogout} />
 
       {message ? <div className={`message message--${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{message}</div> : null}
 
@@ -585,5 +565,4 @@ function normalizeFilterValue(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
 function parseMinMonths(value: string): number | undefined { const parsed = Number(value); return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined; }
-function initials(value: string): string { return value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "AD"; }
 function joinAdminValues(...values: Array<string | number | undefined>): string | undefined { const available = values.filter((value) => value !== undefined && value !== ""); return available.length ? available.join(" · ") : undefined; }
