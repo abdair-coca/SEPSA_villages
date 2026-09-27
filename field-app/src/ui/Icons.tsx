@@ -85,6 +85,15 @@ export function IconDownload({ className = "icon", ...props }: SVGProps<SVGSVGEl
   );
 }
 
+export function IconDevice({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>
+      <rect x="6" y="2.5" width="12" height="19" rx="2" />
+      <path d="M10 5h4M11 18.5h2" />
+    </svg>
+  );
+}
+
 export function IconPin({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg

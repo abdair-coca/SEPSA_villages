@@ -7,7 +7,7 @@ import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
 import { AppHeader } from "./AppHeader";
 import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch, IconUser } from "./Icons";
+import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch, IconUser } from "./Icons";
 import { Notification } from "./Notification";
 
 export interface FieldAppProps {
@@ -140,49 +140,58 @@ export function FieldApp({
   return (
     <div className="field-app">
       <AppHeader
-        variant="field"
+        role="field"
+        title="Jornada de campo"
+        description="Órdenes asignadas, ejecución de cortes y sincronización en terreno."
+        user={{ displayName: technicianName ?? technicianId, roleLabel: "Técnico" }}
         onLogout={onLogout}
         context={
-          <>
-            <span>Técnico:</span>
-            <strong>{technicianName ?? technicianId}</strong>
-            <span className="header-context__separator" aria-hidden="true">|</span>
-            <span className="header-device">Dispositivo: {shortTechnicalId(deviceId)}</span>
-          </>
-        }
-        actions={
-          <div className="header-meta">
-            <div className="header-top-actions">
-              <span className={`network-status-badge network-status-badge--${state.mode}`}>
-                <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
-                <span className="network-status-text">{modeLabel}</span>
+          <div className="field-header-context-card">
+            <div className="field-header-context__item">
+              <span className="field-header-context__icon" aria-hidden="true"><IconDevice /></span>
+              <span className="field-header-context__copy">
+                <span className="field-header-context__label">Dispositivo</span>
+                <strong>{shortTechnicalId(deviceId)}</strong>
               </span>
-              <LastUpdateDisplay
-                timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
-                isRefreshing={isProbingNetwork || isRefreshingAssigned}
-                onRefresh={() => void handleRefreshAssigned()}
-              />
-              {onLogout ? <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button> : null}
             </div>
-            <div className="header-bottom-actions">
-              <button
-                type="button"
-                className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
-                onClick={handleRetryConnection}
-                disabled={isProbingNetwork}
-                title="Reintentar envío de operaciones pendientes"
-                aria-label="Reintentar envío"
-              >
-                <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
-                <span>{isProbingNetwork ? "Probando…" : "Reintentar envío"}</span>
-              </button>
-              <button type="button" className="header-refresh-button" onClick={() => void handleRefreshAssigned()} disabled={isRefreshingAssigned}>
-                <IconDownload />
-                <span>{isRefreshingAssigned ? "Enviando y actualizando…" : "Enviar pendientes y actualizar"}</span>
-              </button>
+            <span className="field-header-context__divider" aria-hidden="true" />
+            <div className="field-header-context__item">
+              <span className="field-header-context__icon" aria-hidden="true"><IconUser /></span>
+              <span className="field-header-context__copy">
+                <span className="field-header-context__label">Técnico</span>
+                <strong>{technicianName ?? technicianId}</strong>
+              </span>
             </div>
           </div>
         }
+        status={{
+          tone: state.mode === "online" ? "positive" : state.mode === "weak" ? "warning" : "negative",
+          label: modeLabel,
+        }}
+        actions={<div className="header-action-row">
+          <button type="button" className="header-refresh-button" onClick={() => void handleRefreshAssigned()} disabled={isRefreshingAssigned}>
+            <IconDownload />
+            <span>{isRefreshingAssigned ? "Enviando y actualizando…" : "Enviar pendientes y actualizar"}</span>
+          </button>
+          <div className="header-action-row__secondary">
+            <LastUpdateDisplay
+              timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
+              isRefreshing={isProbingNetwork || isRefreshingAssigned}
+              onRefresh={() => void handleRefreshAssigned()}
+            />
+            <button
+              type="button"
+              className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
+              onClick={handleRetryConnection}
+              disabled={isProbingNetwork}
+              title="Reintentar envío de operaciones pendientes"
+              aria-label="Reintentar envío"
+            >
+              <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
+              <span>{isProbingNetwork ? "Probando…" : "Reintentar envío"}</span>
+            </button>
+          </div>
+        </div>}
       />
       {state.message && !(state.message.transient && dismissedMessage === state.message) ? (
         <Notification

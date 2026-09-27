@@ -3,6 +3,7 @@ import { generateOperationId, type AuditEvent, type DebtorRecord, type Session, 
 import type { OperationsAuthorityPort } from "../ports";
 import { AppHeader } from "./AppHeader";
 import { IconAlertTriangle, IconCheck, IconDocument, IconSearch } from "./Icons";
+import { AppStateCard } from "./UiState";
 
 interface OperationsAppProps {
   authority: OperationsAuthorityPort;
@@ -307,7 +308,14 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
 
   return (
     <div className="operations-app">
-      <AppHeader variant="admin" session={session} onLogout={onLogout} />
+      <AppHeader
+        role="admin"
+        title="Centro de control de órdenes de corte"
+        description="Busca suministros con mora, genera órdenes y asigna técnicos."
+        user={{ displayName: session.displayName ?? session.username, roleLabel: "Admin", authenticity: session.authenticity }}
+        status={{ tone: "environment", label: `Entorno · ${session.authenticity}` }}
+        onLogout={onLogout}
+      />
 
       {message ? <div className={`message message--${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{message}</div> : null}
 
@@ -372,11 +380,11 @@ export function getMissingOrderCreationDebtorIds(debtorIds: readonly string[], d
 }
 
 function AdminLoadingState() {
-  return <div className="admin-state-card admin-state-card--loading" aria-live="polite"><span className="admin-loading-mark" aria-hidden="true" /><strong>Cargando suministros</strong><span>Estamos consultando información operativa.</span></div>;
+  return <AppStateCard as="div" className="admin-state-card" tone="loading" title="Cargando suministros" description="Estamos consultando información operativa." />;
 }
 
 function AdminErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return <div className="admin-state-card admin-state-card--error" role="alert"><strong>No pudimos cargar los suministros</strong><span>{message}</span><button className="secondary-action" type="button" onClick={onRetry}>Reintentar</button></div>;
+  return <AppStateCard as="div" className="admin-state-card" tone="error" title="No pudimos cargar los suministros" description={message} action={{ label: "Reintentar", onClick: onRetry, variant: "secondary" }} />;
 }
 
 function AdminInlineError({ message, onRetry }: { message: string; onRetry: () => void }) {

@@ -2,46 +2,11 @@
 @import "@fontsource/manrope/latin-500.css";
 @import "@fontsource/manrope/latin-600.css";
 @import "@fontsource/manrope/latin-700.css";
-
-:root {
-  --ink: #1e2423;
-  --muted: #68706c;
-  --warm-bg: #f3efe7;
-  --surface: #fbfaf7;
-  --paper: #ffffff;
-  --line: #ded8cc;
-  --accent: #c45b19;
-  --accent-soft: #fff1d2;
-  --warning: #e7a629;
-  --space-2: 2px;
-  --space-4: 4px;
-  --space-8: 8px;
-  --space-12: 12px;
-  --space-16: 16px;
-  --space-24: 24px;
-  --space-32: 32px;
-  --space-40: 40px;
-  --space-48: 48px;
-  --space-64: 64px;
-  --space-80: 80px;
-  --space-96: 96px;
-  --radius-4: 4px;
-  --radius-6: 6px;
-  --radius-8: 8px;
-  --radius-12: 12px;
-  --radius-16: 16px;
-  --radius-full: 50%;
-  --ease-field: cubic-bezier(.32,.72,0,1);
-  color: var(--ink);
-  background: var(--warm-bg);
-  font-family: "Manrope", sans-serif;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  font-variant-numeric: tabular-nums;
-}
+@import "./styles/tokens.css";
+@import "./styles/shared-shell.css";
 
 * { box-sizing: border-box; }
-body { min-width: 320px; margin: 0; background: var(--warm-bg); }
+body { min-width: 0; margin: 0; background: var(--warm-bg); }
 button, input, select, textarea { font: inherit; }
 button { transition: background-color 160ms var(--ease-field), border-color 160ms var(--ease-field), color 160ms var(--ease-field), transform 120ms var(--ease-field); }
 input, select, textarea { transition: border-color 160ms ease, box-shadow 160ms ease; }
@@ -3532,158 +3497,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   background: #f8f8f6;
 }
 
-.admin-topbar {
-  border-bottom: 1px solid #e7e5df;
-  background: var(--paper);
-}
-
-.admin-topbar__inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-24);
-  width: min(1280px, calc(100% - 48px));
-  min-height: 64px;
-  margin-inline: auto;
-}
-
-.admin-brand-lockup,
-.admin-topbar__tools,
-.admin-user-summary {
-  display: flex;
-  align-items: center;
-}
-
-.admin-brand-lockup {
-  gap: var(--space-8);
-  min-width: 0;
-}
-
-.admin-brand-lockup strong {
-  color: #c65312;
-  font-size: 19px;
-  line-height: 28px;
-  letter-spacing: -.03em;
-}
-
-.admin-brand-lockup > span:last-child {
-  margin-left: var(--space-8);
-  padding-left: var(--space-12);
-  border-left: 1px solid var(--line);
-  color: #7c817d;
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.admin-brand-mark {
-  display: block;
-  width: 15px;
-  height: 24px;
-  background: var(--accent);
-  clip-path: polygon(48% 0, 100% 0, 65% 42%, 93% 42%, 25% 100%, 42% 55%, 8% 55%);
-}
-
-.admin-topbar__tools {
-  gap: var(--space-16);
-  color: #59635d;
-}
-
-.admin-environment {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-8);
-  padding-right: var(--space-16);
-  border-right: 1px solid var(--line);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.admin-environment strong {
-  color: #707872;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .04em;
-}
-
-.admin-environment__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: #82928a;
-}
-
-.admin-notification {
-  position: relative;
-  width: 18px;
-  height: 20px;
-}
-
-.admin-notification::before {
-  position: absolute;
-  top: 3px;
-  left: 4px;
-  width: 10px;
-  height: 12px;
-  border: 1.5px solid #5c6861;
-  border-radius: 8px 8px 4px 4px;
-  content: "";
-}
-
-.admin-notification::after {
-  position: absolute;
-  bottom: 1px;
-  left: 7px;
-  width: 5px;
-  height: 2px;
-  border-radius: 2px;
-  background: #5c6861;
-  content: "";
-}
-
-.admin-avatar {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: var(--radius-full);
-  color: #40505a;
-  background: #e1e5e8;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.admin-user-summary {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
-  min-width: 88px;
-}
-
-.admin-user-summary strong {
-  color: var(--ink);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.admin-user-summary span {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.admin-logout-link {
-  padding: 0;
-  border: 0;
-  color: var(--muted);
-  background: transparent;
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.admin-logout-link:hover {
-  color: var(--accent);
-}
-
 .operations-app .operations-header,
 .operations-app .admin-summary,
 .operations-app .process-strip,
@@ -3691,36 +3504,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 .operations-app .admin-order-detail,
 .operations-app > .message {
   width: min(1280px, calc(100% - 48px));
-}
-
-.operations-app .admin-header {
-  align-items: flex-end;
-  padding: var(--space-32) 0 var(--space-16);
-  border-bottom: 0;
-}
-
-.operations-app .admin-brand h1 {
-  margin-bottom: var(--space-4);
-  font-size: 30px;
-  line-height: 36px;
-}
-
-.operations-app .admin-brand p {
-  color: #7a827c;
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.admin-page-status {
-  display: grid;
-  justify-items: end;
-  gap: var(--space-8);
-}
-
-.admin-page-status small {
-  color: #89918b;
-  font-size: 11px;
-  line-height: 16px;
 }
 
 .operations-app .operations-main {
@@ -8484,16 +8267,46 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     padding: var(--space-4) 0;
   }
 
-  .field-app:has(.orders-tray) .identity-block h1 {
+  .field-app:has(.orders-tray) .app-header.app-shell {
+    min-height: 0;
+    width: calc(100% - 24px);
+    padding: var(--space-8) 0;
+  }
+
+  .field-app:has(.orders-tray) .app-header.app-shell .identity-block h1 {
     margin: 0;
     font-size: 20px;
     line-height: 24px;
   }
 
+  .field-app:has(.orders-tray) .app-header.app-shell .identity-brand-row,
+  .field-app:has(.orders-tray) .app-header.app-shell .app-header__description,
   .field-app:has(.orders-tray) .identity,
   .field-app:has(.orders-tray) .header-context,
+  .field-app:has(.orders-tray) .app-header__actions,
   .field-app:has(.orders-tray) .header-top-actions .last-update {
     display: none;
+  }
+
+  .field-app:has(.orders-tray) .app-header.app-shell .app-header__aside {
+    min-width: 0;
+    align-items: flex-end;
+    gap: var(--space-4);
+  }
+
+  .field-app:has(.orders-tray) .app-header.app-shell .app-header__status,
+  .field-app:has(.orders-tray) .app-header.app-shell .app-header__user-row {
+    justify-content: flex-end;
+  }
+
+  .field-app:has(.orders-tray) .app-header.app-shell .app-header__user-row {
+    min-height: 32px;
+  }
+
+  .field-app:has(.orders-tray) .app-header.app-shell .app-header__avatar {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
   }
 
   .field-app:has(.orders-tray) .header-meta {
@@ -9630,5 +9443,424 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
   .field-app .map-page__tools .map-download-link {
     min-height: 40px;
+  }
+}
+
+/* Premium mobile hierarchy for the Technician home header. */
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .field-header-context-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  margin-top: 22px;
+  padding: 18px 22px;
+  border: 1px solid #efede9;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(33, 42, 59, .06);
+}
+
+.field-app:has(.field-home) .field-header-context__item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+}
+
+.field-app:has(.field-home) .field-header-context__icon {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  place-items: center;
+  border-radius: 20px;
+  color: #263754;
+  background: #f5f6f7;
+}
+
+.field-app:has(.field-home) .field-header-context__icon .icon {
+  width: 27px;
+  height: 27px;
+}
+
+.field-app:has(.field-home) .field-header-context__copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.field-app:has(.field-home) .field-header-context__label {
+  overflow: hidden;
+  color: #7b8799;
+  font-size: 15px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-app:has(.field-home) .field-header-context__copy strong {
+  overflow: hidden;
+  color: #263754;
+  font-size: 18px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-app:has(.field-home) .field-header-context__divider {
+  width: 1px;
+  height: 48px;
+  background: #e8e7e4;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button {
+  display: flex;
+  width: 100%;
+  min-height: 104px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 22px;
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 10px 22px rgba(196, 91, 25, .18);
+  font-size: clamp(18px, 4.8vw, 24px);
+  line-height: 30px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button:hover:not(:disabled) {
+  background: #a84d16;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > .icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > span:not(.header-refresh-button__arrow) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-app:has(.field-home) .header-refresh-button__arrow {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(190, 59, 0, .56);
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.22fr) minmax(0, .78fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update,
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 96px;
+  align-items: center;
+  border: 1px solid #efede9;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(33, 42, 59, .05);
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 2px;
+  padding: 16px 20px;
+  color: #7b8799;
+  font-size: 15px;
+  line-height: 20px;
+  text-align: left;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update br {
+  display: none;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update strong {
+  color: #263754;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update .last-update-exact {
+  color: #7b8799;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry {
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-color: #efede9;
+  color: #263754;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(33, 42, 59, .05);
+  font-size: 17px;
+  line-height: 24px;
+  text-align: left;
+  white-space: normal;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon {
+  display: inline-flex;
+  flex: 0 0 30px;
+  color: #263754;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon .icon {
+  width: 30px;
+  height: 30px;
+}
+
+@media (min-width: 761px) {
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .field-header-context-card {
+    display: flex;
+    width: auto;
+    margin-top: 16px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .field-app:has(.field-home) .field-header-context__item {
+    gap: 8px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__icon {
+    display: none;
+  }
+
+  .field-app:has(.field-home) .field-header-context__label,
+  .field-app:has(.field-home) .field-header-context__copy strong {
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__divider {
+    width: auto;
+    height: auto;
+    margin-inline: 8px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__divider::after {
+    content: "|";
+    color: #c8c0b5;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row {
+    display: flex;
+    width: auto;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button {
+    width: auto;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 12px;
+    box-shadow: none;
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > .icon {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }
+
+  .field-app:has(.field-home) .header-refresh-button__arrow {
+    display: none;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update,
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry {
+    min-height: 40px;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update {
+    display: inline-flex;
+    width: auto;
+    padding: 2px 6px;
+    font-size: 12px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update strong {
+    font-size: 12px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update .last-update-exact {
+    font-size: 11px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry {
+    width: auto;
+    padding: 0 12px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon {
+    flex-basis: 16px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon .icon {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (max-width: 430px) {
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .field-header-context-card {
+    gap: 10px;
+    margin-top: 16px;
+    padding: 8px 12px;
+    border-radius: 18px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__item {
+    gap: 8px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__icon {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    border-radius: 13px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__icon .icon {
+    width: 19px;
+    height: 19px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__label {
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__copy strong {
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .field-app:has(.field-home) .field-header-context__divider {
+    height: 32px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row {
+    gap: 8px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button {
+    min-height: 66px;
+    gap: 6px;
+    padding-inline: 12px;
+    border-radius: 16px;
+    font-size: clamp(14px, 4.8vw, 18px);
+    line-height: 22px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > .icon {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+  }
+
+  .field-app:has(.field-home) .header-refresh-button__arrow {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    background: rgba(124, 53, 11, .34);
+    font-size: 24px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary {
+    gap: 8px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update,
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry {
+    min-height: 64px;
+    border-radius: 16px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update {
+    padding: 8px 10px;
+    font-size: 10px;
+    line-height: 14px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update strong {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update .last-update-exact {
+    font-size: 10px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry {
+    gap: 5px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon {
+    flex-basis: 20px;
+  }
+
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon .icon {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+@media (max-width: 760px) {
+  .field-app:has(.field-home) {
+    overflow-x: clip;
   }
 }

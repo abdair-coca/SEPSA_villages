@@ -21,6 +21,18 @@ PostgreSQL
 
 `field-app/` contiene una aplicación React + TypeScript. `src/domain` define entidades y políticas; `src/application` contiene casos de uso; `src/app` compone el estado de la jornada; `src/ports` define interfaces; `src/adapters` conecta IndexedDB, navegador, simulación y HTTP; `src/ui` contiene las vistas de administración y campo.
 
+### UI compartida
+
+La interfaz visual cruza los roles mediante un shell común. `src/ui/AppHeader.tsx` es el seam de presentación autenticado para Admin y Técnico: recibe identidad, título, descripción, contexto, un estado tipado y acciones como contenido. Renderiza la misma tarjeta superior responsive para ambos roles: marca por área, estado o entorno, avatar y menú de cuenta. El menú concentra nombre, rol, entorno cuando existe y cierre de sesión; no contiene reglas de autorización.
+
+El estado del header conserva una separación explícita: Técnico muestra el estado real de conectividad (`positive`, `warning` o `negative`) que ya produce la jornada; Admin muestra el entorno de ejecución (`environment`) y no introduce una segunda lógica de conectividad. El nombre y rol no se duplican fuera del menú. El top bar no es fijo ni sticky y el título de página permanece debajo con el texto propio de cada superficie.
+
+`src/ui/BrandLockup.tsx` comparte la marca con Login, mientras la lógica de permisos, sincronización, persistencia y operaciones permanece fuera de la UI. `context` y `actions` son slots de presentación existentes: el shell los posiciona, pero no interpreta ni modifica sus comportamientos.
+
+Los patrones visuales compartidos deben tener una interfaz pequeña y más de un consumidor real. Paneles, estados, acciones, badges, formularios, modales y paginación se reutilizan cuando representan el mismo comportamiento. Las excepciones específicas del técnico móvil se mantienen acotadas a captura, teclado, GPS, evidencia, mapa y operación offline.
+
+Los estilos tienen un punto de entrada en `src/ui/styles.css`. Los tokens visuales viven en `src/ui/styles/tokens.css` y el frame compartido en `src/ui/styles/shared-shell.css`; el resto de estilos se organiza por superficie hasta completar su migración. La hoja de estilos no contiene reglas de autorización ni de negocio.
+
 La aplicación arranca en uno de estos modos:
 
 - **Local/simulado:** sin `VITE_PILOT_BACKEND_URL`; autoridad y datos de demostración locales.

@@ -1,0 +1,36 @@
+:root {
+  --ink: #1e2423;
+  --muted: #68706c;
+  --warm-bg: #f3efe7;
+  --surface: #fbfaf7;
+  --paper: #ffffff;
+  --line: #ded8cc;
+  --accent: #c45b19;
+  --accent-soft: #fff1d2;
+  --warning: #e7a629;
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+  --space-64: 64px;
+  --space-80: 80px;
+  --space-96: 96px;
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-8: 8px;
+  --radius-12: 12px;
+  --radius-16: 16px;
+  --radius-full: 50%;
+  --ease-field: cubic-bezier(.32, .72, 0, 1);
+  color: var(--ink);
+  background: var(--warm-bg);
+  font-family: "Manrope", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;
+}
