@@ -11,6 +11,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "smoke:pwa": "node scripts/pwa-smoke.mjs",
+    "test:smoke-guard": "node --test scripts/smoke-build.test.mjs",
     "test": "vitest"
   },
   "dependencies": {

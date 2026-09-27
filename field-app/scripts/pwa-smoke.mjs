@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { assertPreviewMatchesBuild, assertSimulatedBuild } from "./smoke-build.mjs";
 
 const projectDirectory = fileURLToPath(new URL("..", import.meta.url));
 const port = 4182;
@@ -12,16 +13,19 @@ const debuggingUrl = "http://127.0.0.1:9223";
 const profileDirectory = join(tmpdir(), `sepsa-pwa-smoke-${Date.now()}`);
 const chromePath = findChrome();
 const viteCli = join(projectDirectory, "node_modules", "vite", "bin", "vite.js");
+const distDirectory = join(projectDirectory, "dist");
 
 let preview;
 let browser;
 
 try {
-  preview = spawn(process.execPath, [viteCli, "preview", "--host", "127.0.0.1", "--port", String(port)], {
+  const build = await assertSimulatedBuild(distDirectory, process.env.VITE_PILOT_BACKEND_URL);
+  preview = spawn(process.execPath, [viteCli, "preview", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
     cwd: projectDirectory,
     stdio: "ignore",
   });
   await waitForHttp(appUrl);
+  await assertPreviewMatchesBuild(appUrl, build);
 
   browser = spawn(chromePath, [
     "--headless=new",
@@ -40,6 +44,7 @@ try {
   await cdp.send("Page.enable");
   await cdp.send("Runtime.enable");
   await cdp.send("Network.enable");
+  await cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*" }] });
   await cdp.send("Page.navigate", { url: appUrl });
   await login(cdp, "admin.simulated", "SIMULATED-admin-003");
   await waitForExpression(cdp, `document.body.innerText.includes("Centro de control")`);
@@ -55,17 +60,28 @@ try {
   await login(cdp, "camila.simulated", "SIMULATED-camila-003");
   await waitForExpression(cdp, `document.body.innerText.includes("Jornada de campo")`);
   await waitForExpression(cdp, `document.querySelector(".current-order-card") !== null`);
+  await waitForExpression(cdp, `navigator.serviceWorker.controller !== null`);
+  await evaluate(cdp, `[...document.querySelectorAll(".bottom-navigation button")].find((button) => button.textContent.includes("Pendientes"))?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".queue-panel") !== null`);
+  const baselineOperationIds = await evaluate(cdp, `[...document.querySelectorAll(".queue-list--desktop .queue-item")].map((item) => item.querySelector(".queue-item__meta .technical-id")?.title).filter(Boolean)`);
+  await evaluate(cdp, `[...document.querySelectorAll(".bottom-navigation button")].find((button) => button.textContent.includes("Inicio"))?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".current-order-card") !== null`);
 
-  await evaluate(cdp, `
-    [...document.querySelectorAll("button")].find((button) => button.textContent.includes("Ver detalle"))?.click()
-  `);
-  await waitForExpression(cdp, `document.body.innerText.includes("Registrar visita")`);
-  await evaluate(cdp, `
-    [...document.querySelectorAll("button")]
-      .find((button) => button.textContent.includes("Registrar visita"))
-      ?.click()
-  `);
-  await waitForExpression(cdp, `document.body.innerText.includes("Confirmar datos")`);
+  await evaluate(cdp, `document.querySelector(".current-order-card .tertiary-action")?.click()`);
+  await waitForExpression(cdp, `document.querySelector('.capture-wizard[aria-label="Captura de visita"]') !== null`);
+  await waitForExpression(cdp, `document.querySelector(".capture-wizard__footer .primary-action")?.disabled === false`);
+  await evaluate(cdp, `document.querySelector('.capture-wizard input[type="checkbox"]')?.click()`);
+  await waitForExpression(cdp, `document.querySelector('.capture-wizard input[type="checkbox"]')?.checked === true`);
+  await evaluate(cdp, `document.querySelector(".capture-wizard__footer .primary-action")?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".capture-wizard textarea") !== null`);
+  await evaluate(cdp, `(() => {
+    const textarea = document.querySelector('.capture-wizard textarea');
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(textarea, 'No fue posible adjuntar evidencia durante smoke test.');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await evaluate(cdp, `document.querySelector(".capture-wizard__footer .primary-action")?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".capture-wizard h3")?.textContent === "Revisar y confirmar"`);
   await cdp.send("Network.emulateNetworkConditions", {
     offline: true,
     latency: 0,
@@ -73,23 +89,27 @@ try {
     uploadThroughput: -1,
   });
   await waitForExpression(cdp, `document.body.innerText.includes("Sin conexión")`);
-  await evaluate(cdp, `document.querySelector('.action-form input[type="checkbox"]')?.click()`);
-  await waitForExpression(cdp, `document.querySelector(".action-form textarea") !== null`);
-  await evaluate(cdp, `(() => {
-    const textarea = document.querySelector('.action-form textarea');
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-    setter.call(textarea, 'No fue posible adjuntar evidencia durante smoke test.');
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
-  await waitForExpression(cdp, `[...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Confirmar")`);
-  await evaluate(cdp, `
-    [...document.querySelectorAll("button")]
-      .find((button) => button.textContent.trim() === "Confirmar")
-      ?.click()
-  `);
-  await waitForExpression(cdp, `document.querySelector(".notification__action") !== null`);
-  await evaluate(cdp, `document.querySelector(".notification__action")?.click()`);
-  await waitForExpression(cdp, `document.querySelector(".queue-panel") !== null`);
+  await evaluate(cdp, `document.querySelector(".capture-wizard__footer .primary-action")?.click()`);
+  await waitForExpression(cdp, `document.querySelector('[role="dialog"] h2')?.textContent === "Visita guardada"`);
+  await evaluate(cdp, `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.trim() === "Listo")?.click()`);
+  await cdp.send("Page.navigate", { url: appUrl });
+  await waitForExpression(cdp, `document.querySelector(".current-order-card") !== null`);
+  await evaluate(cdp, `[...document.querySelectorAll(".bottom-navigation button")].find((button) => button.textContent.includes("Pendientes"))?.click()`);
+  await waitForExpression(cdp, `document.querySelector(".queue-panel .queue-status--pending") !== null`);
+  const persistedOffline = await evaluate(cdp, `({
+    offline: !navigator.onLine,
+    items: [...document.querySelectorAll(".queue-list--desktop .queue-item")].map((item) => ({
+      action: item.querySelector(".queue-item__header strong")?.textContent,
+      status: [...(item.querySelector(".queue-status")?.classList ?? [])].find((name) => name.startsWith("queue-status--")),
+      operationId: item.querySelector(".queue-item__meta .technical-id")?.title,
+    })),
+  })`);
+  const newVisitIds = persistedOffline.items.filter((item) => item.action === "Observación de campo" && !baselineOperationIds.includes(item.operationId)).map((item) => item.operationId);
+  const pendingNewVisits = persistedOffline.items.filter((item) => newVisitIds.includes(item.operationId) && item.status === "queue-status--pending").length;
+  const baselineStillPresent = baselineOperationIds.every((id) => persistedOffline.items.filter((item) => item.operationId === id).length === 1);
+  if (!persistedOffline.offline || newVisitIds.length !== 1 || pendingNewVisits !== 1 || !baselineStillPresent) {
+    throw new Error(`Offline reload persisted unexpected queue state: ${JSON.stringify(persistedOffline)}.`);
+  }
 
   const serviceWorker = await evaluate(cdp, `
     navigator.serviceWorker.ready.then(async (registration) => {
@@ -110,36 +130,63 @@ try {
   `, true);
   console.log(JSON.stringify({ serviceWorker }, null, 2));
 
-  stopProcessTree(preview.pid);
-  preview = undefined;
-  await delay(500);
-
-  const documentToken = `online-${Date.now()}`;
-  await evaluate(cdp, `document.documentElement.dataset.pwaSmokeDocument = ${JSON.stringify(documentToken)}`);
-  await cdp.send("Page.navigate", { url: appUrl });
-  await waitForExpression(cdp, `document.documentElement.dataset.pwaSmokeDocument !== ${JSON.stringify(documentToken)}`);
-  await waitForExpression(cdp, `document.querySelector(".bottom-navigation") !== null`);
-  await waitForExpression(cdp, `document.querySelector(".current-order-card") !== null`);
-  await evaluate(cdp, `document.querySelector(".collapsible-card__summary")?.click()`);
-  await waitForExpression(cdp, `document.querySelector(".home-secondary-link") !== null`);
-  await evaluate(cdp, `document.querySelector(".home-secondary-link")?.click()`);
-  await waitForExpression(cdp, `document.body.innerText.includes("Cola de sincronización")`);
-
-  const offlineState = await evaluate(cdp, `({
-    shell: document.body.innerText.includes("Jornada de campo"),
-    orders: document.body.innerText.includes("Cola de sincronización"),
-    pendingVisit: document.querySelector(".queue-status")?.textContent.includes("Pendiente") ?? false,
-    networkError: document.body.innerText.includes("ERR_CONNECTION_REFUSED"),
+  await evaluate(cdp, `window.__pwaSmokeOnlineEventCount = 0; window.addEventListener("online", () => { window.__pwaSmokeOnlineEventCount += 1; });`);
+  await cdp.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  });
+  await waitForExpression(cdp, "navigator.onLine === true", "browser online event after reconnect");
+  await waitForExpression(cdp, "document.querySelector('.network-status-badge--online') !== null", "UI online state after reconnect");
+  let automaticallySynced = false;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    automaticallySynced = await evaluate(cdp, `[...document.querySelectorAll(".queue-list--desktop .queue-item")].some((item) => {
+      const operationId = item.querySelector(".queue-item__meta .technical-id")?.title;
+      return ${JSON.stringify(newVisitIds)}.includes(operationId) && item.querySelector(".queue-status--synced") !== null;
+    })`);
+    if (automaticallySynced) break;
+    await delay(250);
+  }
+  const onlineEventCount = await evaluate(cdp, "window.__pwaSmokeOnlineEventCount");
+  let manualSyncUsed = false;
+  if (!automaticallySynced) {
+    await evaluate(cdp, `document.querySelector(".queue-panel .sync-button")?.click()`);
+    manualSyncUsed = true;
+    await waitForExpression(cdp, `[...document.querySelectorAll(".queue-list--desktop .queue-item")].some((item) => {
+      const operationId = item.querySelector(".queue-item__meta .technical-id")?.title;
+      return ${JSON.stringify(newVisitIds)}.includes(operationId) && item.querySelector(".queue-status--synced") !== null;
+    })`, "manual sync of offline visit");
+  }
+  const synchronized = await evaluate(cdp, `({
+    items: [...document.querySelectorAll(".queue-list--desktop .queue-item")].map((item) => ({
+      action: item.querySelector(".queue-item__header strong")?.textContent,
+      status: [...(item.querySelector(".queue-status")?.classList ?? [])].find((name) => name.startsWith("queue-status--")),
+      operationId: item.querySelector(".queue-item__meta .technical-id")?.title,
+    })),
   })`);
+  const syncedVisits = synchronized.items.filter((item) => newVisitIds.includes(item.operationId) && item.status === "queue-status--synced").length;
+  const pendingVisitCount = synchronized.items.filter((item) => newVisitIds.includes(item.operationId) && item.status === "queue-status--pending").length;
+  const queueIdsUnchanged = synchronized.items.length === persistedOffline.items.length
+    && persistedOffline.items.every((item) => synchronized.items.filter((candidate) => candidate.operationId === item.operationId).length === 1);
+  if (syncedVisits !== 1 || pendingVisitCount !== 0 || !queueIdsUnchanged) {
+    throw new Error("Reconnect did not synchronize exactly one visit without duplicates.");
+  }
 
-  const result = { previewHttp200: true, serviceWorker, offlineState };
+  const result = { previewHttp200: true, serviceWorker, persistedOffline, reconnect: { onlineEventCount, automaticallySynced, manualSyncUsed }, synchronized };
   console.log(JSON.stringify(result, null, 2));
 
   if (!serviceWorker.active || !serviceWorker.controlled || !serviceWorker.hasScript || !serviceWorker.hasStyles || !serviceWorker.hasFont) {
     throw new Error("Service Worker did not cache complete application shell.");
   }
-  if (!offlineState.shell || !offlineState.orders || !offlineState.pendingVisit || offlineState.networkError) {
-    throw new Error("Application did not recover persisted work from offline shell.");
+  if (!persistedOffline.offline || newVisitIds.length !== 1 || pendingNewVisits !== 1 || syncedVisits !== 1 || pendingVisitCount !== 0 || !queueIdsUnchanged) {
+    throw new Error("Application did not preserve and synchronize offline work exactly once.");
+  }
+
+  const unexpectedExternalRequests = cdp.blockedOrigins.filter((origin) => origin !== "https://server.arcgisonline.com");
+  if (unexpectedExternalRequests.length) throw new Error("Smoke attempted a non-simulated external request; request was blocked.");
+  if (!automaticallySynced) {
+    throw new Error(`Automatic sync did not run after reconnect; onlineEventCount=${onlineEventCount}; manualSyncRecovered=${manualSyncUsed}.`);
   }
 
   cdp.close();
@@ -150,7 +197,7 @@ try {
   try {
     rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   } catch (error) {
-    console.warn(`Could not remove temporary browser profile: ${error.message}`);
+    console.warn("Could not remove temporary browser profile.");
   }
 }
 
@@ -193,12 +240,25 @@ async function connectCdp(webSocketUrl) {
   });
   let messageId = 0;
   const pending = new Map();
-  const events = [];
+  const blockedOrigins = [];
+  function send(method, params = {}) {
+    const id = ++messageId;
+    socket.send(JSON.stringify({ id, method, params }));
+    return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+  }
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (!message.id) {
-      events.push(message);
-      if (events.length > 100) events.shift();
+      if (message.method === "Fetch.requestPaused") {
+        const { requestId, request } = message.params;
+        let requestOrigin;
+        try { requestOrigin = new URL(request.url).origin; } catch { requestOrigin = "invalid"; }
+        if (requestOrigin === appUrl) void send("Fetch.continueRequest", { requestId });
+        else {
+          blockedOrigins.push(requestOrigin);
+          void send("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" });
+        }
+      }
       return;
     }
     if (!pending.has(message.id)) return;
@@ -208,12 +268,8 @@ async function connectCdp(webSocketUrl) {
     else resolve(message.result);
   });
   return {
-    events,
-    send(method, params = {}) {
-      const id = ++messageId;
-      socket.send(JSON.stringify({ id, method, params }));
-      return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
-    },
+    blockedOrigins,
+    send,
     close() {
       socket.close();
     },
@@ -230,21 +286,12 @@ async function evaluate(cdp, expression, awaitPromise = false) {
   return response.result.value;
 }
 
-async function waitForExpression(cdp, expression) {
+async function waitForExpression(cdp, expression, description = "expected PWA UI state") {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     if (await evaluate(cdp, expression)) return;
     await delay(250);
   }
-  const state = await evaluate(cdp, `({
-    location: location.href,
-    body: document.body?.innerText?.slice(0, 500),
-    html: document.documentElement?.outerHTML?.slice(0, 1000),
-    resources: performance.getEntriesByType("resource").map((entry) => entry.name),
-  })`);
-  const failures = cdp.events
-    .filter((event) => event.method === "Runtime.exceptionThrown" || event.method === "Network.loadingFailed")
-    .slice(-10);
-  throw new Error(`Timed out waiting for expression: ${expression}\n${JSON.stringify({ state, failures })}`);
+  throw new Error(`Timed out waiting for ${description}.`);
 }
 
 async function login(cdp, username, password) {

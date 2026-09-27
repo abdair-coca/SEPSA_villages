@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
+import type * as Leaflet from "leaflet";
 import type { ConnectivityMode, WorkOrder } from "../domain";
 import { MAP_CACHE_NAME, SATELLITE_TILE_URL_TEMPLATE } from "../app/map-cache";
 import {
@@ -41,6 +42,55 @@ function escapeHtml(value: string): string {
   }[character] ?? character));
 }
 
+export function orderPopupHtml(account: string, customer: string, meter: string, debt: string, status: string): string {
+  return `
+          <strong>Cuenta ${escapeHtml(account)}</strong>
+          <span>${escapeHtml(customer)}</span>
+          <span>Medidor ${escapeHtml(meter)}</span>
+          <span>Deuda: ${escapeHtml(debt)} · <strong>${escapeHtml(status)}</strong></span>
+        `;
+}
+
+const FOCUSABLE_MAP_CONTROLS = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+export function handleFullscreenMapKeyDown(event: KeyboardEvent, dialog: HTMLElement, onClose?: () => void): void {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose?.();
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const controls = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_MAP_CONTROLS))
+    .filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
+  if (controls.length === 0) {
+    event.preventDefault();
+    dialog.focus();
+    return;
+  }
+
+  const active = document.activeElement;
+  if (!controls.some((element) => element === active)) {
+    event.preventDefault();
+    (event.shiftKey ? controls[controls.length - 1] : controls[0]).focus();
+  } else if (event.shiftKey && active === controls[0]) {
+    event.preventDefault();
+    controls[controls.length - 1].focus();
+  } else if (!event.shiftKey && active === controls[controls.length - 1]) {
+    event.preventDefault();
+    controls[0].focus();
+  }
+}
+
+export function restoreFullscreenMapFocus(opener: HTMLElement | null, dialog: HTMLElement | null): void {
+  if (opener?.isConnected) {
+    opener.focus();
+  } else {
+    dialog?.querySelector<HTMLButtonElement>(".btn-expand-map")?.focus();
+  }
+}
+
 export function FieldMap({
   orders,
   selectedOrderId,
@@ -54,6 +104,9 @@ export function FieldMap({
   onCloseFullscreen,
 }: FieldMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const fullscreenOpenerRef = useRef<HTMLElement | null>(null);
+  const onCloseFullscreenRef = useRef(onCloseFullscreen);
   const [mapStatus, setMapStatus] = useState<string>("");
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [isTracking, setIsTracking] = useState<boolean>(false);
@@ -63,18 +116,19 @@ export function FieldMap({
     accuracy: number;
   } | null>(null);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapInstanceRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const leafletRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const techMarkerRef = useRef<any>(null);
+  const mapInstanceRef = useRef<Leaflet.Map | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
+  const techMarkerRef = useRef<Leaflet.Marker | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const fullscreenCloseRef = useRef<HTMLButtonElement>(null);
 
   const activeLocation = liveLocation ?? technicianLocation ?? null;
   const mappedOrderCount = orders.filter((order) => orderCoordinates(order) !== null).length;
   const hasOrderCoordinates = mappedOrderCount > 0;
+
+  useEffect(() => {
+    onCloseFullscreenRef.current = onCloseFullscreen;
+  }, [onCloseFullscreen]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !mapContainerRef.current) return;
@@ -111,13 +165,10 @@ export function FieldMap({
 
       mapInstanceRef.current = map;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const CachedSatelliteLayer = (L.TileLayer as any).extend({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        createTile(coords: any, done: any) {
+      class CachedSatelliteLayer extends L.TileLayer {
+        override createTile(coords: Leaflet.Coords, done: Leaflet.DoneCallback): HTMLImageElement {
           const tile = document.createElement("img");
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const url = (this as any).getTileUrl(coords);
+          const url = this.getTileUrl(coords);
           tile.alt = "";
           tile.setAttribute("role", "presentation");
 
@@ -134,25 +185,24 @@ export function FieldMap({
                 }
                 tile.src = url;
                 L.DomEvent.on(tile, "load", () => done(undefined, tile));
-                L.DomEvent.on(tile, "error", (e: unknown) => done(e, tile));
+                L.DomEvent.on(tile, "error", () => done(new Error("Satellite tile failed to load"), tile));
               })
               .catch(() => {
                 tile.src = url;
                 L.DomEvent.on(tile, "load", () => done(undefined, tile));
-                L.DomEvent.on(tile, "error", (e: unknown) => done(e, tile));
+                L.DomEvent.on(tile, "error", () => done(new Error("Satellite tile failed to load"), tile));
               });
           } else {
             tile.src = url;
             L.DomEvent.on(tile, "load", () => done(undefined, tile));
-            L.DomEvent.on(tile, "error", (e: unknown) => done(e, tile));
+            L.DomEvent.on(tile, "error", () => done(new Error("Satellite tile failed to load"), tile));
           }
 
           return tile;
-        },
-      });
+        }
+      }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const satelliteLayer = new (CachedSatelliteLayer as any)(SATELLITE_TILE_URL_TEMPLATE, {
+      const satelliteLayer = new CachedSatelliteLayer(SATELLITE_TILE_URL_TEMPLATE, {
         maxNativeZoom: 17,
         maxZoom: 19,
         attribution: "Tiles &copy; Esri",
@@ -216,12 +266,7 @@ export function FieldMap({
 
         const popupContent = document.createElement("div");
         popupContent.className = "map-popup";
-        popupContent.innerHTML = `
-          <strong>Cuenta ${account}</strong>
-          <span>${customer}</span>
-          <span>Medidor ${meter}</span>
-          <span>Deuda: ${debt} · <strong>${order.status}</strong></span>
-        `;
+        popupContent.innerHTML = orderPopupHtml(account, customer, meter, debt, order.status);
 
         const viewBtn = document.createElement("button");
         viewBtn.className = "btn-map-popup";
@@ -279,6 +324,27 @@ export function FieldMap({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [isFullscreen]);
+
+  useEffect(() => {
+    if (!isFullscreen || typeof document === "undefined") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const opener = fullscreenOpenerRef.current ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    fullscreenOpenerRef.current = opener;
+    const onKeyDown = (event: KeyboardEvent) => handleFullscreenMapKeyDown(event, dialog, onCloseFullscreenRef.current);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      restoreFullscreenMapFocus(opener, dialogRef.current);
+      fullscreenOpenerRef.current = null;
+    };
+  }, [isFullscreen]);
+
+  const handleExpandMap = () => {
+    fullscreenOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    onExpandMap?.();
+  };
 
   const handleGetRealLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -376,10 +442,12 @@ export function FieldMap({
   if (!hasOrderCoordinates && !activeLocation) {
     return (
       <div
+        ref={dialogRef}
         className={`field-map-container field-map-container--empty${isFullscreen ? " field-map-container--fullscreen" : ""}`}
         role={isFullscreen ? "dialog" : undefined}
         aria-modal={isFullscreen ? true : undefined}
         aria-label="Mapa de la ruta"
+        tabIndex={isFullscreen ? -1 : undefined}
       >
         {isFullscreen ? <FullscreenMapHeader closeRef={fullscreenCloseRef} onClose={onCloseFullscreen} /> : null}
         <div className="field-map-empty" role="status">
@@ -393,10 +461,12 @@ export function FieldMap({
 
   return (
     <div
+      ref={dialogRef}
       className={`field-map-container${compact ? " field-map-container--compact" : ""}${isFullscreen ? " field-map-container--fullscreen" : ""}`}
       role={isFullscreen ? "dialog" : undefined}
       aria-modal={isFullscreen ? true : undefined}
       aria-label="Mapa interactivo de la ruta"
+      tabIndex={isFullscreen ? -1 : undefined}
     >
       {isFullscreen ? <FullscreenMapHeader closeRef={fullscreenCloseRef} onClose={onCloseFullscreen} /> : null}
       {mapStatus ? (
@@ -455,7 +525,7 @@ export function FieldMap({
           </button>
 
           {!compact && !isFullscreen && onExpandMap ? (
-            <button type="button" className="btn-expand-map" onClick={onExpandMap} aria-label="Expandir mapa a pantalla completa">
+            <button type="button" className="btn-expand-map" onClick={handleExpandMap} aria-label="Expandir mapa a pantalla completa">
               <IconExpand className="btn-icon" />
               <span>Expandir mapa</span>
             </button>
