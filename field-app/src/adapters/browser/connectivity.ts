@@ -57,6 +57,11 @@ export class BrowserConnectivity implements ConnectivityPort {
 
   subscribe(listener: (mode: ConnectivityMode) => void): () => void {
     this.listeners.add(listener);
+    try {
+      listener(this.currentMode);
+    } catch {
+      // Un suscriptor no debe interrumpir la suscripción ni el monitoreo.
+    }
     return () => {
       this.listeners.delete(listener);
     };

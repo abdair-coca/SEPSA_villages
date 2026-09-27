@@ -2,6 +2,29 @@ import { describe, expect, it, vi } from "vitest";
 import { BrowserConnectivity } from "./connectivity";
 
 describe("BrowserConnectivity", () => {
+  it("notifies new subscribers of the current browser mode", () => {
+    const originalNavigator = globalThis.navigator;
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { onLine: false },
+    });
+
+    try {
+      const connectivity = new BrowserConnectivity();
+      connectivity.stop();
+      const modes: string[] = [];
+      const unsubscribe = connectivity.subscribe((mode) => modes.push(mode));
+
+      expect(modes).toEqual(["offline"]);
+      unsubscribe();
+    } finally {
+      Object.defineProperty(globalThis, "navigator", {
+        configurable: true,
+        value: originalNavigator,
+      });
+    }
+  });
+
   it("detects online mode on fast response", async () => {
     const mockFetch = vi.fn().mockImplementation(async () => {
       return new Response(null, { status: 200 });
