@@ -9,6 +9,18 @@ export interface AppHeaderUser {
 
 export type AppHeaderStatusTone = "positive" | "warning" | "negative" | "environment";
 
+export type AppHeaderVariant = "standard" | "minimal";
+
+export interface AppHeaderMenuAction {
+  id: "sync-and-refresh" | "retry";
+  label: string;
+  busyLabel: string;
+  icon: ReactNode;
+  disabled?: boolean;
+  busy?: boolean;
+  onSelect: () => void;
+}
+
 export interface AppHeaderStatus {
   label: string;
   tone: AppHeaderStatusTone;
@@ -19,6 +31,9 @@ export interface AppHeaderProps {
   title: string;
   description: string;
   user: AppHeaderUser;
+  variant?: AppHeaderVariant;
+  menuActions?: readonly AppHeaderMenuAction[];
+  viewKey?: string;
   context?: ReactNode;
   status?: AppHeaderStatus;
   actions?: ReactNode;
@@ -53,6 +68,10 @@ export function AppHeader(props: AppHeaderProps) {
     };
   }, [isAccountMenuOpen]);
 
+  useEffect(() => {
+    setIsAccountMenuOpen(false);
+  }, [props.viewKey]);
+
   function closeAccountMenu(): void {
     setIsAccountMenuOpen(false);
     window.requestAnimationFrame(() => accountButtonRef.current?.focus());
@@ -68,59 +87,83 @@ export function AppHeader(props: AppHeaderProps) {
   }
 
   return (
-    <header className={`app-header app-shell app-header--${props.role}`} data-shell="shared">
-      <div className="app-header__topbar">
-        <div className="identity-brand-row app-header__brand">
-          <BrandLockup area={props.role === "admin" ? "OPERACIONES" : "CAMPO"} />
-        </div>
+    <header className={`app-header app-shell app-header--${props.role}`} data-shell="shared" data-variant={props.variant ?? "standard"}>
+      <div className="app-header__topbar-transition">
+        <div className="app-header__topbar">
+          <div className="identity-brand-row app-header__brand">
+            <BrandLockup area={props.role === "admin" ? "OPERACIONES" : "CAMPO"} />
+          </div>
 
-        <div className="app-header__topbar-actions">
-          {props.status ? <HeaderStatus status={props.status} /> : null}
-          <div className="app-header__account">
-            <button
-              ref={accountButtonRef}
-              className="app-header__account-trigger"
-              type="button"
-              aria-label={`Abrir menú de ${props.user.displayName}`}
-              aria-haspopup="menu"
-              aria-expanded={isAccountMenuOpen}
-              aria-controls={accountMenuId}
-              onClick={toggleAccountMenu}
-            >
-              <span className="app-header__avatar" aria-hidden="true">{initials(props.user.displayName)}</span>
-              <span className="app-header__chevron" aria-hidden="true" />
-            </button>
+          <div className="app-header__topbar-actions">
+            {props.status ? <HeaderStatus status={props.status} /> : null}
+            <div className="app-header__account">
+              <button
+                ref={accountButtonRef}
+                className="app-header__account-trigger"
+                type="button"
+                aria-label={`Abrir menú de ${props.user.displayName}`}
+                aria-haspopup="menu"
+                aria-expanded={isAccountMenuOpen}
+                aria-controls={accountMenuId}
+                onClick={toggleAccountMenu}
+              >
+                <span className="app-header__avatar" aria-hidden="true">{initials(props.user.displayName)}</span>
+                <span className="app-header__chevron" aria-hidden="true" />
+              </button>
 
-            <div
-              ref={accountMenuRef}
-              id={accountMenuId}
-              className="app-header__account-menu"
-              role="menu"
-              aria-label="Menú de usuario"
-              hidden={!isAccountMenuOpen}
-            >
-              <div className="app-header__account-info">
-                <strong>{props.user.displayName}</strong>
-                <span>{props.user.roleLabel}</span>
-                {props.user.authenticity ? <span>Entorno · {props.user.authenticity}</span> : null}
+              <div
+                ref={accountMenuRef}
+                id={accountMenuId}
+                className="app-header__account-menu"
+                role="menu"
+                aria-label="Menú de usuario"
+                aria-hidden={!isAccountMenuOpen}
+                data-open={isAccountMenuOpen}
+              >
+                <div className="app-header__account-info">
+                  <strong>{props.user.displayName}</strong>
+                  <span>{props.user.roleLabel}</span>
+                  {props.user.authenticity ? <span>Entorno · {props.user.authenticity}</span> : null}
+                </div>
+                {props.menuActions?.length ? (
+                  <div className="app-header__menu-actions" role="group" aria-label="Sincronización">
+                    <span className="app-header__menu-section-title">Sincronización</span>
+                    {props.menuActions.map((action) => (
+                      <button
+                        key={action.id}
+                        className="app-header__menu-action"
+                        type="button"
+                        role="menuitem"
+                        disabled={action.disabled || action.busy}
+                        aria-busy={action.busy || undefined}
+                        onClick={action.onSelect}
+                      >
+                        <span className="app-header__menu-action-icon" aria-hidden="true">{action.icon}</span>
+                        <span>{action.busy ? action.busyLabel : action.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {props.onLogout ? (
+                  <button className="app-header__logout" type="button" role="menuitem" onClick={logout}>
+                    Cerrar sesión
+                  </button>
+                ) : null}
               </div>
-              {props.onLogout ? (
-                <button className="app-header__logout" type="button" role="menuitem" onClick={logout}>
-                  Cerrar sesión
-                </button>
-              ) : null}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="app-header__body">
-        <div className="identity-block">
-          <HeaderTitle title={props.title} description={props.description} />
-          {props.context ? <div className="header-context">{props.context}</div> : null}
+      {props.variant !== "minimal" ? (
+        <div className="app-header__body">
+          <div className="identity-block">
+            <HeaderTitle title={props.title} description={props.description} />
+            {props.context ? <div className="header-context">{props.context}</div> : null}
+          </div>
+          {props.actions ? <div className="app-header__actions">{props.actions}</div> : null}
         </div>
-        {props.actions ? <div className="app-header__actions">{props.actions}</div> : null}
-      </div>
+      ) : null}
     </header>
   );
 }

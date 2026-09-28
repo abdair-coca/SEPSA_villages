@@ -23,7 +23,7 @@ describe("shared app header", () => {
       />,
     );
 
-    expect(markup).toContain('<header class="app-header app-shell app-header--field" data-shell="shared">');
+    expect(markup).toContain('<header class="app-header app-shell app-header--field" data-shell="shared" data-variant="standard">');
     expect(markup).toContain('<div class="app-header__topbar">');
     expect(markup).toContain('<div class="app-brand"><strong>SEPSA</strong><span>CAMPO</span></div>');
     expect(markup).toContain('class="app-status-badge app-status-badge--positive"');
@@ -58,7 +58,7 @@ describe("shared app header", () => {
       />,
     );
 
-    expect(markup).toContain('<header class="app-header app-shell app-header--admin" data-shell="shared">');
+    expect(markup).toContain('<header class="app-header app-shell app-header--admin" data-shell="shared" data-variant="standard">');
     expect(markup).toContain('<div class="app-brand"><strong>SEPSA</strong><span>OPERACIONES</span></div>');
     expect(markup).toContain('class="app-status-badge app-status-badge--environment"');
     expect(markup).toContain("Entorno · SIMULATED");
@@ -83,7 +83,7 @@ describe("shared app header", () => {
 
     for (const role of ["admin", "field"] as const) {
       const markup = renderHeader(role);
-      expect(markup).toContain(`class="app-header app-shell app-header--${role}" data-shell="shared"`);
+      expect(markup).toContain(`class="app-header app-shell app-header--${role}" data-shell="shared" data-variant="standard"`);
       expect(markup).toContain('<div class="app-header__topbar">');
       expect(markup).toContain('<div class="app-header__body">');
       expect(markup).toContain('<div class="app-header__status">');
@@ -91,5 +91,33 @@ describe("shared app header", () => {
       expect(markup).toContain('class="app-header__account-menu" role="menu"');
       expect(markup).toContain("<h1>Título</h1>");
     }
+  });
+
+  it("renders the minimal field shell with synchronization actions inside the account menu", () => {
+    const markup = renderToStaticMarkup(
+      <AppHeader
+        role="field"
+        title="Jornada de campo"
+        description="Descripción que no debe aparecer en el shell minimalista."
+        user={{ displayName: "Jhony Moya", roleLabel: "Técnico" }}
+        variant="minimal"
+        viewKey="map"
+        status={{ tone: "positive", label: "Red disponible" }}
+        menuActions={[
+          { id: "sync-and-refresh", label: "Enviar pendientes y actualizar", busyLabel: "Enviando y actualizando…", icon: <span>↓</span>, onSelect: () => undefined },
+          { id: "retry", label: "Reintentar envío", busyLabel: "Probando…", icon: <span>↻</span>, busy: true, onSelect: () => undefined },
+        ]}
+        onLogout={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-variant="minimal"');
+    expect(markup).not.toContain('class="app-header__body"');
+    expect(markup).toContain('class="app-header__menu-actions" role="group" aria-label="Sincronización"');
+    expect(markup).toContain("Enviar pendientes y actualizar");
+    expect(markup).toContain("Probando…");
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain('role="menuitem"');
+    expect(markup).toContain('data-open="false"');
   });
 });

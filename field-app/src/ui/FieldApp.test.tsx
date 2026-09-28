@@ -211,9 +211,14 @@ describe("FieldApp SSR shell", () => {
     expect(home).toContain("abrir orden");
     expect(home).toContain("mapa");
     expect(home).toContain("marcar incidencia");
+    expect(home).toContain('data-variant="standard"');
 
     store.setTab("orders");
-    expect(html(store)).toContain("ord-24017");
+    const orders = html(store);
+    expect(orders).toContain("ord-24017");
+    expect(orders).toContain('data-variant="minimal"');
+    expect(orders).not.toContain("<h1>jornada de campo</h1>");
+    expect(orders).toContain("enviar pendientes y actualizar");
     store.selectOrder("ORD-24017");
     const generated = html(store);
     expect(generated).toContain("detalle de ord-24017");
@@ -225,6 +230,19 @@ describe("FieldApp SSR shell", () => {
     expect(executed).toContain("preparar reconexión");
     expect(executed).not.toContain("preparar corte");
     expect(executed).not.toContain("registrar visita");
+
+    store.selectOrder(null);
+    store.setTab("map");
+    const map = html(store);
+    expect(map).toContain('data-variant="minimal"');
+    expect(map).toContain("mapa");
+    expect(map).not.toContain('class="compact-network-status');
+
+    store.setTab("queue");
+    const queue = html(store);
+    expect(queue).toContain('data-variant="minimal"');
+    expect(queue).toContain("cola de sincronización");
+    expect(queue).not.toContain('class="compact-network-status');
   });
 
   it("renders home first with dedicated mobile navigation and compact secondary cards", async () => {
@@ -342,12 +360,16 @@ describe("FieldApp SSR shell", () => {
     expect(reviewMobile).toContain(">ver error y contexto</button>");
     expect(reviewMobile).toContain(">ver detalle</button>");
     expect(cardsFor("uncertain-003")[0]).toContain("resultado incierto");
-    expect(markup).toContain("enviar operaciones pendientes");
+    expect(markup).not.toContain("enviar operaciones pendientes");
 
     const offline = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), mode: "offline", syncItems: items }} store={store} />).toLocaleLowerCase();
-    expect(offline).toContain("sin conexión");
+    expect(offline).not.toContain("sin conexión");
     expect(offline).not.toContain("conectada");
     expect(offline).toContain('class="queue-item__retry" disabled=""');
+
+    store.setMode("offline");
+    store.setTab("queue");
+    expect(html(store)).toContain("sin conexión");
   });
 
   it("offers state verification for uncertain-only failure, but withholds sync actions for manual review", async () => {
@@ -413,15 +435,20 @@ describe("FieldApp SSR shell", () => {
     expect(status("offline")).toContain("sin conexión");
   });
 
-  it("keeps global send for safe retryable operations", async () => {
+  it("keeps synchronization actions in the field shell for safe retryable operations", async () => {
     const store = await readyStore("ui-queue-safe-send");
     const items: SyncItem[] = [
       { operationId: "safe-retry-001", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 1, errorCode: "NETWORK_UNAVAILABLE" },
       { operationId: "uncertain-002", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, uncertain: true },
     ];
-    const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items }} store={store} />).toLocaleLowerCase();
-    expect(markup).toContain(">enviar operaciones pendientes</button>");
-    expect(markup).toContain(">reintentar</button>");
+    const queueMarkup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items }} store={store} />).toLocaleLowerCase();
+    expect(queueMarkup).not.toContain("enviar operaciones pendientes");
+
+    store.setTab("queue");
+    const shellMarkup = html(store);
+    expect(shellMarkup).toContain("data-variant=\"minimal\"");
+    expect(shellMarkup).toContain("enviar pendientes y actualizar");
+    expect(shellMarkup).toContain("reintentar envío");
   });
 
   it("uses reusable notification with a quiet link to pending operations", async () => {
