@@ -85,6 +85,15 @@ export function IconDownload({ className = "icon", ...props }: SVGProps<SVGSVGEl
   );
 }
 
+export function IconDevice({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>
+      <rect x="6" y="2.5" width="12" height="19" rx="2" />
+      <path d="M10 5h4M11 18.5h2" />
+    </svg>
+  );
+}
+
 export function IconPin({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -266,14 +275,6 @@ export function IconDocument({ className = "icon", ...props }: SVGProps<SVGSVGEl
     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>
       <path d="M6 3h9l3 3v15H6z" />
       <path d="M14 3v4h4M9 12h6M9 16h6" />
-    </svg>
-  );
-}
-
-export function IconPhone({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>
-      <path d="M7 4h3l1.5 4-2 1.5a12 12 0 0 0 5 5l1.5-2 4 1.5v3c0 1-1 2-2 2C11.4 19.6 4.4 12.6 4 6c0-1 1-2 3-2Z" />
     </svg>
   );
 }

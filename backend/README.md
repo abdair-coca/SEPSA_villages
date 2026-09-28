@@ -1,55 +1,35 @@
-# PILOT_PROVISIONAL Backend
+# Backend del piloto provisional
 
-REST and PostgreSQL backend for provisional vertical slice. This is not an official SEPSA API, schema, credential set, or integration.
+API REST Node.js/TypeScript + PostgreSQL para validar el flujo administrativo y técnico. No es la API oficial de SEPSA ni debe recibir secretos institucionales o datos reales sin autorización.
 
-## Run
+## Desarrollo local
 
-1. Copy `.env.example` to `.env` and set `DATABASE_URL`.
-2. Apply `sql/001_init.sql`, `sql/002_seed.sql`, `sql/003_reference_fields.sql`, `sql/004_e2e_seed.sql` and `sql/005_definitive_seed.sql` when upgrading an existing database (in numeric order).
-3. Run `npm install`.
-4. Run `npm run dev`.
+1. Copia `.env.example` a `.env` y configura `DATABASE_URL`.
+2. Instala dependencias: `npm install`.
+3. Levanta el servidor: `npm run dev`.
 
-`docker compose up --build` starts PostgreSQL on host port `15432` and API on `8080` with provisional values.
+También puedes usar `docker compose up --build`; publica PostgreSQL en `15432` y la API en `8080` con valores provisionales.
 
-Set `CORS_ORIGIN` to the exact frontend origin used by the pilot. Do not use `*` when deploying beyond local development.
+## Datos y migraciones
 
-Session tokens are delivered through an `HttpOnly` cookie and never returned to frontend storage. Authorization tokens are hashed in authorization storage and removed from synchronized operation payloads and audit metadata; `payload_hash` preserves idempotency checks.
+- `npm run pilot:bootstrap` inicializa una base vacía y se niega a borrar datos existentes.
+- `npm run pilot:field-test` importa un workbook mediante el script de carga.
+- `npm run pilot:migrate:field-test` aplica la carga idempotente del dataset de prueba disponible.
+- Las migraciones históricas se ejecutan en orden; no las edites para corregir datos actuales.
+- El importador conserva filas originales y no inventa GPS, fechas o significados de columnas.
 
-Photo files remain locally persisted on the field device. The sync payload sends only evidence references and metadata (`evidence_storage: LOCAL_ONLY`), never the photo bytes; after valid online authorization, capture, and idempotency checks, the backend can acknowledge the cut while the evidence remains local. Controlled photo exceptions remain auditable. Pending operations created by the previous local-photo rejection are retryable after this backend update; other conflicts remain pending review.
+## Seguridad del piloto
 
-Seed users are `admin.sepsa` (ADMIN), `jhonny.moya` and `tecnico.sepsa02-06` (TECHNICIAN: Alex Fernández, Paola Ríos, Cristian Soria, Daniela Paredes y Marco Aguilar — nombres ficticios de PRUEBA, no personal real). Initial password for all is `password123` for LOCAL pilot only; only scrypt hashes are stored in SQL. Rotate before any shared deployment.
+- Configura `CORS_ORIGIN` con el origen exacto; no uses `*` fuera de desarrollo local.
+- Las sesiones se validan en backend. No guardes contraseñas en texto plano ni credenciales de prueba fuera del entorno local.
+- Las operaciones y autorizaciones usan identificadores/idempotencia; la auditoría conserva actor y resultado.
+- Las fotos se mantienen localmente; el payload de sync actual envía referencias y metadatos, no bytes.
 
-`sql/005_definitive_seed.sql` contains the older 28-debtor bootstrap snapshot from `Deudores_morosos_30_03_2026.xlsx` (sheet MOROSOS). It is not the field-test replacement below. `sql/004_e2e_seed.sql` is deprecated and intentionally empty.
-
-To import a workbook into an existing database without deleting orders or audit history, set `DATABASE_URL` for the process and run `python scripts/import-debtors-xlsx.py path/to/workbook.xlsx`. The importer validates headers, permits missing source GPS, preserves stable debtor/account/supply identifiers, stores the original row in `context.excel_row`, and commits all updates in one transaction. A non-date source value such as `Antigua` is stored as a null `updated_at` with the original value and a status marker in `context`.
-
-### Field test dataset
-
-For the 2026-09-22 field test, preview the supplied workbook first:
-
-```powershell
-$env:DATABASE_URL="postgres://pilot_provisional:pilot_provisional@localhost:15432/pilot_provisional"
-python scripts/import-debtors-xlsx.py "C:\Users\abdai\Downloads\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --dry-run
-```
-
-For the deployed pilot, the reviewed `EXCEL_20260922` snapshot is available as an idempotent database migration. The Docker image runs this migration before starting the API, so the Free Render service does not require Shell access:
-
-```text
-node migrations/20260923-load-excel-20260922.mjs
-```
-
-The migration loads 99 debtor rows and creates 10 eligible `CUT` orders (`DEUDA > 0` and `MESES >= 3`) assigned to `jhonny.moya`. It preserves existing pilot orders, sessions, synchronization records, and audit history. It is protected by a PostgreSQL advisory lock and deterministic identifiers, so rerunning it does not duplicate the dataset or its orders. In the Docker image it runs automatically before the API starts; `npm run pilot:migrate:field-test` remains available for a trusted manual run.
-
-After reviewing the preview, replace only `PILOT_PROVISIONAL` operational data and create eligible `CUT` orders for `jhonny.moya`:
+## Verificación
 
 ```powershell
-python scripts/import-debtors-xlsx.py "C:\Users\abdai\Downloads\Listado_de_clientes_al_22_09_2026 (1).xlsx" --dataset EXCEL_20260922 --replace-pilot --create-cut-orders --assign-technician jhonny.moya
+npm run build
+npm test
 ```
 
-This explicit replacement removes provisional sessions, sync operations, authorizations, order history, audit events, orders, and debtors. Pilot users remain. It loads 99 debtor rows and creates orders only for rows with `DEUDA > 0` and `MESES >= 3`: the supplied workbook currently produces 10 cut orders, all assigned to `jhonny.moya`; the remaining 89 rows remain available without a field-test cut order. The operation is transactional and records create/assignment audit entries for each generated order. It does not invent GPS, Kardex, source dates, or meanings for unconfirmed columns.
-
-## Verification
-
-`npm run build` compiles TypeScript. `npm test` runs pure tests and skips database integration harness when `DATABASE_URL` is absent.
-
-For a new empty pilot database, set `DATABASE_URL` to the direct PostgreSQL connection string and run `npm run pilot:bootstrap` once. The command refuses to run when provisional tables already contain data, so it cannot silently erase pilot operations.
+La integración de la API oficial, el contrato de evidencia y las políticas definitivas de SEPSA siguen pendientes.

@@ -3,7 +3,7 @@ import { createAuthenticatedTechnicianStore, createUnavailableAppStore, Simulate
 import { IndexedDbAuthorityRepository, IndexedDbLocalRepository, createSimulatedPackageEnvelope } from "./adapters/indexeddb";
 import { HttpPilotClient } from "./adapters/http";
 import { downloadAssigned } from "./application";
-import { FieldApp, LoginScreen, OperationsApp } from "./ui";
+import { AppStateCard, FieldApp, LoginScreen, OperationsApp } from "./ui";
 import type { Session, WorkPackageEnvelope } from "./domain";
 import type { IdentityPort, OperationsAuthorityPort } from "./ports";
 import { clearStoredSession, persistSession, readStoredSession } from "./application/session-persistence";
@@ -92,8 +92,8 @@ function TechnicianRuntime({ authority, session, onLogout, remote = false }: { a
     return () => clearInterval(interval);
   }, [refreshAssigned]);
 
-  if (error) return <main className="state-card state-card--error"><h2>No pudimos abrir jornada</h2><p>{error}</p><button className="primary-action" onClick={onLogout}>Volver al inicio</button></main>;
-  if (!store) return <main className="state-card"><div className="loading-mark" /><h2>Descargando jornada</h2><p>Validando identidad y órdenes asignadas.</p></main>;
+  if (error) return <AppStateCard as="main" className="state-card" tone="error" title="No pudimos abrir jornada" description={error} action={{ label: "Volver al inicio", onClick: onLogout }} />;
+  if (!store) return <AppStateCard as="main" className="state-card" tone="loading" title="Descargando jornada" description="Validando identidad y órdenes asignadas." />;
   return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection={!remote} onRefreshAssigned={refreshAssigned} onLogout={onLogout} />;
 }
 

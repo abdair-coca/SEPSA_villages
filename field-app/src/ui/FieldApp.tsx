@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { ActivityEntry, AppMessage, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
+import type { ActionResult, ActivityEntry, AppMessage, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
 import type { CaptureDraftContent } from "../ports/repository";
 import { selectVisibleOrders } from "../app/index";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
+import { AppHeader } from "./AppHeader";
 import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDocument, IconDownload, IconExpand, IconMap, IconPhone, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch, IconUser } from "./Icons";
+import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch, IconUser } from "./Icons";
 import { Notification } from "./Notification";
 
 export interface FieldAppProps {
@@ -129,6 +130,7 @@ export function FieldApp({
   };
 
   const pending = pendingCount(state.syncItems);
+  const modeLabel = state.mode === "online" ? "Red disponible" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
   const openPendingQueue = () => {
     if (state.message) setDismissedMessage(state.message);
     store.selectOrder(null);
@@ -137,16 +139,79 @@ export function FieldApp({
 
   return (
     <div className="field-app">
-      <Header
-        state={state}
-        isProbingNetwork={isProbingNetwork}
-        onRetryConnection={handleRetryConnection}
-        isRefreshingAssigned={isRefreshingAssigned}
-        onRefreshAssigned={() => void handleRefreshAssigned()}
-        technicianId={technicianId}
-        technicianName={technicianName}
-        deviceId={deviceId}
+      <AppHeader
+        role="field"
+        title="Jornada de campo"
+        description="Órdenes asignadas, ejecución de cortes y sincronización en terreno."
+        user={{ displayName: technicianName ?? technicianId, roleLabel: "Técnico" }}
+        variant={state.tab === "home" ? "standard" : "minimal"}
+        viewKey={state.tab}
         onLogout={onLogout}
+        context={state.tab === "home" ? (
+          <div className="field-header-context-card">
+            <div className="field-header-context__item">
+              <span className="field-header-context__icon" aria-hidden="true"><IconDevice /></span>
+              <span className="field-header-context__copy">
+                <span className="field-header-context__label">Dispositivo</span>
+                <strong>{shortTechnicalId(deviceId)}</strong>
+              </span>
+            </div>
+            <span className="field-header-context__divider" aria-hidden="true" />
+            <div className="field-header-context__item">
+              <span className="field-header-context__icon" aria-hidden="true"><IconUser /></span>
+              <span className="field-header-context__copy">
+                <span className="field-header-context__label">Técnico</span>
+                <strong>{technicianName ?? technicianId}</strong>
+              </span>
+            </div>
+          </div>
+        ) : undefined}
+        status={{
+          tone: state.mode === "online" ? "positive" : state.mode === "weak" ? "warning" : "negative",
+          label: modeLabel,
+        }}
+        menuActions={state.tab !== "home" ? [
+          {
+            id: "sync-and-refresh",
+            label: "Enviar pendientes y actualizar",
+            busyLabel: "Enviando y actualizando…",
+            icon: <IconDownload />,
+            busy: isRefreshingAssigned,
+            onSelect: () => void handleRefreshAssigned(),
+          },
+          {
+            id: "retry",
+            label: "Reintentar envío",
+            busyLabel: "Probando…",
+            icon: <IconRefresh />,
+            busy: isProbingNetwork,
+            onSelect: () => void handleRetryConnection(),
+          },
+        ] : undefined}
+        actions={state.tab === "home" ? <div className="header-action-row">
+          <button type="button" className="header-refresh-button" onClick={() => void handleRefreshAssigned()} disabled={isRefreshingAssigned}>
+            <IconDownload />
+            <span>{isRefreshingAssigned ? "Enviando y actualizando…" : "Enviar pendientes y actualizar"}</span>
+          </button>
+          <div className="header-action-row__secondary">
+            <LastUpdateDisplay
+              timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
+              isRefreshing={isProbingNetwork || isRefreshingAssigned}
+              onRefresh={() => void handleRefreshAssigned()}
+            />
+            <button
+              type="button"
+              className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
+              onClick={handleRetryConnection}
+              disabled={isProbingNetwork}
+              title="Reintentar envío de operaciones pendientes"
+              aria-label="Reintentar envío"
+            >
+              <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
+              <span>{isProbingNetwork ? "Probando…" : "Reintentar envío"}</span>
+            </button>
+          </div>
+        </div> : undefined}
       />
       {state.message && !(state.message.transient && dismissedMessage === state.message) ? (
         <Notification
@@ -185,81 +250,6 @@ export async function syncThenRefreshAssigned(store: AppStore, refreshAssigned: 
       : `El servidor no confirmó ${remaining.length} operación(es) pendiente(s). Los registros y evidencias siguen guardados en este dispositivo.`);
   }
   await refreshAssigned();
-}
-
-function Header({
-  state,
-  isProbingNetwork,
-  onRetryConnection,
-  isRefreshingAssigned,
-  onRefreshAssigned,
-  technicianId,
-  technicianName,
-  deviceId,
-  onLogout,
-}: {
-  state: AppState;
-  isProbingNetwork: boolean;
-  onRetryConnection: () => void;
-  isRefreshingAssigned: boolean;
-  onRefreshAssigned?: () => void;
-  technicianId: string;
-  technicianName?: string;
-  deviceId: string;
-  onLogout?: () => void;
-}) {
-  const modeLabel =
-    state.mode === "online" ? "Red disponible" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
-
-  return (
-    <header className="app-header">
-      <div className="identity-block">
-        <div className="identity-brand-row">
-          <div className="field-brand"><strong>SEPSA</strong><span>CAMPO</span></div>
-          {onLogout ? <button type="button" className="header-profile-button" onClick={onLogout} aria-label="Cerrar sesión"><IconUser /></button> : null}
-        </div>
-        <h1>Jornada de campo</h1>
-        <p className="identity">Órdenes asignadas, ejecución de cortes y sincronización en terreno.</p>
-        <div className="header-context">
-          <span>Técnico:</span>
-          <strong>{technicianName ?? technicianId}</strong>
-           <span className="header-context__separator" aria-hidden="true">|</span>
-           <span className="header-device">Dispositivo: {shortTechnicalId(deviceId)}</span>
-        </div>
-      </div>
-      <div className="header-meta">
-        <div className="header-top-actions">
-          <span className={`network-status-badge network-status-badge--${state.mode}`}>
-            <span className={`network-dot network-dot--${state.mode}`} aria-hidden="true" />
-            <span className="network-status-text">{modeLabel}</span>
-          </span>
-          <LastUpdateDisplay
-            timestamp={state.lastRefreshAt ?? state.package?.downloadedAt}
-            isRefreshing={isProbingNetwork || isRefreshingAssigned}
-            onRefresh={onRefreshAssigned ?? onRetryConnection}
-          />
-          {onLogout ? <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button> : null}
-        </div>
-        <div className="header-bottom-actions">
-          <button
-            type="button"
-            className={`btn-network-retry ${isProbingNetwork ? "is-probing" : ""}`}
-            onClick={onRetryConnection}
-            disabled={isProbingNetwork}
-            title="Reintentar envío de operaciones pendientes"
-            aria-label="Reintentar envío"
-          >
-            <span className="retry-icon" aria-hidden="true"><IconRefresh /></span>
-            <span>{isProbingNetwork ? "Probando…" : "Reintentar envío"}</span>
-          </button>
-          <button type="button" className="header-refresh-button" onClick={onRefreshAssigned} disabled={isRefreshingAssigned}>
-            <IconDownload />
-            <span>{isRefreshingAssigned ? "Enviando y actualizando…" : "Enviar pendientes y actualizar"}</span>
-          </button>
-        </div>
-      </div>
-    </header>
-  );
 }
 
 function Workbench({
@@ -489,7 +479,7 @@ function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
     catch (error) { setMapDownloadError(error instanceof Error ? error.message : "No pudimos descargar el mapa para trabajo offline."); }
     finally { setIsDownloadingMap(false); setDownloadProgress(null); }
   };
-  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><CompactNetworkStatus mode={state.mode} /><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools"><div className="map-page__download">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} aria-busy={isDownloadingMap} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}<span className="map-page__download-hint">{isMapCachedState ? "Disponible sin conexión en este dispositivo." : "Guarda esta zona antes de salir a terreno."}</span></div>{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
+  return <section className="map-page" aria-label="Mapa de órdenes"><div className="map-page__heading"><div><span className="eyebrow">RUTA DE CAMPO</span><h2>Mapa</h2><p>Ubica tus suministros y abre una ficha desde el mapa.</p></div><span className="map-page__count">{state.orders.length} órdenes</span></div><div className="map-page__surface"><FieldMap orders={state.orders} selectedOrderId={selectedOrderId} onSelectOrder={(orderId) => store.selectOrder(orderId)} mode={state.mode} isFullscreen={isFullscreen} onExpandMap={() => setIsFullscreen(true)} onCloseFullscreen={() => setIsFullscreen(false)} /></div><div className="map-page__tools"><div className="map-page__download">{!isMapCachedState ? <button type="button" className="map-download-link" disabled={isDownloadingMap || !hasMapCoordinates} aria-busy={isDownloadingMap} onClick={() => void handleDownloadMap()}><IconDownload />{isDownloadingMap ? `Descargando zona (${downloadProgress?.percent ?? 0}%)…` : hasMapCoordinates ? "Descargar zona offline" : "No hay coordenadas para descargar"}</button> : <span className="map-cached-tag"><IconCheck /> Mapa descargado</span>}<span className="map-page__download-hint">{isMapCachedState ? "Disponible sin conexión en este dispositivo." : "Guarda esta zona antes de salir a terreno."}</span></div>{mapDownloadError ? <span className="map-page__error" role="alert">{mapDownloadError}</span> : null}</div></section>;
 }
 
 export function CompactNetworkStatus({ mode }: { mode: ConnectivityMode }) {
@@ -765,7 +755,7 @@ function OrderDetail({
   onBack: () => void;
 }) {
   const [draft, setDraft] = useState<ActionKind | null>(initialAction === "VISIT" && !isManualVisitAllowed(order) ? null : initialAction ?? null);
-  const [cutCompletion, setCutCompletion] = useState<"confirmed" | "pending" | "review">();
+  const [actionCompletion, setActionCompletion] = useState<ActionResult>();
   const [mobileView, setMobileView] = useState<OrderReviewView>("review");
   const [kardexIndex, setKardexIndex] = useState(0);
   const [detailsPageIndex, setDetailsPageIndex] = useState(0);
@@ -923,14 +913,13 @@ function OrderDetail({
           onSubmit={async (input) => {
             let completed: boolean;
             if (draft === "VISIT") {
-              await store.registerVisit(order.orderId, input);
-              completed = true;
+              const result = await store.registerVisit(order.orderId, input);
+              setActionCompletion(result);
+              completed = result.localSaved;
             } else if (draft === "CUT") {
-              const durable = await store.executeCut(order.orderId, input);
-              const finalOrder = store.getSnapshot().orders.find((candidate) => candidate.orderId === order.orderId);
-              const outcome = cutCompletionOutcome(durable, finalOrder);
-              if (outcome) setCutCompletion(outcome);
-              completed = Boolean(outcome);
+              const result = await store.executeCut(order.orderId, input);
+              setActionCompletion(result);
+              completed = result.localSaved;
             } else {
               completed = await store.executeReconnection(order.orderId, input);
             }
@@ -939,18 +928,41 @@ function OrderDetail({
           }}
         />
       ) : null}
-      {cutCompletion ? <CutCompletionDialog outcome={cutCompletion} onDismiss={() => setCutCompletion(undefined)} /> : null}
+      {actionCompletion ? <ActionCompletionDialog result={actionCompletion} onDismiss={() => setActionCompletion(undefined)} /> : null}
     </section>
   );
 }
 
-export function CutCompletionDialog({ outcome, onDismiss }: { outcome: "confirmed" | "pending" | "review"; onDismiss: () => void }) {
-  const content = {
-    confirmed: { title: "Corte confirmado", message: "La orden figura como ejecutada y confirmada." },
-    pending: { title: "Corte guardado", message: "Intención guardada en este dispositivo. Ejecución pendiente de confirmación del servidor. No repita la acción." },
-    review: { title: "Resultado incierto", message: "Revisión humana requerida. No repita la acción." },
-  }[outcome];
-  return <div className="cut-completion-backdrop"><section className={`cut-completion cut-completion--${outcome}`} role="dialog" aria-modal="true" aria-labelledby="cut-completion-title" aria-describedby="cut-completion-message"><h2 id="cut-completion-title">{content.title}</h2><p id="cut-completion-message">{content.message}</p><button type="button" className="primary-action" onClick={onDismiss}>Listo</button></section></div>;
+export function ActionCompletionDialog({ result, onDismiss }: { result: ActionResult; onDismiss: () => void }) {
+  const content = completionDialogContent(result);
+  const showSuccessIcon = result.outcome !== "review";
+  return (
+    <div className="cut-completion-backdrop">
+      <section className={`cut-completion cut-completion--${result.outcome}`} role="dialog" aria-modal="true" aria-labelledby="cut-completion-title" aria-describedby="cut-completion-message">
+        <div className="cut-completion__icon" aria-hidden="true">{showSuccessIcon ? <IconCheckCircle /> : <IconAlertTriangle />}</div>
+        <h2 id="cut-completion-title">{content.title}</h2>
+        <p id="cut-completion-message">{content.message}</p>
+        <button type="button" className="primary-action" onClick={onDismiss}>Listo</button>
+      </section>
+    </div>
+  );
+}
+
+function completionDialogContent(result: ActionResult): { title: string; message: string } {
+  if (result.outcome === "review") return { title: "Resultado incierto", message: "Los datos siguen guardados, pero se requiere revisión humana. No repita la acción." };
+  if (result.requestedAction === "CUT" && result.recordedAction === "VISIT") {
+    return result.syncStatus === "synced"
+      ? { title: "Visita confirmada", message: "La visita y los datos capturados quedaron guardados y fueron confirmados por el servidor. El corte no se ejecutó porque requiere autorización online." }
+      : { title: "Visita guardada", message: "La visita y los datos capturados quedaron guardados en este dispositivo. El corte no se ejecutó porque requiere autorización online. Se enviarán automáticamente cuando haya conexión." };
+  }
+  if (result.recordedAction === "VISIT") {
+    return result.outcome === "confirmed"
+      ? { title: "Visita confirmada", message: "La visita quedó guardada y fue confirmada por el servidor." }
+      : { title: "Visita guardada", message: "La visita quedó guardada en este dispositivo y se subirá automáticamente cuando haya conexión." };
+  }
+  if (result.outcome === "confirmed") return { title: "Corte confirmado", message: "El corte quedó guardado y confirmado por el servidor." };
+  if (result.outcome === "blocked") return { title: "Corte no ejecutado", message: "El corte fue bloqueado por una validación externa. Los datos quedaron guardados y no debe repetir la acción." };
+  return { title: "Datos del corte guardados", message: "La información quedó guardada en este dispositivo. El servidor todavía no la confirmó. No repita la acción." };
 }
 
 export function cutCompletionOutcome(durable: boolean, order?: WorkOrder): "confirmed" | "pending" | "review" | undefined {
@@ -1540,9 +1552,6 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
   const items = [...state.syncItems].sort(
     (left, right) => Number(right.status !== "synced") - Number(left.status !== "synced")
   );
-  const canSendPending = items.some((item) =>
-    (item.status === "pending" || item.status === "failed") && !item.manualReview && !item.uncertain
-  );
   const canRunQueueSync = isUsable(state.mode) && state.busyAction !== "SYNC";
   const { page, pageCount, item: mobileItem } = queuePageItem(items, requestedPage);
   const renderItem = (item: import("../ports").SyncItem, mobile: boolean) => (
@@ -1555,12 +1564,8 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
           <div className="eyebrow">TRAZABILIDAD LOCAL</div>
           <h2>Cola de sincronización</h2>
         </div>
-        <CompactNetworkStatus mode={state.mode} />
         <div className="queue-panel__actions">
           <button type="button" className="toolbar-action" onClick={() => store.setTab("orders")}>Volver a mis órdenes</button>
-          {canSendPending ? <button className="sync-button" disabled={!isUsable(state.mode) || state.busyAction === "SYNC"} onClick={() => void store.sync()}>
-            {state.busyAction === "SYNC" ? "Enviando pendientes…" : "Enviar operaciones pendientes"}
-          </button> : null}
         </div>
       </div>
       <p className="queue-intro">Los registros permanecen en este dispositivo hasta recibir confirmación válida.</p>

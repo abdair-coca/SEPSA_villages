@@ -6,7 +6,7 @@ import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, Mock
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
 import type { SyncItem } from "../ports";
-import { adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, CutCompletionDialog, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import { ActionCompletionDialog, adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -77,16 +77,25 @@ describe("capture wizard QA recovery", () => {
     expect(markup).toContain("medidor.jpg");
   });
 
-  it("distinguishes confirmed, pending, and uncertain cut completion accessibly", () => {
-    const confirmed = renderToStaticMarkup(<CutCompletionDialog outcome="confirmed" onDismiss={() => undefined} />).toLocaleLowerCase();
-    const pending = renderToStaticMarkup(<CutCompletionDialog outcome="pending" onDismiss={() => undefined} />).toLocaleLowerCase();
-    const review = renderToStaticMarkup(<CutCompletionDialog outcome="review" onDismiss={() => undefined} />).toLocaleLowerCase();
+  it("distinguishes confirmed, saved, blocked, and uncertain completion accessibly", () => {
+    const confirmed = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "CUT", outcome: "confirmed", localSaved: true, operationId: "cut-1", syncStatus: "synced" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const saved = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "CUT", outcome: "saved", localSaved: true, operationId: "cut-2", syncStatus: "pending" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const blocked = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "VISIT", outcome: "blocked", localSaved: true, operationId: "visit-1", syncStatus: "pending" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const blockedAndSynced = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "VISIT", outcome: "blocked", localSaved: true, operationId: "visit-2", syncStatus: "synced" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const review = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "CUT", outcome: "review", localSaved: true, operationId: "cut-3", syncStatus: "failed" }} onDismiss={() => undefined} />).toLocaleLowerCase();
     expect(confirmed).toContain('role="dialog"');
     expect(confirmed).toContain("corte confirmado");
     expect(confirmed).toContain(">listo</button>");
-    expect(pending).toContain("pendiente de confirmación del servidor");
-    expect(pending).toContain("no repita la acción");
-    expect(review).toContain("revisión humana requerida");
+    expect(confirmed).toContain("cut-completion__icon");
+    expect(saved).toContain("datos del corte guardados");
+    expect(saved).toContain("servidor todavía no la confirmó");
+    expect(saved).toContain("cut-completion__icon");
+    expect(blocked).toContain("visita guardada");
+    expect(blocked).toContain("el corte no se ejecutó");
+    expect(blockedAndSynced).toContain("visita confirmada");
+    expect(blockedAndSynced).toContain("fueron confirmados por el servidor");
+    expect(blockedAndSynced).toContain("el corte no se ejecutó");
+    expect(review).toContain("se requiere revisión humana");
     expect(review).toContain("no repita la acción");
   });
 
@@ -202,9 +211,14 @@ describe("FieldApp SSR shell", () => {
     expect(home).toContain("abrir orden");
     expect(home).toContain("mapa");
     expect(home).toContain("marcar incidencia");
+    expect(home).toContain('data-variant="standard"');
 
     store.setTab("orders");
-    expect(html(store)).toContain("ord-24017");
+    const orders = html(store);
+    expect(orders).toContain("ord-24017");
+    expect(orders).toContain('data-variant="minimal"');
+    expect(orders).not.toContain("<h1>jornada de campo</h1>");
+    expect(orders).toContain("enviar pendientes y actualizar");
     store.selectOrder("ORD-24017");
     const generated = html(store);
     expect(generated).toContain("detalle de ord-24017");
@@ -216,6 +230,19 @@ describe("FieldApp SSR shell", () => {
     expect(executed).toContain("preparar reconexión");
     expect(executed).not.toContain("preparar corte");
     expect(executed).not.toContain("registrar visita");
+
+    store.selectOrder(null);
+    store.setTab("map");
+    const map = html(store);
+    expect(map).toContain('data-variant="minimal"');
+    expect(map).toContain("mapa");
+    expect(map).not.toContain('class="compact-network-status');
+
+    store.setTab("queue");
+    const queue = html(store);
+    expect(queue).toContain('data-variant="minimal"');
+    expect(queue).toContain("cola de sincronización");
+    expect(queue).not.toContain('class="compact-network-status');
   });
 
   it("renders home first with dedicated mobile navigation and compact secondary cards", async () => {
@@ -333,12 +360,16 @@ describe("FieldApp SSR shell", () => {
     expect(reviewMobile).toContain(">ver error y contexto</button>");
     expect(reviewMobile).toContain(">ver detalle</button>");
     expect(cardsFor("uncertain-003")[0]).toContain("resultado incierto");
-    expect(markup).toContain("enviar operaciones pendientes");
+    expect(markup).not.toContain("enviar operaciones pendientes");
 
     const offline = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), mode: "offline", syncItems: items }} store={store} />).toLocaleLowerCase();
-    expect(offline).toContain("sin conexión");
+    expect(offline).not.toContain("sin conexión");
     expect(offline).not.toContain("conectada");
     expect(offline).toContain('class="queue-item__retry" disabled=""');
+
+    store.setMode("offline");
+    store.setTab("queue");
+    expect(html(store)).toContain("sin conexión");
   });
 
   it("offers state verification for uncertain-only failure, but withholds sync actions for manual review", async () => {
@@ -404,15 +435,20 @@ describe("FieldApp SSR shell", () => {
     expect(status("offline")).toContain("sin conexión");
   });
 
-  it("keeps global send for safe retryable operations", async () => {
+  it("keeps synchronization actions in the field shell for safe retryable operations", async () => {
     const store = await readyStore("ui-queue-safe-send");
     const items: SyncItem[] = [
       { operationId: "safe-retry-001", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 1, errorCode: "NETWORK_UNAVAILABLE" },
       { operationId: "uncertain-002", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, uncertain: true },
     ];
-    const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items }} store={store} />).toLocaleLowerCase();
-    expect(markup).toContain(">enviar operaciones pendientes</button>");
-    expect(markup).toContain(">reintentar</button>");
+    const queueMarkup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items }} store={store} />).toLocaleLowerCase();
+    expect(queueMarkup).not.toContain("enviar operaciones pendientes");
+
+    store.setTab("queue");
+    const shellMarkup = html(store);
+    expect(shellMarkup).toContain("data-variant=\"minimal\"");
+    expect(shellMarkup).toContain("enviar pendientes y actualizar");
+    expect(shellMarkup).toContain("reintentar envío");
   });
 
   it("uses reusable notification with a quiet link to pending operations", async () => {

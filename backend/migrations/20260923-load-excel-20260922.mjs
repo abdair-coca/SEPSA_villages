@@ -236,8 +236,8 @@ async function ensureOrder(client, row, adminId, technicianId) {
   if (inserted.rowCount === 0) return "skipped-existing";
 
   await client.query(
-    `INSERT INTO audit_events (audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, transition, metadata, source)
-     VALUES ($1, $2, 'ADMIN', 'CREATE_ORDER', $3, $3, $4, 'accepted', $5::jsonb, $6::jsonb, $7)
+     `INSERT INTO audit_events (audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, transition, metadata, source)
+      VALUES ($1, $2, 'ADMIN', 'CREATE_ORDER', $3::text, $3::uuid, $4, 'accepted', $5::jsonb, $6::jsonb, $7)
      ON CONFLICT (audit_id) DO NOTHING`,
     [
       createAuditId, adminId, orderId, `FIELD-TEST-${DATASET}-CREATE-${row.account_id}`,
@@ -252,9 +252,9 @@ async function ensureOrder(client, row, adminId, technicianId) {
     [assignmentId, orderId, technicianId, adminId, SOURCE],
   );
   await client.query(
-    `INSERT INTO audit_events (audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, transition, metadata, source)
-     VALUES ($1, $2, 'ADMIN', 'ASSIGN_ORDER', $3, $3, $4, 'accepted', $5::jsonb, $6::jsonb, $7)
-     ON CONFLICT (audit_id) DO NOTHING`,
+     `INSERT INTO audit_events (audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, transition, metadata, source)
+      VALUES ($1, $2, 'ADMIN', 'ASSIGN_ORDER', $3::text, $3::uuid, $4, 'accepted', $5::jsonb, $6::jsonb, $7)
+      ON CONFLICT (audit_id) DO NOTHING`,
     [
       assignAuditId, adminId, orderId, `FIELD-TEST-${DATASET}-ASSIGN-${row.account_id}`,
       JSON.stringify({ before: null, after: technicianId, version: 2 }),
@@ -272,9 +272,9 @@ async function insertAssignmentAudit(client, input) {
     [input.assignmentId, input.orderId, input.technicianId, input.adminId, input.version, SOURCE],
   );
   await client.query(
-    `INSERT INTO audit_events (audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, transition, metadata, source)
-     VALUES ($1, $2, 'ADMIN', 'ASSIGN_ORDER', $3, $3, $4, 'accepted', $5::jsonb, $6::jsonb, $7)
-     ON CONFLICT (audit_id) DO NOTHING`,
+     `INSERT INTO audit_events (audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, transition, metadata, source)
+      VALUES ($1, $2, 'ADMIN', 'ASSIGN_ORDER', $3::text, $3::uuid, $4, 'accepted', $5::jsonb, $6::jsonb, $7)
+      ON CONFLICT (audit_id) DO NOTHING`,
     [
       input.auditId, input.adminId, input.orderId, input.operationId,
       JSON.stringify({ before: input.before, after: input.technicianId, version: input.version }),
