@@ -27,6 +27,9 @@
   --radius-16: 16px;
   --radius-full: 50%;
   --ease-field: cubic-bezier(.32, .72, 0, 1);
+  --motion-control: 180ms;
+  --motion-enter: 280ms;
+  --motion-stagger: 50ms;
   color: var(--ink);
   background: var(--warm-bg);
   font-family: "Manrope", sans-serif;

@@ -33,8 +33,10 @@
 }
 
 .app-header__topbar-transition {
+  position: relative;
   min-width: 0;
-  animation: app-header-view-enter 220ms var(--ease-field) both;
+  z-index: 500;
+  animation: app-header-view-enter var(--motion-enter) var(--ease-field) both;
 }
 
 .app-header.app-shell[data-shell="shared"][data-variant="minimal"] {
@@ -133,7 +135,7 @@
   border-right: 3px solid var(--header-muted);
   border-bottom: 3px solid var(--header-muted);
   transform: rotate(45deg);
-  transition: transform 180ms var(--ease-field);
+  transition: transform var(--motion-control) var(--ease-field);
 }
 
 .app-header__account-trigger[aria-expanded="true"] .app-header__chevron {
@@ -158,7 +160,7 @@
   pointer-events: none;
   transform: translateY(-6px) scale(.98);
   transform-origin: top right;
-  transition: opacity 180ms var(--ease-field), visibility 180ms var(--ease-field), transform 180ms var(--ease-field);
+  transition: opacity var(--motion-control) var(--ease-field), visibility var(--motion-control) var(--ease-field), transform var(--motion-control) var(--ease-field);
 }
 
 .app-header__account-menu[hidden] {
@@ -227,7 +229,7 @@
   font-weight: 700;
   text-align: left;
   cursor: pointer;
-  transition: background-color 180ms var(--ease-field), border-color 180ms var(--ease-field), color 180ms var(--ease-field), transform 180ms var(--ease-field);
+  transition: background-color var(--motion-control) var(--ease-field), border-color var(--motion-control) var(--ease-field), color var(--motion-control) var(--ease-field), transform var(--motion-control) var(--ease-field), box-shadow var(--motion-control) var(--ease-field);
 }
 
 .app-header__menu-action:hover:not(:disabled) {

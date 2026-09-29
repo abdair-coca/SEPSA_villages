@@ -8,8 +8,8 @@
 * { box-sizing: border-box; }
 body { min-width: 0; margin: 0; background: var(--warm-bg); }
 button, input, select, textarea { font: inherit; }
-button { transition: background-color 160ms var(--ease-field), border-color 160ms var(--ease-field), color 160ms var(--ease-field), transform 120ms var(--ease-field); }
-input, select, textarea { transition: border-color 160ms ease, box-shadow 160ms ease; }
+button { transition: background-color var(--motion-control) var(--ease-field), border-color var(--motion-control) var(--ease-field), color var(--motion-control) var(--ease-field), transform var(--motion-control) var(--ease-field), box-shadow var(--motion-control) var(--ease-field); }
+input, select, textarea { transition: border-color var(--motion-control) var(--ease-field), box-shadow var(--motion-control) var(--ease-field); }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .56; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--warning); outline-offset: 4px; }
@@ -9957,6 +9957,64 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 @media (max-width: 760px) {
   .field-app:has(.field-home) {
     overflow-x: clip;
+  }
+}
+
+/* Brief entrance motion marks newly mounted work surfaces and their first content. */
+.field-app .workbench > :is(.field-home, .map-page, .queue-panel, .orders-tray, .orders-layout, .detail-panel, .capture-wizard) {
+  animation: field-surface-enter var(--motion-enter) var(--ease-field) both;
+}
+
+.field-app .workbench > .field-home > :nth-child(-n + 3),
+.field-app .workbench > .map-page > :nth-child(-n + 3),
+.field-app .workbench > .queue-panel > :is(.panel-heading, .queue-intro, .queue-list),
+.field-app .workbench > .orders-tray > :nth-child(-n + 3),
+.field-app .workbench > .orders-layout > :nth-child(-n + 2) {
+  animation: field-surface-enter var(--motion-enter) var(--ease-field) both;
+}
+
+.field-app .workbench > .field-home > :nth-child(2),
+.field-app .workbench > .map-page > :nth-child(2),
+.field-app .workbench > .queue-panel > .queue-intro,
+.field-app .workbench > .orders-tray > :nth-child(2),
+.field-app .workbench > .orders-layout > :nth-child(2) {
+  animation-delay: var(--motion-stagger);
+}
+
+.field-app .workbench > .field-home > :nth-child(3),
+.field-app .workbench > .map-page > :nth-child(3),
+.field-app .workbench > .queue-panel > .queue-list,
+.field-app .workbench > .orders-tray > :nth-child(3) {
+  animation-delay: calc(var(--motion-stagger) * 2);
+}
+
+@keyframes field-surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.995);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field-app .workbench > :is(.field-home, .map-page, .queue-panel, .orders-tray, .orders-layout, .detail-panel, .capture-wizard),
+  .field-app .workbench > .field-home > :nth-child(-n + 3),
+  .field-app .workbench > .map-page > :nth-child(-n + 3),
+  .field-app .workbench > .queue-panel > :is(.panel-heading, .queue-intro, .queue-list),
+  .field-app .workbench > .orders-tray > :nth-child(-n + 3),
+  .field-app .workbench > .orders-layout > :nth-child(-n + 2) {
+    animation: none;
+  }
+
+  .field-app button,
+  .field-app input,
+  .field-app select,
+  .field-app textarea {
+    transition-duration: .01ms;
   }
 }
 
