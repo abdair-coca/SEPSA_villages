@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createAuthenticatedTechnicianStore, createUnavailableAppStore, SimulatedAuthoritySyncTransport } from "./app/index";
 import { IndexedDbAuthorityRepository, IndexedDbLocalRepository, createSimulatedPackageEnvelope } from "./adapters/indexeddb";
 import { HttpPilotClient } from "./adapters/http";
 import { downloadAssigned } from "./application";
-import { AppStateCard, FieldApp, LoginScreen, OperationsApp } from "./ui";
+import { AppStateCard, ExitConfirmationModal, FieldApp, LoginScreen, OperationsApp } from "./ui";
 import type { Session, WorkPackageEnvelope } from "./domain";
 import type { IdentityPort, OperationsAuthorityPort } from "./ports";
 import { clearStoredSession, persistSession, readStoredSession } from "./application/session-persistence";
@@ -11,8 +11,30 @@ import { clearStoredSession, persistSession, readStoredSession } from "./applica
 const authority = typeof indexedDB === "undefined" ? undefined : new IndexedDbAuthorityRepository();
 const pilotBackendUrl = resolvePilotBackendUrl();
 const remoteAuthority = pilotBackendUrl ? new HttpPilotClient({ baseUrl: pilotBackendUrl }) : undefined;
+
+const MOBILE_BACK_GUARD_KEY = "sepsa-mobile-back-guard";
+
+interface MobileBackNavigationGuard {
+  confirmExit: () => void;
+  dispose: () => void;
+}
+
 export function App() {
   const [session, setSession] = useState<Session | undefined>(() => readStoredSession());
+  const [isExitConfirmationOpen, setIsExitConfirmationOpen] = useState(false);
+  const backGuardRef = useRef<MobileBackNavigationGuard | undefined>(undefined);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const guard = installMobileBackNavigationGuard(window, () => setIsExitConfirmationOpen(true));
+    if (!guard) return;
+    backGuardRef.current = guard;
+    return () => {
+      guard.dispose();
+      if (backGuardRef.current === guard) backGuardRef.current = undefined;
+    };
+  }, []);
+
   useEffect(() => {
     if (!authority || remoteAuthority) return;
     void authority.seedE2eData();
@@ -36,11 +58,51 @@ export function App() {
     setSession(undefined);
   };
 
-  if (remoteAuthority) return <ConnectedApp authority={remoteAuthority} session={session} onAuthenticated={authenticate} onLogout={logout} />;
-  if (!authority) return <FieldApp store={createUnavailableAppStore()} />;
-  if (!session) return <LoginScreen authority={authority} onAuthenticated={authenticate} />;
-  if (session.role === "ADMIN") return <OperationsApp authority={authority} session={session} onLogout={logout} />;
-  return <TechnicianRuntime authority={authority} session={session} onLogout={logout} />;
+  const content = remoteAuthority
+    ? <ConnectedApp authority={remoteAuthority} session={session} onAuthenticated={authenticate} onLogout={logout} />
+    : !authority
+      ? <FieldApp store={createUnavailableAppStore()} />
+      : !session
+        ? <LoginScreen authority={authority} onAuthenticated={authenticate} />
+        : session.role === "ADMIN"
+          ? <OperationsApp authority={authority} session={session} onLogout={logout} />
+          : <TechnicianRuntime authority={authority} session={session} onLogout={logout} />;
+
+  return <>
+    {content}
+    {isExitConfirmationOpen ? <ExitConfirmationModal onStay={() => setIsExitConfirmationOpen(false)} onExit={() => { setIsExitConfirmationOpen(false); backGuardRef.current?.confirmExit(); }} /> : null}
+  </>;
+}
+
+export function installMobileBackNavigationGuard(target: Window, onRequestExit: () => void): MobileBackNavigationGuard | undefined {
+  if (!target.matchMedia("(max-width: 760px)").matches) return undefined;
+
+  const currentState = isRecord(target.history.state) ? target.history.state : {};
+  if (!currentState[MOBILE_BACK_GUARD_KEY]) target.history.pushState({ ...currentState, [MOBILE_BACK_GUARD_KEY]: true }, "", target.location.href);
+
+  let released = false;
+  const handlePopState = (): void => {
+    if (released) return;
+    onRequestExit();
+    const state = isRecord(target.history.state) ? target.history.state : {};
+    target.history.pushState({ ...state, [MOBILE_BACK_GUARD_KEY]: true }, "", target.location.href);
+  };
+  target.addEventListener("popstate", handlePopState);
+
+  return {
+    confirmExit() {
+      if (released) return;
+      released = true;
+      target.history.go(-2);
+    },
+    dispose() {
+      target.removeEventListener("popstate", handlePopState);
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function ConnectedApp({ authority, session, onAuthenticated, onLogout }: { authority: IdentityPort & OperationsAuthorityPort & HttpPilotClient; session?: Session; onAuthenticated: (session: Session) => void; onLogout: () => void }) {
