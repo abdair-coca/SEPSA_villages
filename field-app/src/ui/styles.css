@@ -8293,6 +8293,17 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     gap: var(--space-4);
   }
 
+  /* The entrance transform creates sibling stacking contexts; keep the open filter panel above cards. */
+  .field-app .orders-tray > .order-filters {
+    position: relative;
+    z-index: 2;
+  }
+
+  .field-app .orders-tray > .order-cards-list {
+    position: relative;
+    z-index: 1;
+  }
+
   .field-app .orders-tray .order-filters .search-field {
     min-height: 40px;
     margin: 0;
