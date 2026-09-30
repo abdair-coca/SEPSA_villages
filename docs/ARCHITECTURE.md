@@ -31,7 +31,11 @@ El estado del header conserva una separación explícita: Técnico muestra el es
 
 Los patrones visuales compartidos deben tener una interfaz pequeña y más de un consumidor real. Paneles, estados, acciones, badges, formularios, modales y paginación se reutilizan cuando representan el mismo comportamiento. Las excepciones específicas del técnico móvil se mantienen acotadas a captura, teclado, GPS, evidencia, mapa y operación offline.
 
-Los estilos tienen un punto de entrada en `src/ui/styles.css`. Los tokens visuales viven en `src/ui/styles/tokens.css` y el frame compartido en `src/ui/styles/shared-shell.css`; el resto de estilos se organiza por superficie hasta completar su migración. La hoja de estilos no contiene reglas de autorización ni de negocio.
+`SearchField` comparte búsqueda controlada y limpieza accesible entre Técnico y Admin. `PaginationControls` comparte las acciones de página; las cantidades y los cálculos siguen perteneciendo a cada vista. `AppStateCard` y `Notification` presentan estados y mensajes recuperables. `AppModal` monta los diálogos en un portal con el tema del rol: controla foco, teclado y bloqueo del fondo; `closeDisabled` impide cancelar mientras una operación administrativa está en curso. Los resultados de captura conservan su contenido y acción «Listo» con este mismo comportamiento.
+
+Los estilos tienen un punto de entrada en `src/ui/styles.css`. Los tokens visuales y capas viven en `src/ui/styles/tokens.css`, el frame compartido en `src/ui/styles/shared-shell.css` y los controles compartidos en `src/ui/styles/controls.css`; el resto de estilos se organiza por superficie hasta completar su migración. La hoja de estilos no contiene reglas de autorización ni de negocio.
+
+`npm run smoke:ui` complementa las pruebas de componentes con Chrome/CDP sobre un build simulado, usando un perfil temporal y sin contactar servicios externos. Captura vistas responsive y verifica foco, filtros, mapa, GPS tardío, desplazamiento de captura y restauración de borradores. `npm run smoke:pwa` verifica por separado el guardado local, cola y recuperación offline.
 
 La aplicación arranca en uno de estos modos:
 

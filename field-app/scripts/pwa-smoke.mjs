@@ -91,6 +91,8 @@ try {
   await waitForExpression(cdp, `document.body.innerText.includes("Sin conexión")`);
   await evaluate(cdp, `document.querySelector(".capture-wizard__footer .primary-action")?.click()`);
   await waitForExpression(cdp, `document.querySelector('[role="dialog"] h2')?.textContent === "Visita guardada"`);
+  const completionFocused = await evaluate(cdp, `document.querySelector('[role="dialog"]').contains(document.activeElement) && document.activeElement.textContent.trim() === 'Listo' && document.querySelector('.field-app').closest('[inert]') !== null`);
+  if (!completionFocused) throw new Error("Completion dialog did not focus Listo and isolate the background.");
   await evaluate(cdp, `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.trim() === "Listo")?.click()`);
   await cdp.send("Page.navigate", { url: appUrl });
   await waitForExpression(cdp, `document.querySelector(".current-order-card") !== null`);
@@ -138,7 +140,7 @@ try {
     uploadThroughput: -1,
   });
   await waitForExpression(cdp, "navigator.onLine === true", "browser online event after reconnect");
-  await waitForExpression(cdp, "document.querySelector('.network-status-badge--online') !== null", "UI online state after reconnect");
+  await waitForExpression(cdp, "document.querySelector('.app-status-badge--positive')?.textContent.includes('Red disponible') === true", "UI online state after reconnect");
   let automaticallySynced = false;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     automaticallySynced = await evaluate(cdp, `[...document.querySelectorAll(".queue-list--desktop .queue-item")].some((item) => {
