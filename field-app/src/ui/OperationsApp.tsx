@@ -2,9 +2,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { generateOperationId, type AuditEvent, type DebtorRecord, type Session, type TechnicianRecord, type WorkOrder } from "../domain";
 import type { OperationsAuthorityPort } from "../ports";
 import { AppHeader } from "./AppHeader";
-import { IconAlertTriangle, IconCheck, IconDocument, IconSearch } from "./Icons";
+import { IconAlertTriangle, IconCheck, IconDocument } from "./Icons";
 import { AppModal } from "./Modal";
 import { AppStateCard } from "./UiState";
+import { Notification } from "./Notification";
+import { SearchField } from "./SearchField";
+import { PaginationControls } from "./PaginationControls";
 
 interface OperationsAppProps {
   authority: OperationsAuthorityPort;
@@ -66,61 +69,94 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
   const refreshSequence = useRef(0);
+  const mounted = useRef(false);
+  const scopeRef = useRef({ authority, session });
   const filtersRef = useRef(filters);
   const liveSearchTimer = useRef<number | undefined>(undefined);
-  const liveSearchMounted = useRef(false);
+  const lastLiveQuery = useRef(filters.query);
   const skipNextLiveSearch = useRef(false);
   const orderDetailRef = useRef<HTMLDivElement>(null);
   filtersRef.current = filters;
+  scopeRef.current = { authority, session };
 
-  async function refresh(nextFilters = filters): Promise<WorkOrder[]> {
-    const sequence = ++refreshSequence.current;
-    const [nextDebtors, nextFilterRecords, nextOrders, nextAudit, nextTechnicians] = await Promise.all([
-      authority.findDebtors({ query: nextFilters.query, area: nextFilters.area, locality: nextFilters.locality, route: nextFilters.route, minMonthsPending: parseMinMonths(nextFilters.minMonthsPending), supplyStatus: nextFilters.supplyStatus, session }),
-      authority.findDebtors({ session }),
-      authority.listOrders(session),
-      authority.listAudit({ session, includeRejected: true }),
-      authority.listTechnicians(session),
-    ]);
-    if (sequence !== refreshSequence.current) return nextOrders;
-    setDebtors(nextDebtors);
-    setFilterRecords(nextFilterRecords);
-    setTechnicians(nextTechnicians);
-    setSelectedTechnician((current) => nextTechnicians.some((technician) => technician.userId === current) ? current : nextTechnicians[0]?.userId ?? "");
-    setOrders(nextOrders);
-    setAudit(nextAudit);
-    setOrdersPage(1);
-    setSuppliesPage(1);
-    if (selectedDebtor && !nextDebtors.some((debtor) => debtor.debtorId === selectedDebtor)) setSelectedDebtor("");
-    setSelectedDebtorIds((current) => current.filter((debtorId) => nextDebtors.some((debtor) => debtor.debtorId === debtorId)));
-    if (selectedOrder && !nextOrders.some((order) => order.orderId === selectedOrder)) setSelectedOrder("");
-    return nextOrders;
+  function isActiveSession(): boolean {
+    return mounted.current && scopeRef.current.authority === authority && scopeRef.current.session === session;
+  }
+
+  function isCurrentRequest(sequence: number): boolean {
+    return isActiveSession() && sequence === refreshSequence.current;
+  }
+
+  async function refresh(nextFilters = filters, mode: "load" | "search" | "refresh" = "refresh"): Promise<WorkOrder[]> {
+    const sequence = isActiveSession() ? ++refreshSequence.current : -1;
+    if (isCurrentRequest(sequence)) {
+      setLoading(mode === "load");
+      setSearching(mode === "search");
+      setLoadError("");
+      if (mode === "search") setMessage("");
+    }
+    try {
+      const [nextDebtors, nextFilterRecords, nextOrders, nextAudit, nextTechnicians] = await Promise.all([
+        authority.findDebtors({ query: nextFilters.query, area: nextFilters.area, locality: nextFilters.locality, route: nextFilters.route, minMonthsPending: parseMinMonths(nextFilters.minMonthsPending), supplyStatus: nextFilters.supplyStatus, session }),
+        authority.findDebtors({ session }),
+        authority.listOrders(session),
+        authority.listAudit({ session, includeRejected: true }),
+        authority.listTechnicians(session),
+      ]);
+      if (!isCurrentRequest(sequence)) return nextOrders;
+      setDebtors(nextDebtors);
+      setFilterRecords(nextFilterRecords);
+      setTechnicians(nextTechnicians);
+      setSelectedTechnician((current) => nextTechnicians.some((technician) => technician.userId === current) ? current : nextTechnicians[0]?.userId ?? "");
+      setOrders(nextOrders);
+      setAudit(nextAudit);
+      setOrdersPage(1);
+      setSuppliesPage(1);
+      setSelectedDebtor((current) => nextDebtors.some((debtor) => debtor.debtorId === current) ? current : "");
+      setSelectedDebtorIds((current) => current.filter((debtorId) => nextDebtors.some((debtor) => debtor.debtorId === debtorId)));
+      setSelectedOrder((current) => nextOrders.some((order) => order.orderId === current) ? current : "");
+      return nextOrders;
+    } catch (error) {
+      if (isCurrentRequest(sequence) && mode !== "refresh") {
+        const text = readableError(error);
+        setLoadError(text);
+        if (mode === "search") notify(text, "error");
+      }
+      throw error;
+    } finally {
+      if (isCurrentRequest(sequence)) {
+        setLoading(false);
+        setSearching(false);
+      }
+    }
   }
 
   function notify(text: string, tone: MessageTone = "info"): void {
+    if (!isActiveSession()) return;
     setMessage(text);
     setMessageTone(tone);
   }
 
   async function loadAdminData(nextFilters = filters): Promise<void> {
-    setLoading(true);
-    setLoadError("");
-    try {
-      await refresh(nextFilters);
-    } catch (error) {
-      setLoadError(readableError(error));
-    } finally {
-      setLoading(false);
-    }
+    try { await refresh(nextFilters, "load"); } catch { /* Current request owns error presentation. */ }
   }
 
-  useEffect(() => { void loadAdminData(); }, [session]);
+  useEffect(() => {
+    mounted.current = true;
+    setBusy(false);
+    setOrderCreationDialog(undefined);
+    setOrderAssignmentDialog(undefined);
+    void loadAdminData(filtersRef.current);
+    return () => {
+      mounted.current = false;
+      refreshSequence.current++;
+      cancelLiveSearch();
+    };
+  }, [authority, session]);
 
   useEffect(() => {
-    if (!liveSearchMounted.current) {
-      liveSearchMounted.current = true;
-      return;
-    }
+    if (lastLiveQuery.current === filters.query) return;
+    lastLiveQuery.current = filters.query;
     if (skipNextLiveSearch.current) {
       skipNextLiveSearch.current = false;
       return;
@@ -128,21 +164,12 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
     cancelLiveSearch();
     liveSearchTimer.current = window.setTimeout(() => {
       liveSearchTimer.current = undefined;
-      setMessage("");
-      setLoadError("");
-      setSearching(true);
-      void refresh(filtersRef.current)
-        .catch((error) => {
-          const text = readableError(error);
-          setLoadError(text);
-          notify(text, "error");
-        })
-        .finally(() => setSearching(false));
+      void refresh(filtersRef.current, "search").catch(() => { /* Current request owns error presentation. */ });
     }, 280);
     return () => {
-      if (liveSearchTimer.current !== undefined) window.clearTimeout(liveSearchTimer.current);
+      cancelLiveSearch();
     };
-  }, [filters.query]);
+  }, [filters.query, authority, session]);
 
   useEffect(() => {
     if (!selectedOrder || !orderDetailRef.current) return;
@@ -152,10 +179,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
   async function search(event: FormEvent) {
     event.preventDefault();
     cancelLiveSearch();
-    setMessage("");
-    setLoadError("");
-    setSearching(true);
-    try { await refresh(filters); } catch (error) { const text = readableError(error); setLoadError(text); notify(text, "error"); } finally { setSearching(false); }
+    try { await refresh(filters, "search"); } catch { /* Current request owns error presentation. */ }
   }
 
   async function clearFilters(): Promise<void> {
@@ -164,10 +188,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
     setFilters({ ...DEFAULT_SEARCH_FILTERS });
     setSelectedDebtor("");
     setSelectedDebtorIds([]);
-    setMessage("");
-    setLoadError("");
-    setSearching(true);
-    try { await refresh(DEFAULT_SEARCH_FILTERS); } catch (error) { const text = readableError(error); setLoadError(text); notify(text, "error"); } finally { setSearching(false); }
+    try { await refresh(DEFAULT_SEARCH_FILTERS, "search"); } catch { /* Current request owns error presentation. */ }
   }
 
   function cancelLiveSearch(): void {
@@ -194,7 +215,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
   }
 
   async function confirmOrderCreation(): Promise<void> {
-    if (!orderCreationDialog) return;
+    if (!orderCreationDialog || busy || !isActiveSession()) return;
     const creationDialog = orderCreationDialog;
     const missingDebtorIds = getMissingOrderCreationDebtorIds(creationDialog.debtorIds, debtors);
     if (missingDebtorIds.length) {
@@ -211,24 +232,25 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
       if (creationDialog.mode === "single") {
         const order = await authority.createOrder({ operationId: generateOperationId("create-order"), debtorId: creationDialog.debtorIds[0], purpose: "CUT", session });
         createdOrders = [order];
-        setOrderCreationDialog(undefined);
+        if (isActiveSession()) setOrderCreationDialog(undefined);
         await assignCreatedOrders([order]);
-        setSelectedOrder(order.orderId);
+        if (isActiveSession()) setSelectedOrder(order.orderId);
         notify("Orden creada y asignada al técnico seleccionado.", "success");
       } else {
         const result = await authority.createOrdersBatch({ batchId: generateOperationId("create-order-batch"), debtorIds: creationDialog.debtorIds, purpose: "CUT", session });
         createdOrders = result.created;
-        setOrderCreationDialog(undefined);
+        if (isActiveSession()) setOrderCreationDialog(undefined);
         await assignCreatedOrders(result.created);
-        if (result.created[0]) {
+        if (isActiveSession() && result.created[0]) {
           setSelectedDebtor(result.created[0].debtorId ?? "");
           setSelectedOrder(result.created[0].orderId);
         }
         notify(`Lote creado y asignado: ${result.created.length} órdenes${result.skipped.length ? `, ${result.skipped.length} omitidas por validación o duplicado` : ""}.`, "success");
-        setSelectedDebtorIds([]);
+        if (isActiveSession()) setSelectedDebtorIds([]);
       }
       await refresh();
     } catch (error) {
+      if (!isActiveSession()) return;
       setOrderCreationDialog(undefined);
       if (createdOrders.length) {
         setSelectedOrder(createdOrders[0].orderId);
@@ -238,6 +260,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
         if (isActiveOrderConflict(error)) {
           try {
             const refreshedOrders = await refresh();
+            if (!isActiveSession()) return;
             const debtor = debtors.find((candidate) => candidate.debtorId === creationDialog.debtorIds[0]);
             const activeOrder = findActiveOrderForSupply(refreshedOrders, creationDialog.debtorIds[0], debtor?.accountId);
             if (activeOrder) {
@@ -251,21 +274,21 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
         }
         notify(readableError(error), "error");
       }
-    } finally { setBusy(false); }
+    } finally { if (isActiveSession()) setBusy(false); }
   }
 
   async function confirmOrderAssignment(): Promise<void> {
     const order = orderAssignmentDialog;
-    if (!order) return;
+    if (!order || busy || !isActiveSession()) return;
     setBusy(true);
     try {
       await authority.assignOrder({ operationId: generateOperationId("assign-order"), orderId: order.orderId, technicianId: selectedTechnician, expectedOrderVersion: order.version ?? 0, session });
-      setOrderAssignmentDialog(undefined);
+      if (isActiveSession()) setOrderAssignmentDialog(undefined);
       notify("Técnico asignado.", "success");
       await refresh();
     } catch (error) {
       notify(readableError(error), "error");
-    } finally { setBusy(false); }
+    } finally { if (isActiveSession()) setBusy(false); }
   }
 
   function selectDebtor(debtorId: string): void {
@@ -318,7 +341,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
         onLogout={onLogout}
       />
 
-      {message ? <div className={`message message--${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{message}</div> : null}
+      {message ? <Notification tone={messageTone} text={message} /> : null}
 
       <main className="operations-main">
         <section className="admin-summary" aria-label="Resumen de órdenes">
@@ -336,7 +359,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
           <section className="panel operations-search" aria-labelledby="supplies-title">
             <div className="panel-heading"><span className="panel-heading__icon panel-heading__icon--list" aria-hidden="true" /><div><span className="eyebrow">Buscar morosos</span><h2 id="supplies-title">Buscar morosos</h2><p className="panel-subtitle">Busca y selecciona un suministro para crear una orden de corte.</p></div><span className="count-badge">{debtors.length} resultados</span></div>
             <form className="admin-search-form admin-search-form--extended" onSubmit={search}>
-              <label className="search-field search-field--large" htmlFor="admin-search"><IconSearch /><input id="admin-search" value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Buscar por nombre, cuenta, área, localidad, ruta o estado" /></label>
+              <SearchField id="admin-search" label="Buscar morosos" value={filters.query} onChange={(query) => setFilters((current) => ({ ...current, query }))} onClear={() => setFilters((current) => ({ ...current, query: "" }))} busy={searching} disabled={busy} placeholder="Buscar por nombre, cuenta, área, localidad, ruta o estado" />
               <div className="compact-filters">
                  <label className="text-field"><span>Área</span><select value={filters.area} onChange={(event) => changeArea(event.target.value)}><option value="">Todas</option>{availableFilterOptions.areas.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                  <label className="text-field"><span>Localidad</span><select value={filters.locality} onChange={(event) => setFilters({ ...filters, locality: event.target.value })}><option value="">Todas</option>{availableFilterOptions.localities.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
@@ -350,7 +373,12 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
             <AdminSelectionSummary selectedCount={selectedDebtorIds.length} visibleSelectedCount={suppliesPageData.items.filter((debtor) => selectedDebtorIds.includes(debtor.debtorId)).length} />
 
              <div className="results-heading"><span><strong>{loading ? "Consultando suministros…" : `${debtors.length} suministros encontrados`}</strong><small>Ordenados por deuda pendiente</small></span></div>
-              {loading ? <AdminLoadingState /> : loadError && !debtors.length ? <AdminErrorState message={loadError} onRetry={() => void loadAdminData()} /> : <><div className="admin-record-list">{suppliesPageData.items.map((debtor, index) => <DebtorItem key={debtor.debtorId} debtor={debtor} position={(suppliesPageData.page - 1) * ADMIN_SUPPLIES_PAGE_SIZE + index + 1} selected={selectedDebtor === debtor.debtorId} checked={selectedDebtorIds.includes(debtor.debtorId)} onSelect={() => selectDebtor(debtor.debtorId)} onToggle={() => toggleDebtor(debtor.debtorId)} />)}</div>{suppliesPageData.totalPages > 1 ? <nav className="admin-pagination supply-pagination" aria-label="Paginación de suministros"><button type="button" onClick={() => setSuppliesPage(suppliesPageData.page - 1)} disabled={suppliesPageData.page === 1} aria-label="Suministros anteriores">‹</button><span>Página {suppliesPageData.page} de {suppliesPageData.totalPages}</span><button type="button" onClick={() => setSuppliesPage(suppliesPageData.page + 1)} disabled={suppliesPageData.page === suppliesPageData.totalPages} aria-label="Suministros siguientes">›</button></nav> : null}{loadError ? <AdminInlineError message={loadError} onRetry={() => void loadAdminData()} /> : null}{!debtors.length && !loadError ? <div className="empty-state"><strong>No hay resultados con estos filtros</strong><span>Ajusta la búsqueda y vuelve a consultar.</span></div> : null}</>}
+              {loading ? <AdminLoadingState /> : loadError && !debtors.length ? <AdminErrorState message={loadError} onRetry={() => void loadAdminData()} /> : <>
+                <div className="admin-record-list">{suppliesPageData.items.map((debtor, index) => <DebtorItem key={debtor.debtorId} debtor={debtor} position={(suppliesPageData.page - 1) * ADMIN_SUPPLIES_PAGE_SIZE + index + 1} selected={selectedDebtor === debtor.debtorId} checked={selectedDebtorIds.includes(debtor.debtorId)} onSelect={() => selectDebtor(debtor.debtorId)} onToggle={() => toggleDebtor(debtor.debtorId)} />)}</div>
+                {suppliesPageData.totalPages > 1 ? <PaginationControls className="admin-pagination supply-pagination" label="Paginación de suministros" page={suppliesPageData.page} totalPages={suppliesPageData.totalPages} onPrevious={() => setSuppliesPage(suppliesPageData.page - 1)} onNext={() => setSuppliesPage(suppliesPageData.page + 1)} /> : null}
+                {loadError ? <AdminInlineError message={loadError} onRetry={() => void loadAdminData()} /> : null}
+                {!debtors.length && !loadError ? <AppStateCard tone="empty" layout="inline" className="empty-state" title="No hay resultados con estos filtros" description="Ajusta la búsqueda y vuelve a consultar." /> : null}
+              </>}
 
           </section>
 
@@ -389,7 +417,7 @@ function AdminErrorState({ message, onRetry }: { message: string; onRetry: () =>
 }
 
 function AdminInlineError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return <div className="admin-inline-error" role="alert"><span>{message}</span><button type="button" onClick={onRetry}>Reintentar</button></div>;
+  return <AppStateCard tone="error" layout="inline" className="admin-inline-error" title="No pudimos actualizar los suministros" description={message} action={{ label: "Reintentar", onClick: onRetry, variant: "secondary" }} />;
 }
 
 function DebtorItem({ debtor, position, selected, checked, onSelect, onToggle }: { debtor: DebtorRecord; position: number; selected: boolean; checked: boolean; onSelect: () => void; onToggle: () => void }) {
@@ -439,15 +467,15 @@ export function OrderCreationModal({ dialog, debtors, technicians, selectedTechn
   const selectedDebtors = dialog.debtorIds.map((debtorId) => debtors.find((debtor) => debtor.debtorId === debtorId)).filter((debtor): debtor is DebtorRecord => Boolean(debtor));
   const missingDebtorIds = getMissingOrderCreationDebtorIds(dialog.debtorIds, debtors);
   const isBatch = dialog.mode === "batch";
-  return <AppModal titleId="order-modal-title" eyebrow={isBatch ? "Creación masiva" : "Nueva orden"} title={isBatch ? "Crear y asignar órdenes" : "Crear y asignar orden de corte"} onClose={onCancel}><p className="admin-modal__intro">Revisa el suministro y selecciona el técnico responsable antes de confirmar.</p><div className="admin-modal__context"><div className="admin-modal__supply-list">{selectedDebtors.map((debtor) => <article className="admin-modal__supply" key={debtor.debtorId}><strong>{debtor.customerName}</strong><span>{debtor.supplyId} · Cuenta {debtor.accountId}</span><small>{debtor.address}</small></article>)}{missingDebtorIds.map((debtorId) => <article className="admin-modal__supply" key={debtorId}><strong>Suministro no disponible</strong><span>ID {debtorId}</span></article>)}</div>{missingDebtorIds.length ? <p role="alert">No se puede confirmar: actualice los resultados para incluir todos los suministros seleccionados.</p> : null}</div><label className="text-field"><span>Asignar a técnico</span><select value={selectedTechnician} onChange={(event) => onTechnicianChange(event.target.value)} disabled={!technicians.length}><option value="" disabled>{technicians.length ? "Seleccione un técnico" : "No hay técnicos habilitados"}</option>{technicians.map((technician) => <option key={technician.userId} value={technician.userId}>{technicianOptionLabel(technician)}</option>)}</select></label><div className="admin-modal__actions"><button className="secondary-action" type="button" onClick={onCancel} disabled={busy}>Cancelar</button><button className="primary-action" type="button" onClick={onConfirm} disabled={busy || missingDebtorIds.length > 0 || selectedDebtors.length !== dialog.debtorIds.length || !selectedTechnician}>{busy ? "Creando…" : isBatch ? "Aceptar y crear órdenes" : "Aceptar y crear orden"}<span>→</span></button></div></AppModal>;
+  return <AppModal titleId="order-modal-title" eyebrow={isBatch ? "Creación masiva" : "Nueva orden"} title={isBatch ? "Crear y asignar órdenes" : "Crear y asignar orden de corte"} onClose={onCancel} closeDisabled={busy}><p className="admin-modal__intro">Revisa el suministro y selecciona el técnico responsable antes de confirmar.</p><div className="admin-modal__context"><div className="admin-modal__supply-list">{selectedDebtors.map((debtor) => <article className="admin-modal__supply" key={debtor.debtorId}><strong>{debtor.customerName}</strong><span>{debtor.supplyId} · Cuenta {debtor.accountId}</span><small>{debtor.address}</small></article>)}{missingDebtorIds.map((debtorId) => <article className="admin-modal__supply" key={debtorId}><strong>Suministro no disponible</strong><span>ID {debtorId}</span></article>)}</div>{missingDebtorIds.length ? <p role="alert">No se puede confirmar: actualice los resultados para incluir todos los suministros seleccionados.</p> : null}</div><label className="text-field"><span>Asignar a técnico</span><select value={selectedTechnician} onChange={(event) => onTechnicianChange(event.target.value)} disabled={busy || !technicians.length}><option value="" disabled>{technicians.length ? "Seleccione un técnico" : "No hay técnicos habilitados"}</option>{technicians.map((technician) => <option key={technician.userId} value={technician.userId}>{technicianOptionLabel(technician)}</option>)}</select></label><div className="admin-modal__actions"><button className="secondary-action" type="button" onClick={onCancel} disabled={busy}>Cancelar</button><button className="primary-action" type="button" onClick={onConfirm} disabled={busy || missingDebtorIds.length > 0 || selectedDebtors.length !== dialog.debtorIds.length || !selectedTechnician}>{busy ? "Creando…" : isBatch ? "Aceptar y crear órdenes" : "Aceptar y crear orden"}<span>→</span></button></div></AppModal>;
 }
 
 function OrderAssignmentModal({ order, technicians, selectedTechnician, busy, onTechnicianChange, onCancel, onConfirm }: { order: WorkOrder; technicians: readonly TechnicianRecord[]; selectedTechnician: string; busy: boolean; onTechnicianChange: (technicianId: string) => void; onCancel: () => void; onConfirm: () => void }) {
-  return <AppModal titleId="assignment-modal-title" eyebrow="Asignación" title="Asignar técnico" onClose={onCancel}><p className="admin-modal__intro">Selecciona técnico responsable para continuar con esta orden.</p><div className="admin-modal__context"><article className="admin-modal__supply"><strong>{order.context?.customerName ?? order.accountId ?? "Suministro"}</strong><span>Cuenta {order.context?.accountId ?? order.accountId ?? "Dato no disponible"}</span><small>{order.context?.address ?? "Dirección no disponible"}</small></article></div><label className="text-field"><span>Asignar a técnico</span><select value={selectedTechnician} onChange={(event) => onTechnicianChange(event.target.value)} disabled={!technicians.length}><option value="" disabled>{technicians.length ? "Seleccione un técnico" : "No hay técnicos habilitados"}</option>{technicians.map((technician) => <option key={technician.userId} value={technician.userId}>{technicianOptionLabel(technician)}</option>)}</select></label><div className="admin-modal__actions"><button className="secondary-action" type="button" onClick={onCancel} disabled={busy}>Cancelar</button><button className="primary-action" type="button" onClick={onConfirm} disabled={busy || !selectedTechnician}>{busy ? "Asignando…" : "Asignar técnico"}<span>→</span></button></div></AppModal>;
+  return <AppModal titleId="assignment-modal-title" eyebrow="Asignación" title="Asignar técnico" onClose={onCancel} closeDisabled={busy}><p className="admin-modal__intro">Selecciona técnico responsable para continuar con esta orden.</p><div className="admin-modal__context"><article className="admin-modal__supply"><strong>{order.context?.customerName ?? order.accountId ?? "Suministro"}</strong><span>Cuenta {order.context?.accountId ?? order.accountId ?? "Dato no disponible"}</span><small>{order.context?.address ?? "Dirección no disponible"}</small></article></div><label className="text-field"><span>Asignar a técnico</span><select value={selectedTechnician} onChange={(event) => onTechnicianChange(event.target.value)} disabled={busy || !technicians.length}><option value="" disabled>{technicians.length ? "Seleccione un técnico" : "No hay técnicos habilitados"}</option>{technicians.map((technician) => <option key={technician.userId} value={technician.userId}>{technicianOptionLabel(technician)}</option>)}</select></label><div className="admin-modal__actions"><button className="secondary-action" type="button" onClick={onCancel} disabled={busy}>Cancelar</button><button className="primary-action" type="button" onClick={onConfirm} disabled={busy || !selectedTechnician}>{busy ? "Asignando…" : "Asignar técnico"}<span>→</span></button></div></AppModal>;
 }
 
 function RecentOrdersPreview({ orders, totalOrders, selectedOrderId, page, totalPages, onSelect, onPageChange }: { orders: WorkOrder[]; totalOrders: number; selectedOrderId: string; page: number; totalPages: number; onSelect: (orderId: string) => void; onPageChange: (page: number) => void }) {
-  return <section className="orders-index admin-recent-orders" aria-labelledby="recent-orders-title"><div className="admin-recent-orders__heading"><div><span className="eyebrow">Actividad</span><h3 id="recent-orders-title">Órdenes recientes</h3></div><span className="admin-recent-orders__count">{totalOrders}</span></div><div className="order-index-list">{orders.map((order) => <OrderRow key={order.orderId} order={order} selected={selectedOrderId === order.orderId} onSelect={() => onSelect(order.orderId)} />)}</div>{!totalOrders ? <p className="activity-empty">Todavía no hay órdenes creadas.</p> : null}{totalPages > 1 ? <nav className="admin-pagination" aria-label="Paginación de órdenes recientes"><button type="button" onClick={() => onPageChange(page - 1)} disabled={page === 1} aria-label="Página anterior">‹</button><span>Página {page} de {totalPages}</span><button type="button" onClick={() => onPageChange(page + 1)} disabled={page === totalPages} aria-label="Página siguiente">›</button></nav> : null}</section>;
+  return <section className="orders-index admin-recent-orders" aria-labelledby="recent-orders-title"><div className="admin-recent-orders__heading"><div><span className="eyebrow">Actividad</span><h3 id="recent-orders-title">Órdenes recientes</h3></div><span className="admin-recent-orders__count">{totalOrders}</span></div><div className="order-index-list">{orders.map((order) => <OrderRow key={order.orderId} order={order} selected={selectedOrderId === order.orderId} onSelect={() => onSelect(order.orderId)} />)}</div>{!totalOrders ? <AppStateCard tone="empty" layout="inline" className="activity-empty" title="Todavía no hay órdenes creadas." description="Selecciona un suministro para crear una orden." /> : null}{totalPages > 1 ? <PaginationControls className="admin-pagination" label="Paginación de órdenes recientes" page={page} totalPages={totalPages} onPrevious={() => onPageChange(page - 1)} onNext={() => onPageChange(page + 1)} /> : null}</section>;
 }
 
 function OrderRow({ order, selected, onSelect }: { order: WorkOrder; selected: boolean; onSelect: () => void }) { return <button type="button" className={selected ? "order-index-item order-index-item--selected" : "order-index-item"} onClick={onSelect}><span><strong>Orden de corte · {order.context?.customerName ?? order.accountId ?? "Suministro"}</strong><small>{order.assignedTechnicianId ? `Asignada a ${order.assignedTechnicianName ?? "Técnico asignado"}` : "Sin técnico asignado"} · {formatDate(order.createdAt)}</small></span><span className={`large-status order-status-label large-status--${statusTone(order)}`}>{orderStatusLabel(order)}</span></button>; }

@@ -76,6 +76,15 @@ describe("admin bulk selection summary", () => {
 });
 
 describe("admin order creation confirmation", () => {
+  it("locks technician selection, dismissal and confirmation while creation is pending", () => {
+    const markup = renderToStaticMarkup(<OrderCreationModal dialog={{ mode: "single", debtorIds: [] }} debtors={[]} technicians={[{ userId: "tech-1", username: "tech.one", displayName: "Técnico Uno", role: "TECHNICIAN", enabled: true, source: "PILOT_PROVISIONAL" }]} selectedTechnician="tech-1" busy onTechnicianChange={() => undefined} onCancel={() => undefined} onConfirm={() => undefined} />);
+
+    expect(markup).toMatch(/<select[^>]*disabled=""/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Cerrar"/);
+    expect(markup).toMatch(/<button[^>]*disabled="">Cancelar/);
+    expect(markup).toMatch(/<button[^>]*disabled="">Creando…/);
+  });
+
   it("keeps every selected supply, technician choice, and both confirmation actions in the dialog", () => {
     const debtors: DebtorRecord[] = [
       { debtorId: "supply-1", accountId: "account-1", supplyId: "meter-1", customerName: "Client One", address: "Address One", references: "", meterId: "meter-1", area: "A", locality: "Town", route: "1", debtCents: 100, monthsPending: 2, updatedAt: "2026-09-01", source: "SIMULATED", kardex: [] },
