@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef } from "react";
 
-type StateTone = "loading" | "error";
+type StateTone = "loading" | "error" | "empty";
 type StateElement = "main" | "div";
 
 export interface AppStateCardProps {
@@ -10,16 +10,17 @@ export interface AppStateCardProps {
   action?: { label: string; onClick: () => void; variant?: "primary" | "secondary" };
   as?: StateElement;
   className?: string;
+  layout?: "panel" | "inline";
 }
 
-/** Shared presentation for recoverable loading and error states. */
-export function AppStateCard({ tone, title, description, action, as = "div", className }: AppStateCardProps) {
+/** Shared presentation for loading, empty and recoverable error states. */
+export function AppStateCard({ tone, title, description, action, as = "div", className, layout = "panel" }: AppStateCardProps) {
   const Element: "main" | "div" = as;
-  const classNames = ["ui-state-card", `ui-state-card--${tone}`, className].filter(Boolean).join(" ");
+  const classNames = ["ui-state-card", `ui-state-card--${tone}`, `ui-state-card--${layout}`, className].filter(Boolean).join(" ");
   const props: ComponentPropsWithoutRef<"div"> = {
     className: classNames,
-    role: tone === "error" ? "alert" : undefined,
-    "aria-live": tone === "loading" ? "polite" : undefined,
+    role: tone === "error" ? "alert" : "status",
+    "aria-live": tone === "error" ? undefined : "polite",
   };
 
   return (

@@ -6,3 +6,5 @@ export * from "./Modal";
 export * from "./ExitConfirmationModal";
 export * from "./OperationsApp";
 export * from "./UiState";
+export * from "./SearchField";
+export * from "./PaginationControls";
