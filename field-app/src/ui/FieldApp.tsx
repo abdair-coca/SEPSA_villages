@@ -218,7 +218,7 @@ export function FieldApp({
           </div>
         </div> : undefined}
       />
-      {state.message && !(state.message.transient && dismissedMessage === state.message) ? (
+      {state.message && dismissedMessage !== state.message ? (
         <Notification
           tone={state.message.tone}
           text={state.message.text}

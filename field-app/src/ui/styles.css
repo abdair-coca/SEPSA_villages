@@ -3193,13 +3193,10 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .field-app .message {
-  position: fixed;
-  top: var(--space-24);
-  left: 50%;
-  z-index: 2;
+  position: static;
   width: min(520px, calc(100% - 32px));
-  margin: 0;
-  transform: translateX(-50%);
+  margin: 0 auto var(--space-16);
+  transform: none;
 }
 
 .field-app .identity-block h1 {
