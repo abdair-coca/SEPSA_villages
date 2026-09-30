@@ -1,12 +1,14 @@
 import "fake-indexeddb/auto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Children, isValidElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
 import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
 import type { SyncItem } from "../ports";
-import { ActionCompletionDialog, adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import { AppModal, type AppModalProps } from "./Modal";
+import { ActionCompletionDialog, adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, openOrderMap, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -105,6 +107,24 @@ describe("capture wizard QA recovery", () => {
     expect(cutCompletionOutcome(true, { ...order, physicalStatus: "PHYSICAL_UNKNOWN" })).toBe("review");
     expect(cutCompletionOutcome(false, { ...order, status: "GENERADO", physicalStatus: "NONE" })).toBeUndefined();
   });
+
+  it("delegates completion dialog accessibility and dismissal while retaining Listo", () => {
+    const onDismiss = vi.fn();
+    const dialog = ActionCompletionDialog({ result: { requestedAction: "CUT", recordedAction: "CUT", outcome: "saved", localSaved: true, operationId: "cut-dialog", syncStatus: "pending" }, onDismiss });
+    expect(dialog.type).toBe(AppModal);
+    const props = dialog.props as AppModalProps;
+    expect(props).toMatchObject({ variant: "completion", titleId: "cut-completion-title", describedBy: "cut-completion-message", hideCloseButton: true });
+    const button = Children.toArray(props.children).find((child) => isValidElement(child) && child.type === "button") as ReactElement<{ type: string; children: string; onClick: () => void }>;
+    expect(button.props).toMatchObject({ type: "button", children: "Listo" });
+    button.props.onClick();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    props.onClose();
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+    const markup = renderToStaticMarkup(dialog);
+    expect(markup).toContain('aria-describedby="cut-completion-message"');
+    expect(markup).toContain('id="cut-completion-message"');
+    expect(markup).not.toContain('aria-label="Cerrar"');
+  });
 });
 
 function html(store: AppStore): string {
@@ -112,6 +132,15 @@ function html(store: AppStore): string {
 }
 
 describe("FieldApp SSR shell", () => {
+  it.each([1, 2])("opens the map for journey order at index %i and keeps map as the final tab", async (index) => {
+    const store = await readyStore(`ui-map-journey-${index}`);
+    const order = orderJourneyOrders(store.getSnapshot().orders)[index];
+    expect(order).toBeDefined();
+    openOrderMap(store, order.orderId);
+    expect(store.getSnapshot()).toMatchObject({ selectedOrderId: order.orderId, tab: "map" });
+    expect(html(store)).toContain('aria-label="mapa de órdenes"');
+  });
+
   it("labels online device connectivity as available network", async () => {
     const store = await readyStore("ui-online-connectivity-label");
     const markup = html(store);
@@ -318,7 +347,7 @@ describe("FieldApp SSR shell", () => {
     expect(mobile).toContain('title="maría flores · ord-24017"');
     expect(mobile).not.toContain("syncing-002");
     expect(markup).toContain('aria-label="paginación de cola"');
-    expect(markup).toContain("operación 1 de 4");
+    expect(markup).toContain("página 1 de 4");
     expect(markup).toContain("0 intento(s)");
     expect(mobile).toMatch(/12\/9\/\d{2,4}/);
     expect(markup).toContain("pendiente");
@@ -492,6 +521,8 @@ describe("FieldApp SSR shell", () => {
     store.setTab("orders");
     store.setQuery("Quispe");
     const markup = html(store);
+    expect(markup).toContain('aria-label="buscar órdenes"');
+    expect(markup).toContain('aria-label="limpiar búsqueda"');
     expect(markup).toContain("josé quispe");
     expect(markup).not.toContain("maría flores");
 
@@ -499,6 +530,14 @@ describe("FieldApp SSR shell", () => {
     const meterMarkup = html(store);
     expect(meterMarkup).toContain("maría flores");
     expect(meterMarkup).not.toContain("josé quispe");
+    expect(meterMarkup).toContain('aria-label="buscar órdenes"');
+
+    store.setQuery("");
+    const clearedMarkup = html(store);
+    expect(clearedMarkup).toContain('aria-label="buscar órdenes"');
+    expect(clearedMarkup).not.toContain('aria-label="limpiar búsqueda"');
+    expect(clearedMarkup).toContain("maría flores");
+    expect(clearedMarkup).toContain("josé quispe");
   });
 
   it("filters assigned orders by route and route correlativo", async () => {
@@ -541,6 +580,8 @@ describe("FieldApp SSR shell", () => {
 
     const firstPage = html(store);
     expect(firstPage).toContain("mostrando 1-5 de 7 órdenes");
+    expect(firstPage).toContain('aria-label="paginación de órdenes"');
+    expect(firstPage).toContain("página 1 de 2");
     expect(firstPage).toContain('aria-label="filtrar órdenes"');
     expect(firstPage).toContain('aria-controls="order-filter-options"');
     expect(firstPage).toContain('aria-expanded="true"');

@@ -7,8 +7,13 @@ import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
 import { AppHeader } from "./AppHeader";
 import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconScissors, IconSearch, IconUser } from "./Icons";
+import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconScissors, IconUser } from "./Icons";
 import { Notification } from "./Notification";
+import { createCaptureGpsRequest } from "./capture-gps-request";
+import { AppModal } from "./Modal";
+import { SearchField } from "./SearchField";
+import { PaginationControls } from "./PaginationControls";
+import { AppStateCard } from "./UiState";
 
 export interface FieldAppProps {
   store: AppStore;
@@ -331,10 +336,7 @@ function FieldHome({ state, store, orders, onOpenIncident, onReviewOrder }: { st
     store.setTab("orders");
     store.selectOrder(orderId);
   };
-  const openMap = (orderId?: string) => {
-    if (orderId) store.selectOrder(null);
-    store.setTab("map");
-  };
+  const openMap = (orderId?: string) => openOrderMap(store, orderId);
 
   return (
     <section className="field-home" aria-label="Inicio de jornada">
@@ -360,6 +362,11 @@ function FieldHome({ state, store, orders, onOpenIncident, onReviewOrder }: { st
       <HomeSecondaryCards state={state} store={store} />
     </section>
   );
+}
+
+export function openOrderMap(store: AppStore, orderId?: string): void {
+  if (orderId) store.selectOrder(orderId);
+  store.setTab("map");
 }
 
 function OperationalSummary({ state }: { state: AppState }) {
@@ -452,7 +459,21 @@ function OrdersPanel({ state, orders, store, onRefreshAssigned, onOpenOrder }: {
   }, []);
   useEffect(() => { setOrdersPage((page) => Math.min(page, ordersPageCount)); }, [orders.length, ordersPageCount]);
   const selectedFilter = filters.find((filter) => filter.value === state.filter)?.label ?? "Todas";
-  return <section className="orders-panel orders-tray" aria-label="Mis órdenes"><div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div><OrderFilters state={state} store={store} filters={filters} compactViewport={isCompactViewport} filtersOpen={filtersOpen} onFiltersOpenChange={setFiltersOpen} selectedFilter={selectedFilter} /><div className="order-cards-list">{pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => { onOpenOrder(); store.selectOrder(order.orderId); }} />)}{!pageOrders.length ? <p className="order-list-empty">No hay órdenes que coincidan con búsqueda y filtros.</p> : null}</div><div className="order-pagination" aria-label="Paginación de órdenes"><span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span><div className="order-pagination__controls"><button type="button" onClick={() => setOrdersPage((page) => Math.max(1, page - 1))} disabled={ordersPage <= 1}>Anterior</button><span>Página {ordersPage} de {ordersPageCount}</span><button type="button" onClick={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} disabled={ordersPage >= ordersPageCount}>Siguiente</button></div></div>{!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}</section>;
+  return (
+    <section className="orders-panel orders-tray" aria-label="Mis órdenes">
+      <div className="orders-tray__heading"><div><span className="eyebrow">BANDEJA ASIGNADA</span><h2>Mis órdenes</h2><p>Todas tus órdenes asignadas para hoy.</p></div><span className="orders-tray__count">{orders.length}</span></div>
+      <OrderFilters state={state} store={store} filters={filters} compactViewport={isCompactViewport} filtersOpen={filtersOpen} onFiltersOpenChange={setFiltersOpen} selectedFilter={selectedFilter} />
+      <div className="order-cards-list">
+        {pageOrders.map((order) => <OrderCard key={order.orderId} order={order} selected={state.selectedOrderId === order.orderId} onSelect={() => { onOpenOrder(); store.selectOrder(order.orderId); }} />)}
+        {!pageOrders.length ? <AppStateCard layout="inline" tone="empty" className="order-list-empty" title="No encontramos órdenes" description="No hay órdenes que coincidan con búsqueda y filtros." /> : null}
+      </div>
+      <div className="order-pagination">
+        <span>Mostrando {firstVisibleOrder}-{lastVisibleOrder} de {orders.length} órdenes</span>
+        <PaginationControls className="order-pagination__controls" label="Paginación de órdenes" page={ordersPage} totalPages={ordersPageCount} onPrevious={() => setOrdersPage((page) => Math.max(1, page - 1))} onNext={() => setOrdersPage((page) => Math.min(ordersPageCount, page + 1))} />
+      </div>
+      {!orders.length ? <button type="button" className="primary-action" onClick={onRefreshAssigned ?? (() => void store.refresh())}>Actualizar bandeja</button> : null}
+    </section>
+  );
 }
 
 function MapPanel({ state, store }: { state: AppState; store: AppStore }) {
@@ -602,13 +623,7 @@ function MetricCard({ value, label, tone, icon }: { value: number; label: string
 function OrderFilters({ state, store, filters, compactViewport, filtersOpen, onFiltersOpenChange, selectedFilter }: { state: AppState; store: AppStore; filters: Array<{ value: OrderFilter; label: string; count?: number }>; compactViewport: boolean; filtersOpen: boolean; onFiltersOpenChange: (open: boolean) => void; selectedFilter: string }) {
   return (
     <div className="order-filters">
-      <div className="search-bar-wrap">
-        <label className="search-field" htmlFor="order-search">
-          <IconSearch className="search-field-icon" />
-          <input id="order-search" type="search" value={state.query} onChange={(event) => store.setQuery(event.target.value)} placeholder="Buscar por cuenta, medidor, cliente, ruta o correlativo" />
-        </label>
-        {state.query ? <button type="button" className="search-clear-btn" onClick={() => store.setQuery("")} aria-label="Limpiar búsqueda">×</button> : null}
-      </div>
+      <SearchField id="order-search" label="Buscar órdenes" value={state.query} onChange={(value) => store.setQuery(value)} onClear={() => store.setQuery("")} placeholder="Buscar por cuenta, medidor, cliente, ruta o correlativo" />
       <details className={`order-filter-disclosure ${compactViewport ? "order-filter-disclosure--compact" : ""}`} open={filtersOpen} onToggle={(event) => onFiltersOpenChange(event.currentTarget.open)}>
         <summary aria-label={`Filtros de órdenes. Filtro activo: ${selectedFilter}`} aria-controls="order-filter-options" aria-expanded={filtersOpen}>
           <span>Filtros</span><span className="order-filter-disclosure__current">{selectedFilter}</span>
@@ -937,14 +952,10 @@ export function ActionCompletionDialog({ result, onDismiss }: { result: ActionRe
   const content = completionDialogContent(result);
   const showSuccessIcon = result.outcome !== "review";
   return (
-    <div className="cut-completion-backdrop">
-      <section className={`cut-completion cut-completion--${result.outcome}`} role="dialog" aria-modal="true" aria-labelledby="cut-completion-title" aria-describedby="cut-completion-message">
-        <div className="cut-completion__icon" aria-hidden="true">{showSuccessIcon ? <IconCheckCircle /> : <IconAlertTriangle />}</div>
-        <h2 id="cut-completion-title">{content.title}</h2>
-        <p id="cut-completion-message">{content.message}</p>
-        <button type="button" className="primary-action" onClick={onDismiss}>Listo</button>
-      </section>
-    </div>
+    <AppModal variant="completion" className={`cut-completion--${result.outcome}`} titleId="cut-completion-title" title={content.title} describedBy="cut-completion-message" icon={showSuccessIcon ? <IconCheckCircle /> : <IconAlertTriangle />} hideCloseButton onClose={onDismiss}>
+      <p id="cut-completion-message">{content.message}</p>
+      <button type="button" className="primary-action" onClick={onDismiss}>Listo</button>
+    </AppModal>
   );
 }
 
@@ -1370,10 +1381,12 @@ function ActionForm({
   const [content, setContent] = useState<CaptureDraftContent>({});
   const contentRef = useRef<CaptureDraftContent>({});
   const saveChain = useRef<Promise<void>>(Promise.resolve());
+  const draftLifetime = useRef({ active: false, revision: 0 });
   const [step, setStep] = useState<CaptureWizardStep>(kind === "CUT" ? "reading" : "evidence");
   const [draftLoadStatus, setDraftLoadStatus] = useState<CaptureDraftLoadResult["status"] | "loading">("loading");
   const [formError, setFormError] = useState("");
   const [locating, setLocating] = useState(false);
+  const [gpsRequest] = useState(createCaptureGpsRequest);
   const [submitting, setSubmitting] = useState(false);
   const [verificationUncertain, setVerificationUncertain] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
@@ -1387,12 +1400,16 @@ function ActionForm({
   const loadDraftRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   useEffect(() => {
-    let active = true;
+    const lifetime = { active: true, revision: 0 };
+    draftLifetime.current = lifetime;
+    gpsRequest.invalidate();
+    setLocating(false);
     const loadDraft = async () => {
+      const revision = ++lifetime.revision;
       setDraftLoadStatus("loading");
       setFormError("");
       const result = await loadCaptureDraftSafely(() => store.loadCaptureDraft(order.orderId, kind));
-      if (!active) return;
+      if (!lifetime.active || lifetime.revision !== revision) return;
       if (result.status === "error") {
         setDraftLoadStatus("error");
         return;
@@ -1404,8 +1421,8 @@ function ActionForm({
     };
     loadDraftRef.current = loadDraft;
     void loadDraft();
-    return () => { active = false; };
-  }, [kind, order.orderId, store]);
+    return () => { lifetime.active = false; gpsRequest.invalidate(); };
+  }, [gpsRequest, kind, order.orderId, store]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -1425,15 +1442,24 @@ function ActionForm({
   }, []);
 
   function persist(next: CaptureDraftContent): Promise<void> {
+    const lifetime = draftLifetime.current;
+    const revision = ++lifetime.revision;
     contentRef.current = next;
     setContent(next);
+    setFormError("");
     const save = saveChain.current.then(() => store.saveCaptureDraft(order.orderId, kind, next));
     saveChain.current = save.catch(() => undefined);
-    void save.then(() => setFormError(""), () => setFormError("No pudimos guardar el borrador en este dispositivo. Reintente."));
+    void save.catch(() => {
+      if (lifetime.active && lifetime.revision === revision) setFormError("No pudimos guardar el borrador en este dispositivo. Reintente.");
+    });
     return save;
   }
 
   function change(patch: Partial<CaptureDraftContent>): void {
+    if (Object.prototype.hasOwnProperty.call(patch, "gpsExceptionReason")) {
+      gpsRequest.invalidate();
+      setLocating(false);
+    }
     void persist({ ...contentRef.current, ...patch }).catch(() => undefined);
   }
 
@@ -1451,7 +1477,11 @@ function ActionForm({
     const problem = validate(activeStep, contentRef.current);
     if (problem) return setFormError(problem);
     try {
-      await persist(contentRef.current);
+      const lifetime = draftLifetime.current;
+      const save = persist(contentRef.current);
+      const revision = lifetime.revision;
+      await save;
+      if (!lifetime.active || lifetime.revision !== revision) return;
       setStep(steps[stepIndex + 1]);
     } catch { /* persist sets actionable error */ }
   }
@@ -1490,11 +1520,16 @@ function ActionForm({
   }
 
   function captureLocation() {
+    gpsRequest.invalidate();
+    setLocating(false);
+    if (contentRef.current.gpsExceptionReason !== undefined) return;
     if (!navigator.geolocation) return setFormError("Este dispositivo no ofrece GPS; registre excepción controlada.");
+    setFormError("");
     setLocating(true);
-    navigator.geolocation.getCurrentPosition((position) => {
-      change({ location: { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, recordedAt: new Date().toISOString(), status: "CAPTURED" }, gpsExceptionReason: undefined });
+    gpsRequest.start(navigator.geolocation, (position) => {
       setLocating(false);
+      if (contentRef.current.gpsExceptionReason !== undefined) return;
+      change({ location: { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, recordedAt: new Date().toISOString(), status: "CAPTURED" } });
     }, () => { setLocating(false); setFormError("No pudimos capturar GPS. Reintente o registre excepción controlada."); });
   }
 
@@ -1519,7 +1554,7 @@ function ActionForm({
         </> : null}
         {!loading && activeStep === "gps" ? <>
           <p>{content.location?.status === "CAPTURED" ? `${content.location.latitude?.toFixed(6)}, ${content.location.longitude?.toFixed(6)} · precisión ${Math.round(content.location.accuracyMeters ?? 0)} m` : "Coordenadas no capturadas"}</p>
-          <button type="button" className="secondary-action" disabled={locating} onClick={captureLocation}>{locating ? "Capturando…" : "Capturar GPS"}</button>
+          <button type="button" className="secondary-action" disabled={locating || gpsException} onClick={captureLocation}>{locating ? "Capturando…" : "Capturar GPS"}</button>
           <label className="checkbox-field"><input type="checkbox" checked={gpsException} onChange={(event) => change(event.target.checked ? { location: undefined, gpsExceptionReason: "" } : { gpsExceptionReason: undefined })} /><span>No puedo capturar coordenadas</span></label>
         </> : null}
         {!loading && activeStep === "gpsException" ? <label className="text-field"><span>Justificación de coordenadas</span><textarea rows={2} value={content.gpsExceptionReason ?? ""} onChange={(event) => change({ gpsExceptionReason: event.target.value })} /></label> : null}
@@ -1586,17 +1621,10 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
             <div className="queue-list queue-list--desktop">{items.map((item) => renderItem(item, false))}</div>
             <div className="queue-list queue-list--mobile" aria-label="Operación de cola">{mobileItem ? renderItem(mobileItem, true) : null}</div>
           </>}
-          <nav className="queue-pagination" aria-label="Paginación de cola">
-            <button type="button" onClick={() => setRequestedPage(Math.max(1, page - 1))} disabled={page <= 1}>Anterior</button>
-            <span aria-live="polite">Operación {page} de {pageCount}</span>
-            <button type="button" onClick={() => setRequestedPage(Math.min(pageCount, page + 1))} disabled={page >= pageCount}>Siguiente</button>
-          </nav>
+          <PaginationControls className="queue-pagination" label="Paginación de cola" page={page} totalPages={pageCount} onPrevious={() => setRequestedPage(Math.max(1, page - 1))} onNext={() => setRequestedPage(Math.min(pageCount, page + 1))} />
         </>
       ) : (
-        <div className="empty-state">
-          <strong>Cola despejada</strong>
-          <span>No hay operaciones locales para mostrar.</span>
-        </div>
+        <AppStateCard layout="inline" tone="empty" className="empty-state" title="Cola despejada" description="No hay operaciones locales para mostrar." />
       )}
     </section>
   );
@@ -1648,8 +1676,7 @@ function EmptyOrders({ hasAnyOrders, onRefresh, onShowMap }: { hasAnyOrders: boo
   return (
     <div className="empty-state">
       <div className="empty-state__icon"><IconPin /></div>
-      <strong>{hasAnyOrders ? "No encontramos órdenes" : "No tienes órdenes asignadas en este momento"}</strong>
-      <span>{hasAnyOrders ? "Prueba cambiar búsqueda o filtro." : "Actualiza la bandeja o espera una nueva asignación."}</span>
+      <AppStateCard layout="inline" tone="empty" title={hasAnyOrders ? "No encontramos órdenes" : "No tienes órdenes asignadas en este momento"} description={hasAnyOrders ? "Prueba cambiar búsqueda o filtro." : "Actualiza la bandeja o espera una nueva asignación."} />
       <div className="empty-state__actions">
         <button type="button" className="primary-action" onClick={onRefresh}>Actualizar bandeja</button>
       </div>
@@ -1658,25 +1685,11 @@ function EmptyOrders({ hasAnyOrders, onRefresh, onShowMap }: { hasAnyOrders: boo
 }
 
 function LoadingState() {
-  return (
-    <main className="state-card">
-      <div className="loading-mark" />
-      <h2>Cargando paquete local</h2>
-      <p>Recuperando órdenes asignadas y cola persistida.</p>
-    </main>
-  );
+  return <AppStateCard as="main" className="state-card" tone="loading" title="Cargando paquete local" description="Recuperando órdenes asignadas y cola persistida." />;
 }
 
 function ErrorState({ text, onRetry }: { text: string; onRetry: () => Promise<void> }) {
-  return (
-    <main className="state-card state-card--error">
-      <h2>No pudimos abrir jornada</h2>
-      <p>{text}</p>
-      <button className="primary-action" onClick={() => void onRetry()}>
-        Reintentar
-      </button>
-    </main>
-  );
+  return <AppStateCard as="main" className="state-card state-card--error" tone="error" title="No pudimos abrir jornada" description={text} action={{ label: "Reintentar", onClick: () => void onRetry() }} />;
 }
 
 function actionLabel(action: ActionKind): string {
