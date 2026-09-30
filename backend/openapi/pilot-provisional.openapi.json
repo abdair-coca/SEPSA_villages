@@ -1,0 +1,1926 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SEPSA pilot provisional API",
+    "version": "0.1.0",
+    "description": "PROVISIONAL · NO OFICIAL · PILOT_PROVISIONAL. Captura observada del backend del piloto; no representa contrato aprobado por SEPSA."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Origen configurado para piloto local; deployment/TLS pendiente."
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Catalog"
+    },
+    {
+      "name": "Orders"
+    },
+    {
+      "name": "Field"
+    },
+    {
+      "name": "Sync"
+    },
+    {
+      "name": "Audit"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Estado del backend piloto",
+        "responses": {
+          "200": {
+            "description": "Backend disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Iniciar sesión piloto",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sesión creada; también envía cookie HttpOnly sepsa_session",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Cookie de sesión; Secure solo si origen CORS usa HTTPS; SameSite=Lax; Path=/."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sesión revocada; cookie borrada."
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/technicians": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Técnicos habilitados; solo ADMIN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechniciansResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/debtors": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/query"
+          },
+          {
+            "$ref": "#/components/parameters/area"
+          },
+          {
+            "$ref": "#/components/parameters/locality"
+          },
+          {
+            "$ref": "#/components/parameters/route"
+          },
+          {
+            "name": "min_months_pending",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "supply_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Morosos; filtro y tope observados de 100",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebtorsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/orders": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Órdenes; solo ADMIN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrdersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Orden creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/orders/batch": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Lote creado, con elementos omitidos por causa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/orders/{order_id}/assignment": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/order_id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Orden asignada y versión incrementada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/technician/orders": {
+      "get": {
+        "tags": [
+          "Field"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paquete del técnico autenticado; integridad provisional",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/authorizations/cut": {
+      "post": {
+        "tags": [
+          "Field"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthorizationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reserva con token de un solo uso; su consumo ocurre durante sync",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/sync/operations": {
+      "post": {
+        "tags": [
+          "Sync"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operación aceptada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "description": "Conflicto que requiere revisión",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncConflict"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sync/operations/{operation_id}": {
+      "get": {
+        "tags": [
+          "Sync"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/operation_id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado y recibo íntegro; TECHNICIAN propietario o ADMIN. confirmed solo incluye identidad, versión y captura almacenados; legacy incompleto devuelve unknown.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/audit": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Auditoría; solo ADMIN, máximo 1000 eventos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/sync/operations/{operation_id}/review": {
+      "post": {
+        "tags": [
+          "Sync"
+        ],
+        "summary": "Registrar revisión humana sin confirmar resultado físico",
+        "description": "Solo ADMIN. Requiere identidad exacta, expected_version y motivo. Cuando el lookup remoto no confirma la operación (por ejemplo, not_found), cambia el estado físico a PHYSICAL_UNKNOWN, conserva el estado de negocio de la orden, incrementa la versión de expected_version a expected_version + 1 y añade HUMAN_REVIEW_RECORDED. Nunca confirma ni habilita reenvío.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/operation_id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HumanReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revisión registrada; corte sigue incierto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque pilot token"
+      },
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sepsa_session"
+      }
+    },
+    "parameters": {
+      "query": {
+        "name": "query",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "area": {
+        "name": "area",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "locality": {
+        "name": "locality",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "route": {
+        "name": "route",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "order_id": {
+        "name": "order_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "operation_id": {
+        "name": "operation_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Error HTTP del backend",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Source": {
+        "const": "PILOT_PROVISIONAL"
+      },
+      "Role": {
+        "enum": [
+          "ADMIN",
+          "TECHNICIAN"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status",
+          "source"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "expires_at",
+          "user",
+          "session_token",
+          "source"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "session_token": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "user": {
+            "type": "object",
+            "required": [
+              "user_id",
+              "username",
+              "display_name",
+              "role"
+            ],
+            "properties": {
+              "user_id": {
+                "type": "string"
+              },
+              "username": {
+                "type": "string"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "role": {
+                "$ref": "#/components/schemas/Role"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "Technician": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "role",
+          "enabled",
+          "source"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "role": {
+            "const": "TECHNICIAN"
+          },
+          "enabled": {
+            "const": true
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          }
+        },
+        "additionalProperties": true
+      },
+      "TechniciansResponse": {
+        "type": "object",
+        "required": [
+          "source",
+          "technicians"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "technicians": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Technician"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Debtor": {
+        "type": "object",
+        "required": [
+          "debtor_id",
+          "account_id",
+          "supply_id",
+          "customer_name",
+          "address",
+          "references",
+          "meter_id",
+          "area",
+          "locality",
+          "route",
+          "debt_cents",
+          "months_pending",
+          "updated_at",
+          "kardex",
+          "source"
+        ],
+        "properties": {
+          "debtor_id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "supply_id": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "references": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meter_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "area": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "area_name": {
+            "type": "string"
+          },
+          "locality": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "route": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "route_name": {
+            "type": "string"
+          },
+          "debt_cents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "months_pending": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "kardex": {
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          }
+        },
+        "additionalProperties": true
+      },
+      "DebtorsResponse": {
+        "type": "object",
+        "required": [
+          "source",
+          "debtors"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "debtors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Debtor"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Order": {
+        "type": "object",
+        "required": [
+          "order_id",
+          "cuc",
+          "debtor_id",
+          "account_id",
+          "supply_id",
+          "purpose",
+          "status",
+          "physical_status",
+          "version",
+          "created_by",
+          "assigned_technician_id",
+          "assigned_technician_name",
+          "created_at",
+          "context",
+          "source"
+        ],
+        "properties": {
+          "order_id": {
+            "type": "string"
+          },
+          "cuc": {
+            "type": "string"
+          },
+          "debtor_id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "supply_id": {
+            "type": "string"
+          },
+          "purpose": {
+            "const": "CUT"
+          },
+          "status": {
+            "enum": [
+              "GENERADO",
+              "EJECUTADO",
+              "RECONEXIÓN",
+              "ANULADO"
+            ]
+          },
+          "physical_status": {
+            "enum": [
+              "NONE",
+              "CLAIMED",
+              "CONFIRMED",
+              "PHYSICAL_UNKNOWN"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "assigned_technician_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assigned_technician_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          }
+        },
+        "additionalProperties": true
+      },
+      "OrdersResponse": {
+        "type": "object",
+        "required": [
+          "source",
+          "orders"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateOrderRequest": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "debtor_id",
+          "purpose"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "debtor_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "purpose": {
+            "const": "CUT"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateBatchRequest": {
+        "type": "object",
+        "required": [
+          "batch_id",
+          "debtor_ids",
+          "purpose"
+        ],
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "debtor_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "type": "string"
+            }
+          },
+          "purpose": {
+            "const": "CUT"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BatchResponse": {
+        "type": "object",
+        "required": [
+          "batch_id",
+          "requested_debtor_ids",
+          "created",
+          "skipped"
+        ],
+        "properties": {
+          "batch_id": {
+            "type": "string"
+          },
+          "requested_debtor_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "debtor_id",
+                "reason",
+                "message"
+              ],
+              "properties": {
+                "debtor_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "enum": [
+                    "ACTIVE_ORDER_EXISTS",
+                    "DEBTOR_NOT_FOUND",
+                    "SUPPLY_ID_REQUIRED"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssignOrderRequest": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "technician_id",
+          "expected_version"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "technician_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_version": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PackageResponse": {
+        "type": "object",
+        "required": [
+          "package",
+          "authenticity",
+          "integrity",
+          "validation",
+          "checksum"
+        ],
+        "properties": {
+          "package": {
+            "type": "object",
+            "required": [
+              "package_id",
+              "technician_id",
+              "device_id",
+              "version",
+              "downloaded_at",
+              "orders",
+              "source"
+            ],
+            "properties": {
+              "package_id": {
+                "type": "string"
+              },
+              "technician_id": {
+                "type": "string"
+              },
+              "device_id": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "downloaded_at": {
+                "type": "string"
+              },
+              "orders": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              },
+              "source": {
+                "$ref": "#/components/schemas/Source"
+              }
+            },
+            "additionalProperties": false
+          },
+          "authenticity": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "validation": {
+            "const": "PILOT_PROVISIONAL_VALID"
+          },
+          "checksum": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthorizationRequest": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "order_id",
+          "device_id",
+          "order_version"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "order_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "device_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "order_version": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthorizationResponse": {
+        "type": "object",
+        "required": [
+          "authorization_id",
+          "token",
+          "order_id",
+          "technician_id",
+          "device_id",
+          "operation_id",
+          "version",
+          "issued_at",
+          "expires_at",
+          "source"
+        ],
+        "properties": {
+          "authorization_id": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "technician_id": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "issued_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EvidenceReference": {
+        "type": "object",
+        "required": [
+          "evidence_refs"
+        ],
+        "properties": {
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence_storage": {
+            "const": "LOCAL_ONLY"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Sync contiene referencias y metadatos; bytes y hash verificado no viajan al backend."
+      },
+      "SyncRequest": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "action",
+          "order_id",
+          "device_id",
+          "recorded_at",
+          "evidence_refs"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "enum": [
+              "CUT",
+              "VISIT"
+            ]
+          },
+          "order_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "technician_id": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attempted_action": {
+            "const": "CUT"
+          },
+          "order_version": {
+            "type": "integer"
+          },
+          "authorization_id": {
+            "type": "string"
+          },
+          "authorization_token": {
+            "type": "string"
+          },
+          "field_capture": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "reason": {
+            "type": "string"
+          },
+          "exception_reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "CUT"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "required": [
+                "order_version",
+                "authorization_id",
+                "authorization_token",
+                "field_capture"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "VISIT"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "required": [
+                "reason"
+              ]
+            }
+          }
+        ]
+      },
+      "SyncResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "operation_id",
+          "source",
+          "order_id",
+          "technician_id",
+          "device_id",
+          "action",
+          "recorded_at",
+          "evidence_refs"
+        ],
+        "properties": {
+          "status": {
+            "const": "acknowledged"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "technician_id": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "order_version": {
+            "type": "integer"
+          },
+          "action": {
+            "enum": [
+              "CUT",
+              "VISIT"
+            ]
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "field_capture": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "CUT"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "required": [
+                "order_version",
+                "field_capture"
+              ]
+            }
+          }
+        ]
+      },
+      "SyncConflict": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "operation_id"
+        ],
+        "properties": {
+          "code": {
+            "const": "CONFLICT"
+          },
+          "message": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LookupResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "operation_id"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "confirmed",
+              "not_found",
+              "unknown"
+            ]
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "technician_id": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "order_version": {
+            "type": "integer"
+          },
+          "action": {
+            "enum": [
+              "CUT",
+              "VISIT"
+            ]
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "field_capture": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "confirmed"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "order_id",
+                "technician_id",
+                "device_id",
+                "action",
+                "recorded_at",
+                "evidence_refs"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "CUT"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "required": [
+                "order_version",
+                "field_capture"
+              ]
+            }
+          }
+        ]
+      },
+      "AuditEvent": {
+        "type": "object",
+        "required": [
+          "audit_id",
+          "actor_id",
+          "actor_role",
+          "action",
+          "entity_id",
+          "order_id",
+          "operation_id",
+          "result",
+          "reason",
+          "device_id",
+          "occurred_at",
+          "transition",
+          "metadata"
+        ],
+        "properties": {
+          "audit_id": {
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "order_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operation_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result": {
+            "enum": [
+              "accepted",
+              "rejected"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "transition": {},
+          "metadata": {}
+        },
+        "additionalProperties": true
+      },
+      "AuditResponse": {
+        "type": "object",
+        "required": [
+          "source",
+          "audit"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "audit": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "HumanReviewRequest": {
+        "type": "object",
+        "required": [
+          "order_id",
+          "technician_id",
+          "device_id",
+          "expected_version",
+          "reason"
+        ],
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "technician_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "device_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "pattern": ".*\\S.*",
+            "description": "Motivo no vacío; whitespace-only rechazado."
+          }
+        },
+        "additionalProperties": false
+      },
+      "HumanReviewResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "order_id",
+          "operation_id",
+          "physical_status",
+          "version",
+          "source"
+        ],
+        "properties": {
+          "status": {
+            "const": "recorded"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "physical_status": {
+            "const": "PHYSICAL_UNKNOWN"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "x-payment-integration": {
+    "availability": "NOT_IMPLEMENTED",
+    "pending": "TODO: VALIDAR CON SEPSA",
+    "endpoints": []
+  },
+  "x-provisional-evidence": "Sync envía evidence_refs y metadata LOCAL_ONLY. No existe endpoint de bytes ni verificación remota de hash."
+}

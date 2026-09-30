@@ -1,0 +1,105 @@
+{
+  "orderCreateRequest": {
+    "operation_id": "synthetic-create-01",
+    "debtor_id": "synthetic-debtor-01",
+    "purpose": "CUT"
+  },
+  "order": {
+    "order_id": "synthetic-order-01",
+    "cuc": "synthetic-cuc-01",
+    "debtor_id": "synthetic-debtor-01",
+    "account_id": "synthetic-account-01",
+    "supply_id": "synthetic-supply-01",
+    "purpose": "CUT",
+    "status": "GENERADO",
+    "physical_status": "NONE",
+    "version": 1,
+    "created_by": "synthetic-admin",
+    "assigned_technician_id": null,
+    "assigned_technician_name": null,
+    "created_at": "2026-09-29T12:00:00.000Z",
+    "context": {},
+    "source": "PILOT_PROVISIONAL"
+  },
+  "assignmentRequest": {
+    "operation_id": "synthetic-assign-01",
+    "technician_id": "synthetic-tech-01",
+    "expected_version": 1
+  },
+  "visitSyncRequest": {
+    "operation_id": "synthetic-visit-01",
+    "action": "VISIT",
+    "order_id": "synthetic-order-01",
+    "technician_id": "synthetic-tech-01",
+    "device_id": "synthetic-device-01",
+    "recorded_at": "2026-09-29T12:05:00.000Z",
+    "evidence_refs": [],
+    "attempted_action": "CUT",
+    "reason": "synthetic no-access reason"
+  },
+  "syncResponse": {
+    "status": "acknowledged",
+    "operation_id": "synthetic-cut-01",
+    "source": "PILOT_PROVISIONAL",
+    "order_id": "synthetic-order-01",
+    "technician_id": "synthetic-tech-01",
+    "device_id": "synthetic-device-01",
+    "order_version": 1,
+    "action": "CUT",
+    "recorded_at": "2026-09-29T12:00:00.000Z",
+    "evidence_refs": [
+      "synthetic-evidence-01"
+    ],
+    "field_capture": {
+      "reading": {
+        "value": 1,
+        "unit": "kWh"
+      }
+    }
+  },
+  "lookupUnknown": {
+    "status": "unknown",
+    "operation_id": "synthetic-visit-01",
+    "error_code": "CONFLICT_REQUIRES_REVIEW"
+  },
+  "paymentAvailability": {
+    "availability": "NOT_IMPLEMENTED",
+    "pending": [
+      "TODO: VALIDAR CON SEPSA"
+    ]
+  },
+  "lookupConfirmed": {
+    "status": "confirmed",
+    "operation_id": "synthetic-cut-01",
+    "order_id": "synthetic-order-01",
+    "technician_id": "synthetic-tech-01",
+    "device_id": "synthetic-device-01",
+    "order_version": 1,
+    "action": "CUT",
+    "recorded_at": "2026-09-29T12:00:00.000Z",
+    "evidence_refs": [
+      "synthetic-evidence-01"
+    ],
+    "field_capture": {
+      "reading": {
+        "value": 1,
+        "unit": "kWh"
+      }
+    }
+  },
+  "humanReviewRequest": {
+    "order_id": "synthetic-order-01",
+    "technician_id": "synthetic-tech-01",
+    "device_id": "synthetic-device-01",
+    "expected_version": 1,
+    "reason": "Revisión de sincronización en prueba sintética."
+  },
+  "humanReviewResponse": {
+    "status": "recorded",
+    "order_id": "synthetic-order-01",
+    "operation_id": "synthetic-cut-01",
+    "physical_status": "PHYSICAL_UNKNOWN",
+    "version": 2,
+    "source": "PILOT_PROVISIONAL"
+  }
+}

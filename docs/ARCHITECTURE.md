@@ -61,6 +61,8 @@ El backend actual expone operaciones para:
 
 Estos endpoints describen el piloto actual, no un contrato oficial de SEPSA.
 
+Contrato HTTP provisional, evidencia observada y pendientes: [Contrato del piloto](api/pilot-contract.md).
+
 ## Flujo de datos
 
 1. La UI invoca un caso de uso o servicio.

@@ -5,6 +5,7 @@ import test from "node:test";
 import type { Pool } from "pg";
 import { Application } from "../src/application.js";
 import { hashToken } from "../src/auth.js";
+import { assertSchema } from "./contract-schema.js";
 
 const config = {
   host: "127.0.0.1",
@@ -28,6 +29,7 @@ test("admin technician catalog exposes active technician identities without cred
     const response = await fetch(`http://127.0.0.1:${address.port}/v1/technicians`, { headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456" } });
     assert.equal(response.status, 200);
     const body = await response.json();
+    assertSchema("TechniciansResponse", body);
     assert.deepEqual(body, {
       source: "PILOT_PROVISIONAL",
       technicians: [
@@ -53,7 +55,9 @@ test("technician cannot read administrative technician catalog", async () => {
     if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
     const response = await fetch(`http://127.0.0.1:${address.port}/v1/technicians`, { headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456" } });
     assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), { code: "FORBIDDEN", message: "Role ADMIN is required." });
+    const body = await response.json();
+    assertSchema("Error", body);
+    assert.deepEqual(body, { code: "FORBIDDEN", message: "Role ADMIN is required." });
   } finally {
     await close(server);
   }
@@ -75,6 +79,7 @@ test("login returns bearer token for switching technicians behind a proxy", asyn
     });
     assert.equal(response.status, 200);
     const body = await response.json() as { session_token?: string };
+    assertSchema("LoginResponse", body);
     assert.equal(typeof body.session_token, "string");
     assert.ok(body.session_token);
   } finally {
@@ -98,6 +103,7 @@ test("admin assignment locks only order and debtor rows with nullable technician
     });
     assert.equal(response.status, 200);
     const body = await response.json();
+    assertSchema("Order", body);
     assert.equal(body.assigned_technician_id, "technician-1");
     assert.equal(body.assigned_technician_name, "Technician One");
     assert.equal(body.version, 2);
@@ -122,7 +128,13 @@ test("acknowledges a cut while keeping photo evidence local", async () => {
       body: JSON.stringify(localEvidencePayload()),
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { status: "acknowledged", operation_id: "cut-local-evidence-1", source: "PILOT_PROVISIONAL" });
+    const body = await response.json();
+    assertSchema("SyncResponse", body);
+    assert.deepEqual(body, {
+      status: "acknowledged", operation_id: "cut-local-evidence-1", source: "PILOT_PROVISIONAL", order_id: "order-1",
+      technician_id: "technician-1", device_id: "device-1", order_version: 1, action: "CUT",
+      recorded_at: "2026-09-22T14:00:00.000Z", evidence_refs: ["evidence-local-1"], field_capture: (localEvidencePayload() as { field_capture: unknown }).field_capture,
+    });
     assert.equal(pool.client.authorizationConsumed, true);
     assert.equal(pool.client.orderExecuted, true);
     assert.equal(pool.client.syncAcknowledged, true);
@@ -136,7 +148,56 @@ test("acknowledges a cut while keeping photo evidence local", async () => {
   }
 });
 
-test("retries a legacy local-photo pending operation after the backend update", async () => {
+test("returns the exact receipt for an idempotent acknowledged replay without consuming authorization twice", async () => {
+  const payload = localEvidencePayload();
+  const pool = new SyncPool({ operation_id: payload.operation_id, technician_id: "technician-1", device_id: "device-1", status: "acknowledged", payload_hash: payloadDigest(payload), conflict_reason: null });
+  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config).handle(request, response); });
+  await listen(server);
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, {
+      method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" }, body: JSON.stringify(payload),
+    });
+    assert.equal(response.status, 200);
+    const receipt = await response.json() as Record<string, unknown>;
+    assert.equal(receipt.operation_id, payload.operation_id);
+    assert.equal(receipt.order_id, payload.order_id);
+    assert.equal(receipt.technician_id, "technician-1");
+    assert.equal(receipt.device_id, payload.device_id);
+    assert.equal(receipt.order_version, payload.order_version);
+    assert.deepEqual(receipt.evidence_refs, payload.evidence_refs);
+    assert.equal(pool.client.authorizationConsumed, false);
+    assert.equal(pool.client.orderExecuted, false);
+    assert.equal(pool.client.auditResult, "");
+  } finally { await close(server); }
+});
+
+test("lookup returns a complete receipt only to ADMIN or the owning technician", async () => {
+  for (const scenario of [{ role: "ADMIN" as const, userId: "admin-1", expected: "confirmed" }, { role: "TECHNICIAN" as const, userId: "technician-1", expected: "confirmed" }, { role: "TECHNICIAN" as const, userId: "another-tech", expected: "not_found" }]) {
+    const pool = new LookupPool(scenario.role, scenario.userId);
+    const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config).handle(request, response); });
+    await listen(server);
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+      const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations/operation-lookup-1`, { headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456" } });
+      assert.equal(response.status, 200);
+      const body = await response.json() as Record<string, unknown>;
+      assert.equal(body.status, scenario.expected);
+      if (scenario.expected === "confirmed") {
+        assert.equal(body.order_id, "order-1");
+        assert.equal(body.technician_id, "technician-1");
+        assert.equal(body.device_id, "device-1");
+        assert.equal(body.order_version, 7);
+        assert.deepEqual(body.evidence_refs, ["evidence-1"]);
+        assert.equal(body.authorization_token, undefined);
+      }
+    } finally { await close(server); }
+  }
+});
+
+test("does not replay an unresolved legacy sync operation", async () => {
   const payload = localEvidencePayload();
   const pool = new SyncPool({
     operation_id: payload.operation_id,
@@ -158,15 +219,15 @@ test("retries a legacy local-photo pending operation after the backend update", 
       headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" },
       body: JSON.stringify(payload),
     });
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { status: "acknowledged", operation_id: "cut-local-evidence-1", source: "PILOT_PROVISIONAL" });
-    assert.equal(pool.client.syncAcknowledged, true);
+    assert.equal(response.status, 409);
+    assert.equal(pool.client.authorizationConsumed, false);
+    assert.equal(pool.client.orderExecuted, false);
   } finally {
     await close(server);
   }
 });
 
-test("recovers an expired authorization only for a previously rejected legacy local-photo operation", async () => {
+test("does not consume an expired authorization while reviewing an unresolved legacy operation", async () => {
   const payload = localEvidencePayload();
   const pool = new SyncPool({
     operation_id: payload.operation_id,
@@ -188,17 +249,9 @@ test("recovers an expired authorization only for a previously rejected legacy lo
       headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" },
       body: JSON.stringify(payload),
     });
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { status: "acknowledged", operation_id: "cut-local-evidence-1", source: "PILOT_PROVISIONAL" });
-    assert.equal(pool.client.authorizationConsumed, true);
-    assert.equal(pool.client.orderExecuted, true);
-    assert.equal(pool.client.auditResult, "accepted");
-    assert.equal((pool.client.auditMetadata as Record<string, unknown>).authorization_token, undefined);
-    assert.deepEqual(pool.client.recoveryAuditValues?.slice(0, 6), ["authorization-1", "order-1", "cut-local-evidence-1", "technician-1", "device-1", "Photo evidence remains pending until its official upload and verification contract is validated with SEPSA."]);
-    assert.equal(pool.client.recoveryAuditValues?.[7], config.authorizationTtlSeconds);
-    const rejectedPayload = JSON.parse(String(pool.client.recoveryAuditValues?.[6])) as Record<string, unknown>;
-    assert.equal(rejectedPayload.authorization_token, undefined);
-    assert.deepEqual(rejectedPayload.evidence_refs, ["evidence-local-1"]);
+    assert.equal(response.status, 409);
+    assert.equal(pool.client.authorizationConsumed, false);
+    assert.equal(pool.client.orderExecuted, false);
   } finally {
     await close(server);
   }
@@ -274,6 +327,52 @@ test("does not recover an expired authorization without exact legacy server evid
     } finally {
       await close(server);
     }
+  }
+});
+
+test("ADMIN review records uncertain operation with CAS and audit, never confirming it", async () => {
+  const pool = new ReviewPool("ADMIN");
+  const server = createServer((request, response) => {
+    void new Application(pool as unknown as Pool, config).handle(request, response);
+  });
+  await listen(server);
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+    const headers = { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" };
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations/operation-review-1/review`, {
+      method: "POST", headers, body: JSON.stringify({ order_id: "order-1", technician_id: "technician-1", device_id: "device-1", expected_version: 4, reason: "Respuesta de sincronización perdida; requiere revisión." }),
+    });
+    assert.equal(response.status, 200);
+    assertSchema("HumanReviewResponse", await response.json());
+    assert.equal(pool.client.orderUpdated, true);
+    assert.equal(pool.client.auditAction, "HUMAN_REVIEW_RECORDED");
+    assert.equal(pool.client.auditActorRole, "ADMIN");
+    assert.equal(pool.client.auditReason, "Respuesta de sincronización perdida; requiere revisión.");
+    assert.deepEqual(pool.client.auditMetadata, { expected_version: 4, technician_id: "technician-1", device_id: "device-1", remote_operation_status: "not_found", physical_result_confirmed: false });
+  } finally { await close(server); }
+});
+
+test("technician, stale version, and blank reason cannot record ADMIN review", async () => {
+  for (const scenario of [
+    { role: "TECHNICIAN" as const, version: 4, reason: "Reason", expectedStatus: 403 },
+    { role: "ADMIN" as const, version: 5, reason: "Reason", expectedStatus: 409 },
+    { role: "ADMIN" as const, version: 4, reason: "   ", expectedStatus: 400 },
+    { role: "ADMIN" as const, version: 4, reason: "Reason", expectedStatus: 409, operation: { order_id: "different-order", technician_id: "technician-1", device_id: "device-1", status: "conflict" } },
+  ]) {
+    const pool = new ReviewPool(scenario.role, scenario.operation);
+    const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config).handle(request, response); });
+    await listen(server);
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+      const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations/operation-review-1/review`, {
+        method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" },
+        body: JSON.stringify({ order_id: "order-1", technician_id: "technician-1", device_id: "device-1", expected_version: scenario.version, reason: scenario.reason }),
+      });
+      assert.equal(response.status, scenario.expectedStatus);
+      assert.equal(pool.client.orderUpdated, false);
+    } finally { await close(server); }
   }
 });
 
@@ -436,6 +535,66 @@ class SyncClient {
       return { rows: [], rowCount: 1 };
     }
     throw new Error(`Unexpected client query: ${text}`);
+  }
+
+  release(): void {}
+}
+
+class ReviewPool {
+  readonly client: ReviewClient;
+
+  constructor(private readonly role: "ADMIN" | "TECHNICIAN", operation?: Record<string, unknown>) { this.client = new ReviewClient(operation); }
+
+  async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
+    if (text.includes("FROM sessions")) return { rows: [{ session_id: "session-1", user_id: this.role === "ADMIN" ? "admin-1" : "technician-1", username: "reviewer", display_name: "Reviewer", role: this.role } as unknown as T], rowCount: 1 };
+    throw new Error(`Unexpected pool query: ${text}`);
+  }
+
+  async connect(): Promise<ReviewClient> { return this.client; }
+}
+
+class LookupPool {
+  constructor(private readonly role: "ADMIN" | "TECHNICIAN", private readonly userId: string) {}
+
+  async query<T extends Record<string, unknown>>(text: string, values: unknown[] = []): Promise<{ rows: T[]; rowCount: number }> {
+    if (text.includes("FROM sessions")) return { rows: [{ session_id: "session-1", user_id: this.userId, username: "user", display_name: "User", role: this.role } as unknown as T], rowCount: 1 };
+    if (text.includes("FROM sync_operations")) {
+      const canRead = values[1] === "ADMIN" || values[2] === "technician-1";
+      const row = { operation_id: "operation-lookup-1", status: "acknowledged", order_id: "order-1", technician_id: "technician-1", device_id: "device-1", action: "CUT", payload: { recorded_at: "2026-09-29T12:00:00.000Z", evidence_refs: ["evidence-1"], order_version: 7, field_capture: { reading: { value: 1, unit: "kWh" } } } };
+      return { rows: canRead ? [row as unknown as T] : [], rowCount: canRead ? 1 : 0 };
+    }
+    throw new Error(`Unexpected lookup query: ${text}`);
+  }
+}
+
+class ReviewClient {
+  orderUpdated = false;
+  auditAction?: string;
+  auditActorRole?: string;
+  auditReason?: string;
+  auditMetadata?: unknown;
+
+  constructor(private readonly operation?: Record<string, unknown>) {}
+
+  async query<T extends Record<string, unknown>>(text: string, values: unknown[] = []): Promise<{ rows: T[]; rowCount: number }> {
+    if (["BEGIN", "COMMIT", "ROLLBACK"].includes(text)) return { rows: [], rowCount: 0 };
+    if (text.includes("SELECT order_id, version, status, physical_status, assigned_technician_id FROM orders")) {
+      return { rows: [{ order_id: "order-1", version: 4, status: "GENERADO", physical_status: "NONE", assigned_technician_id: "technician-1" } as unknown as T], rowCount: 1 };
+    }
+    if (text.includes("SELECT order_id, technician_id, device_id, status FROM sync_operations")) return { rows: this.operation ? [this.operation as T] : [], rowCount: this.operation ? 1 : 0 };
+    if (text.startsWith("UPDATE orders SET physical_status = 'PHYSICAL_UNKNOWN'")) {
+      this.orderUpdated = true;
+      assert.deepEqual(values, ["order-1", 4]);
+      return { rows: [], rowCount: 1 };
+    }
+    if (text.startsWith("INSERT INTO audit_events")) {
+      this.auditActorRole = String(values[2]);
+      this.auditAction = String(values[3]);
+      this.auditReason = String(values[8]);
+      this.auditMetadata = values[11];
+      return { rows: [], rowCount: 1 };
+    }
+    throw new Error(`Unexpected review query: ${text}`);
   }
 
   release(): void {}
