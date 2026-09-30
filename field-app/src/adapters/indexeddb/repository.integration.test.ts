@@ -265,9 +265,17 @@ describe("IndexedDB local repository", () => {
     const repository = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });
     repositories.push(repository);
     await repository.savePackage(workPackage);
-    const evidence: EvidenceReference = { evidenceId: "evidence-1", orderId: "order-1", operationId: "operation-evidence", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true };
+    const content = new Blob(["durable evidence bytes"], { type: "image/jpeg" });
+    const evidence: EvidenceReference = { evidenceId: "evidence-1", orderId: "order-1", operationId: "operation-evidence", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true, content, contentHash: "synthetic-hash" };
     await repository.claimCut({ ...change("operation-evidence"), evidence }, 1);
-    await expect(repository.getEvidence("evidence-1")).resolves.toEqual(evidence);
+    await expect(repository.getEvidence("evidence-1")).resolves.toMatchObject({ ...evidence, uploadStatus: "pending" });
+    await repository.close();
+    const restored = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });
+    repositories.push(restored);
+    await expect(restored.getEvidence("evidence-1")).resolves.toMatchObject({ contentHash: "synthetic-hash", uploadStatus: "pending" });
+    await expect((await restored.getEvidence("evidence-1"))?.content?.text()).resolves.toBe("durable evidence bytes");
+    await restored.updateEvidenceUploadState("evidence-1", "failed", "INTERRUPTED");
+    await expect(restored.getEvidence("evidence-1")).resolves.toMatchObject({ uploadStatus: "failed", uploadErrorCode: "INTERRUPTED" });
   });
 
   it("preserves claimed and pending local orders when a stale package arrives", async () => {

@@ -623,6 +623,18 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return evidence ? fromStoredEvidence(evidence) : undefined;
   }
 
+  async updateEvidenceUploadState(evidenceId: string, state: NonNullable<EvidenceReference["uploadStatus"]>, errorCode?: string): Promise<void> {
+    const db = await this.dbPromise;
+    const transaction = db.transaction(["evidence"], "readwrite");
+    const store = transaction.objectStore("evidence");
+    const key = this.evidenceKey(evidenceId);
+    const current = await requestResult(store.get(key)) as StoredEvidence | undefined;
+    if (!current) throw new Error("Evidence is missing from local storage.");
+    const evidence = fromStoredEvidence(current);
+    store.put(toStoredEvidence({ ...evidence, uploadStatus: state, uploadErrorCode: errorCode }, key));
+    await transactionComplete(transaction);
+  }
+
   private async putEvidence(transaction: IDBTransaction, evidence: EvidenceReference): Promise<void> {
     if (!this.identityMatches(evidence)) throw new Error("Evidence is outside this technician and device scope.");
     const store = transaction.objectStore("evidence");
@@ -631,7 +643,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     if (current && !evidenceEquivalent(fromStoredEvidence(current), evidence)) {
       throw new Error("Evidence identifier collision has different binding or metadata.");
     }
-    if (!current) store.put(toStoredEvidence(evidence, key));
+    if (!current) store.put(toStoredEvidence({ uploadStatus: "pending", ...evidence }, key));
   }
 
   private putRecord(transaction: IDBTransaction, record: StoredRecord): void {
