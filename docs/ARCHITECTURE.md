@@ -87,7 +87,7 @@ El frontend usa permisos para orientar la experiencia; el backend vuelve a valid
 
 - El backend provisional no es la API oficial.
 - Excel se importa mediante scripts/migraciones; no es una dependencia de la UI ni la base definitiva.
-- Las fotos se conservan localmente y el sync actual envía referencias/metadatos, no bytes; el contrato oficial de almacenamiento y verificación queda pendiente.
+- Los blobs se conservan en IndexedDB. En el piloto, `EvidenceUploadPort` carga bytes por `/v1/evidence/assets`; servidor recomputa SHA-256 y guarda binding inmutable. CUT valida assets verificados antes de consumir autorización. API oficial, límites y retención siguen `TODO: VALIDAR CON SEPSA`.
 - La autorización externa de corte es obligatoria online inmediatamente antes de la acción física.
 
 ## PLANNED

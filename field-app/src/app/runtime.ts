@@ -85,7 +85,7 @@ export function createDemoAppStoreFor(technicianId: string, deviceId: string): A
   const prepareExternalValidation: PrepareExternalValidation = (action, order, operationId, now) => {
     prepareDemoExternalValidation(action, order, operationId, now, { authorization, enablement }, technicianId, deviceId);
   };
-  return createAppStore({ repository, authorization, enablement, connectivity, transport, technicianId, deviceId, seedPackage: createDemoPackageFor(new Date().toISOString(), technicianId, deviceId), prepareExternalValidation });
+  return createAppStore({ repository, authorization, enablement, connectivity, transport, evidenceUploader: isEvidenceUploader(transport) ? transport : undefined, technicianId, deviceId, seedPackage: createDemoPackageFor(new Date().toISOString(), technicianId, deviceId), prepareExternalValidation });
 }
 
 export interface AuthenticatedStoreOptions {
@@ -111,7 +111,11 @@ export function createAuthenticatedTechnicianStore(technicianId: string, deviceI
   const prepareExternalValidation: PrepareExternalValidation | undefined = authorityContext
     ? (action, order, operationId, now) => prepareDemoExternalValidation(action, order, operationId, now, { authorization: authorizationDelegate, enablement: enablementDelegate }, technicianId, deviceId)
     : undefined;
-  return createAppStore({ repository, authorization, enablement, connectivity, transport, technicianId, deviceId, seedPackage: options.seedPackage, prepareExternalValidation });
+  return createAppStore({ repository, authorization, enablement, connectivity, transport, evidenceUploader: isEvidenceUploader(transport) ? transport : undefined, technicianId, deviceId, seedPackage: options.seedPackage, prepareExternalValidation });
+}
+
+function isEvidenceUploader(value: unknown): value is import("../ports").EvidenceUploadPort {
+  return typeof value === "object" && value !== null && "uploadEvidence" in value && typeof value.uploadEvidence === "function";
 }
 
 export class SimulatedAuthoritySyncTransport implements SyncTransport {

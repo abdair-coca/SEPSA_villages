@@ -515,6 +515,21 @@
         }
       }
     },
+    "/v1/evidence/assets": {
+      "post": {
+        "tags": ["Evidence"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "description": "PILOT_PROVISIONAL upload. Server recomputes SHA-256 and binds immutable bytes to order, operation, technician and device. TODO: VALIDAR CON SEPSA.",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EvidenceUploadRequest"}}}},
+        "responses": {
+          "200": {"description": "Evidence bytes verified or same upload replayed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EvidenceUploadResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"},
+          "409": {"$ref": "#/components/responses/Error"},
+          "422": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
     "/v1/sync/operations": {
       "post": {
         "tags": [
@@ -1432,6 +1447,27 @@
         },
         "additionalProperties": false
       },
+      "EvidenceUploadRequest": {
+        "type": "object",
+        "required": ["evidence_id", "order_id", "operation_id", "device_id", "mime_type", "content_hash", "content_base64"],
+        "properties": {
+          "evidence_id": {"type": "string", "minLength": 1},
+          "order_id": {"type": "string", "minLength": 1},
+          "operation_id": {"type": "string", "minLength": 1},
+          "technician_id": {"type": "string", "minLength": 1},
+          "device_id": {"type": "string", "minLength": 1},
+          "mime_type": {"enum": ["image/jpeg", "image/png"]},
+          "content_hash": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+          "content_base64": {"type": "string", "contentEncoding": "base64"}
+        },
+        "additionalProperties": false
+      },
+      "EvidenceUploadResponse": {
+        "type": "object",
+        "required": ["status", "evidence_id", "content_hash", "source"],
+        "properties": {"status": {"const": "verified"}, "evidence_id": {"type": "string"}, "content_hash": {"type": "string"}, "source": {"$ref": "#/components/schemas/Source"}},
+        "additionalProperties": false
+      },
       "EvidenceReference": {
         "type": "object",
         "required": [
@@ -1443,13 +1479,10 @@
             "items": {
               "type": "string"
             }
-          },
-          "evidence_storage": {
-            "const": "LOCAL_ONLY"
           }
         },
         "additionalProperties": true,
-        "description": "Sync contiene referencias y metadatos; bytes y hash verificado no viajan al backend."
+        "description": "CUT evidence_refs refer to previously uploaded, verified PILOT_PROVISIONAL assets."
       },
       "SyncRequest": {
         "type": "object",
@@ -1929,5 +1962,5 @@
     "pending": "TODO: VALIDAR CON SEPSA",
     "endpoints": []
   },
-  "x-provisional-evidence": "Sync envía evidence_refs y metadata LOCAL_ONLY. No existe endpoint de bytes ni verificación remota de hash."
+  "x-provisional-evidence": "PILOT_PROVISIONAL POST /v1/evidence/assets recomputes SHA-256 and binds immutable image bytes to order, operation, technician and device. CUT sync accepts refs only after verified asset lookup in same transaction as authorization consumption. Controlled photo exception remains auditable. Official storage and retention contract: TODO: VALIDAR CON SEPSA."
 }

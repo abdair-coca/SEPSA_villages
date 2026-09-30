@@ -1,7 +1,7 @@
 import { generateOperationId, type OperationRecord, type VisitRecord } from "../domain";
 import type { ConnectivityPort, LocalRepository, StoredRecord } from "../ports";
 import type { SyncClaimResult } from "../ports/repository";
-import type { SyncItem, SyncPayload, SyncTransport } from "../ports/sync";
+import type { EvidenceUploadPort, SyncItem, SyncPayload, SyncTransport } from "../ports/sync";
 
 export interface SyncEngineOptions {
   now?: () => string;
@@ -28,6 +28,7 @@ export class SyncEngine {
     private readonly connectivity: ConnectivityPort,
     private readonly transport: SyncTransport,
     options: SyncEngineOptions = {},
+    private readonly evidenceUpload?: EvidenceUploadPort,
   ) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.owner = options.owner ?? generateOperationId("sync-engine");
@@ -139,6 +140,26 @@ export class SyncEngine {
     }
 
     try {
+      if (record.kind !== "VISIT" && record.action === "CUT" && record.evidenceRefs.length > 0 && this.evidenceUpload) {
+        for (const evidenceId of record.evidenceRefs) {
+          const evidence = await this.repository.getEvidence?.(evidenceId);
+          if (!evidence?.content || !evidence.contentHash) {
+            await this.repository.updateEvidenceUploadState?.(evidenceId, "review-required", "LOCAL_EVIDENCE_BYTES_MISSING");
+            await this.fail(item, "LOCAL_EVIDENCE_BYTES_MISSING", false);
+            return "failed";
+          }
+          await this.repository.updateEvidenceUploadState?.(evidenceId, "uploading");
+          try {
+            const state = await this.evidenceUpload.uploadEvidence(evidence);
+            await this.repository.updateEvidenceUploadState?.(evidenceId, state);
+          } catch (error) {
+            const code = errorCode(error, "EVIDENCE_UPLOAD_FAILED");
+            await this.repository.updateEvidenceUploadState?.(evidenceId, "failed", code);
+            await this.fail(item, code, false);
+            return "failed";
+          }
+        }
+      }
       const response = await this.transport.send(toPayload(record));
       if (response.operationId !== item.operationId) {
         await this.fail(item, "RESPONSE_OPERATION_ID_MISMATCH", true);

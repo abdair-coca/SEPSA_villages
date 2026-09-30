@@ -1,8 +1,8 @@
 import { assertCan, permissionsForRole, type AuditEvent, type ConnectivityMode, type CreateOrdersBatchResult, type DataSource, type DebtorQuery, type DebtorRecord, type DemoCredentials, type KardexEntry, type OperationRecord, type Session, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackageEnvelope } from "../../domain";
 import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, RemoteResult } from "../../ports/authorization";
-import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
-import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
+import type { EvidenceUploadPort, SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
+import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
 
 interface HttpClientOptions {
   baseUrl: string;
@@ -10,7 +10,7 @@ interface HttpClientOptions {
 }
 
 interface ApiErrorBody { code?: string; message?: string; }
-export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, AuthorizationAdapter, SyncTransport {
+export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, AuthorizationAdapter, SyncTransport, EvidenceUploadPort {
   readonly simulation = "PILOT_PROVISIONAL" as const;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -165,6 +165,20 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
       if (error instanceof HttpPilotError && error.status === 409) return { status: "conflict", operationId: payload.operationId, remote: error.body, reason: error.code };
       throw error;
     }
+  }
+
+  async uploadEvidence(evidence: import("../../domain").EvidenceReference): Promise<"verified"> {
+    if (!evidence.content || !evidence.contentHash) throw new Error("Evidence bytes and SHA-256 hash are required.");
+    const bytes = new Uint8Array(await evidence.content.arrayBuffer());
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    const response = await this.request<PilotEvidenceUploadResponseDto>("/v1/evidence/assets", { method: "POST", body: {
+      evidence_id: evidence.evidenceId, order_id: evidence.orderId, operation_id: evidence.operationId,
+      technician_id: evidence.technicianId, device_id: evidence.deviceId, mime_type: evidence.mimeType,
+      content_hash: evidence.contentHash, content_base64: btoa(binary),
+    } }, this.requireActiveSession());
+    if (response.status !== "verified" || response.evidence_id !== evidence.evidenceId || response.content_hash !== evidence.contentHash) throw new Error("Evidence upload receipt does not match local evidence.");
+    return "verified";
   }
 
   async lookup(operationId: string): Promise<RemoteResult> {

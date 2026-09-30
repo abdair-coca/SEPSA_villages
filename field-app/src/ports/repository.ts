@@ -65,6 +65,7 @@ export interface LocalRepository {
   updateOperationAndOrder(change: AtomicOperationChange, expectedOrderVersion?: number): Promise<void>;
   listSyncItems(): Promise<SyncItem[]>;
   getEvidence?(evidenceId: string): Promise<EvidenceReference | undefined>;
+  updateEvidenceUploadState?(evidenceId: string, state: NonNullable<EvidenceReference["uploadStatus"]>, errorCode?: string): Promise<void>;
   claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number, options?: { allowManualReview?: boolean }): Promise<SyncClaimResult>;
   recoverPhysicalUnknown(operationId: string, now: string, lease?: { owner: string; leaseToken: string; errorCode?: string }): Promise<StoredRecord | undefined>;
   updateSyncState(

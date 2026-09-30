@@ -27,6 +27,8 @@ export interface SyncOperationRequestDto {
   recorded_at: string; evidence_refs: string[]; attempted_action?: "CUT"; order_version?: number;
   authorization_id?: string; authorization_token?: string; field_capture?: unknown; reason?: string; exception_reason?: string;
 }
+export interface EvidenceUploadRequestDto { evidence_id: string; order_id: string; operation_id: string; technician_id?: string; device_id: string; mime_type: "image/jpeg" | "image/png"; content_hash: string; content_base64: string; }
+export interface EvidenceUploadResponseDto { status: "verified"; evidence_id: string; content_hash: string; source: PilotSource; }
 export interface EvidenceWireDto { evidence_refs: string[]; evidence_storage?: "LOCAL_ONLY"; }
 export interface SyncResponseDto { status: "acknowledged"; operation_id: string; source: PilotSource; order_id: string; technician_id: string; device_id: string; order_version?: number; action: "CUT" | "VISIT"; recorded_at: string; evidence_refs: string[]; field_capture?: unknown; }
 export interface SyncConflictDto { code: "CONFLICT"; message: string; operation_id: string; }

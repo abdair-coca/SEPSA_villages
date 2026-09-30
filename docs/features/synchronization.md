@@ -9,13 +9,16 @@ Enviar operaciones locales sin perderlas, duplicarlas ni convertir un resultado 
 1. Validar la acción localmente.
 2. Guardar entidad, registro y `operationId` de forma atómica en IndexedDB.
 3. Mostrar “guardado en dispositivo” si aún no hay confirmación remota.
-4. Enviar una operación física pendiente una sola vez cuando la conectividad sea utilizable.
-5. Marcar `synced` solo con un recibo ligado a la operación, orden, técnico, dispositivo, versión de autorización y captura guardada.
-6. Ante respuesta perdida, timeout, respuesta ambigua o conflicto, persistir `PHYSICAL_UNKNOWN` y consultar estado; ningún resultado de lookup permite otro POST.
+4. Cuando hay conexión útil, subir primero blobs locales de un CUT con foto.
+5. Enviar CUT solo después de recibo de upload verificado ligado a operación, orden, técnico y dispositivo.
+6. Marcar `synced` solo con recibo ligado a operación, orden, técnico, dispositivo, versión de autorización y captura guardada.
+7. Ante respuesta perdida, timeout, respuesta ambigua o conflicto, persistir `PHYSICAL_UNKNOWN` y consultar estado; ningún resultado de lookup permite otro POST.
 
 ## Estados
 
 `pending`, `syncing`, `synced` y `failed`. Cada elemento conserva intentos, error, operación, orden y si requiere revisión manual.
+
+Evidencia conserva estado propio: `pending`, `uploading`, `verified`, `failed` o `review-required`. Fallo/interrupción conserva bytes y evita POST CUT. Reintento usa mismo ID y binding; backend devuelve mismo recibo solo para mismo contenido y hash. CUT con foto se acepta solo cuando todas sus referencias están verificadas dentro de la transacción de aceptación. Excepción controlada sin foto conserva motivo en payload y auditoría.
 
 ## Reglas
 

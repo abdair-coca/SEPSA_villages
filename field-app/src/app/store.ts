@@ -11,6 +11,7 @@ import { DomainError, generateOperationId, type EvidenceReference, type Connecti
 import type { AuthorizationAdapter, EnablementAdapter } from "../ports/authorization";
 import type { CaptureDraftContent, CaptureDraftKey, ConnectivityPort, LocalRepository, StoredRecord } from "../ports";
 import type { SyncItem } from "../ports/sync";
+import type { EvidenceUploadPort } from "../ports/sync";
 import { metadataOnlyEvidence, prepareEvidence, type EvidenceDraft } from "./evidence";
 
 export type { EvidenceDraft } from "./evidence";
@@ -80,6 +81,7 @@ export interface AppStoreDependencies {
   enablement: EnablementAdapter;
   connectivity: ConnectivityPort;
   transport: import("../ports").SyncTransport;
+  evidenceUploader?: EvidenceUploadPort;
   seedPackage?: WorkPackage;
   prepareExternalValidation?: PrepareExternalValidation;
   now?: () => string;
@@ -423,7 +425,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       return;
     }
     await runWithBusy("SYNC", async () => {
-      const report = await new SyncEngine(dependencies.repository, dependencies.connectivity, dependencies.transport, { now }).syncOnce();
+      const report = await new SyncEngine(dependencies.repository, dependencies.connectivity, dependencies.transport, { now }, dependencies.evidenceUploader).syncOnce();
       await refresh();
       update({ message: report.failed
         ? { tone: "warning", text: "Algunas operaciones requieren revisión; ninguna fue eliminada." }

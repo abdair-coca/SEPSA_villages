@@ -121,6 +121,7 @@ export class Application {
     if (request.method === "POST" && assignment) return await this.assignOrder(request, response, user, assignment[1]);
     if (request.method === "GET" && path === "/v1/technician/orders") return await this.technicianOrders(response, user, url);
     if (request.method === "POST" && path === "/v1/authorizations/cut") return await this.authorizeCut(request, response, user);
+    if (request.method === "POST" && path === "/v1/evidence/assets") return await this.uploadEvidence(request, response, user);
     if (request.method === "POST" && path === "/v1/sync/operations") return await this.syncOperation(request, response, user);
     const operationReview = /^\/v1\/sync\/operations\/([^/]+)\/review$/.exec(path);
     if (request.method === "POST" && operationReview) return await this.recordHumanReview(request, response, user, operationReview[1] ?? "");
@@ -449,6 +450,44 @@ export class Application {
     sendJson(response, 200, { status: "acknowledged", ...syncReceipt(payload), source: PROVISIONAL_SOURCE });
   }
 
+  private async uploadEvidence(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void> {
+    this.requireRole(user, "TECHNICIAN");
+    const body = await parseJsonBody(request, this.config.maxBodyBytes);
+    const evidenceId = requiredString(body.evidence_id, "evidence_id");
+    const orderId = requiredString(body.order_id, "order_id");
+    const operationId = requiredString(body.operation_id, "operation_id");
+    const deviceId = requiredString(body.device_id, "device_id");
+    if (body.technician_id !== undefined && requiredString(body.technician_id, "technician_id") !== user.userId) throw new HttpError(403, "TECHNICIAN_SCOPE", "Evidence technician does not match session.");
+    if (body.mime_type !== "image/jpeg" && body.mime_type !== "image/png") throw new HttpError(400, "EVIDENCE_FORMAT_INVALID", "Evidence must be JPEG or PNG.");
+    const declaredHash = requiredString(body.content_hash, "content_hash").toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(declaredHash)) throw new HttpError(400, "EVIDENCE_HASH_INVALID", "content_hash must be a SHA-256 hex digest.");
+    const encoded = requiredString(body.content_base64, "content_base64");
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "content_base64 is invalid.");
+    const bytes = Buffer.from(encoded, "base64");
+    if (bytes.length === 0 || bytes.toString("base64") !== encoded) throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "Evidence bytes are empty or malformed.");
+    const computedHash = createHash("sha256").update(bytes).digest("hex");
+    if (computedHash !== declaredHash) throw new HttpError(422, "EVIDENCE_HASH_MISMATCH", "Evidence content does not match declared SHA-256 hash.");
+    const result = await withTransaction(this.pool, async (client) => {
+      const orderResult = await client.query<{ assigned_technician_id: string | null }>("SELECT assigned_technician_id FROM orders WHERE order_id = $1 AND source = $2 FOR UPDATE", [orderId, PROVISIONAL_SOURCE]);
+      if (!orderResult.rows[0] || orderResult.rows[0].assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
+      const existing = await client.query<{ order_id: string; operation_id: string; technician_id: string; device_id: string; mime_type: string; content_hash: string }>("SELECT order_id, operation_id, technician_id, device_id, mime_type, content_hash FROM evidence_assets WHERE evidence_id = $1 FOR UPDATE", [evidenceId]);
+      let prior = existing.rows[0];
+      if (prior && (prior.order_id !== orderId || prior.operation_id !== operationId || prior.technician_id !== user.userId || prior.device_id !== deviceId || prior.mime_type !== body.mime_type || prior.content_hash.trim() !== computedHash)) throw new HttpError(409, "EVIDENCE_BINDING_CONFLICT", "Evidence identifier is already bound to different content or operation.");
+      if (!prior) {
+        const inserted = await client.query("INSERT INTO evidence_assets(evidence_id, order_id, operation_id, technician_id, device_id, mime_type, content_hash, content, status, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'verified',$9) ON CONFLICT (evidence_id) DO NOTHING", [evidenceId, orderId, operationId, user.userId, deviceId, body.mime_type, computedHash, bytes, PROVISIONAL_SOURCE]);
+        if (inserted.rowCount !== 1) {
+          const raced = await client.query<{ order_id: string; operation_id: string; technician_id: string; device_id: string; mime_type: string; content_hash: string }>("SELECT order_id, operation_id, technician_id, device_id, mime_type, content_hash FROM evidence_assets WHERE evidence_id = $1 FOR UPDATE", [evidenceId]);
+          prior = raced.rows[0];
+          if (!prior || prior.order_id !== orderId || prior.operation_id !== operationId || prior.technician_id !== user.userId || prior.device_id !== deviceId || prior.mime_type !== body.mime_type || prior.content_hash.trim() !== computedHash) throw new HttpError(409, "EVIDENCE_BINDING_CONFLICT", "Evidence identifier is already bound to different content or operation.");
+        }
+      }
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: prior ? "EVIDENCE_UPLOAD_REPLAY" : "EVIDENCE_VERIFIED", result: "accepted", entityId: evidenceId, orderId, operationId, deviceId, metadata: { content_hash: computedHash, mime_type: body.mime_type, status: "verified", source: PROVISIONAL_SOURCE } });
+      return { status: "verified", evidence_id: evidenceId, content_hash: computedHash, source: PROVISIONAL_SOURCE };
+    });
+    this.logEvent("evidence.upload", { requestId: String(response.getHeader("x-request-id")), result: "verified" });
+    sendJson(response, 200, result);
+  }
+
   private async applySync(client: PoolClient, user: SessionUser, payload: SyncPayload): Promise<{ status: "acknowledged" } | { status: "conflict"; message: string }> {
     const existing = await client.query<StoredOperationRow>("SELECT operation_id, technician_id, device_id, status, payload_hash, conflict_reason FROM sync_operations WHERE operation_id = $1 FOR UPDATE", [payload.operation_id]);
     const replay = existing.rows[0] ? syncReplay(existing.rows[0], user.userId, payload) : undefined;
@@ -477,6 +516,10 @@ export class Application {
     }
     if (order.status !== "GENERADO") return await rejectSync(client, user, payload, "Only GENERADO orders can be cut.");
     if (order.physical_status !== "NONE") return await rejectSync(client, user, payload, "Physical status must be NONE before a cut can be synchronized.");
+    if (payload.evidence_refs.length > 0) {
+      const evidence = await client.query<{ evidence_id: string }>("SELECT evidence_id FROM evidence_assets WHERE evidence_id = ANY($1::text[]) AND order_id = $2 AND operation_id = $3 AND technician_id = $4 AND device_id = $5 AND status = 'verified'", [payload.evidence_refs, payload.order_id, payload.operation_id, user.userId, payload.device_id]);
+      if (evidence.rows.length !== new Set(payload.evidence_refs).size) return await rejectSync(client, user, payload, "CUT evidence is missing, unverified, or bound to another operation.");
+    }
     if (!payload.authorization_id || !payload.authorization_token || payload.order_version === undefined) return await rejectSync(client, user, payload, "Cut requires authorization, token, and order version.");
     if (order.version !== payload.order_version) return await rejectSync(client, user, payload, "Order version is stale.");
     const authorization = await client.query<{ authorization_id: string; operation_id: string; token_hash: string; status: string; expires_at: string; order_id: string; technician_id: string; device_id: string; order_version: number }>("SELECT authorization_id, operation_id, token_hash, status, expires_at, order_id, technician_id, device_id, order_version FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE", [payload.authorization_id]);
@@ -657,7 +700,7 @@ function syncReplay(row: StoredOperationRow, technicianId: string, payload: Sync
 
 function safeSyncPayload(payload: SyncPayload): Record<string, unknown> {
   const { authorization_token: _authorizationToken, ...safe } = payload;
-  return payload.evidence_refs.length > 0 ? { ...safe, evidence_storage: "LOCAL_ONLY" } : safe;
+  return safe;
 }
 
 function syncReceipt(payload: SyncPayload): Record<string, unknown> {

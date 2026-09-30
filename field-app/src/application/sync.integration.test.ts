@@ -6,7 +6,7 @@ import { LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON, SyncEngine, toPayload } from "./
 import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
 import { MockAuthorizationAdapter, MockConnectivity, MockSyncTransport } from "../adapters/mock";
 import { ResponseLostError } from "../ports/authorization";
-import type { OperationRecord, WorkOrder, WorkPackage } from "../domain";
+import type { EvidenceReference, OperationRecord, WorkOrder, WorkPackage } from "../domain";
 
 const databases: string[] = [];
 const repositories: IndexedDbLocalRepository[] = [];
@@ -153,6 +153,31 @@ describe("durable sync engine", () => {
     expect(transport.sent).toHaveLength(1);
     await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "failed", manualReview: true }]);
     await expect(repository.getEvidence(evidenceId)).resolves.toMatchObject({ evidenceId, operationId });
+  });
+
+  it("uploads durable bytes before CUT and retries interrupted upload idempotently", async () => {
+    const repository = await setup("evidence-upload-ordering");
+    const operationId = "operation-evidence-upload-00000000-0000-4000-8000-000000000022";
+    const bytes = new Blob(["synthetic photo bytes"], { type: "image/jpeg" });
+    const contentHash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", await bytes.arrayBuffer()))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const evidence: EvidenceReference = { evidenceId: "evidence-upload", orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 10, height: 10, optimized: true, content: bytes, contentHash };
+    const authorization = new MockAuthorizationAdapter();
+    authorization.requestResponse = { status: "authorized", grant: authGrant(operationId) };
+    await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence, fieldCapture: validFieldCapture(operationId) });
+    const events: string[] = [];
+    const transport = new MockSyncTransport();
+    const send = transport.send.bind(transport);
+    transport.send = async (payload) => { events.push("cut"); return send(payload); };
+    let interrupted = true;
+    const uploader = { uploadEvidence: async () => { events.push("upload"); if (interrupted) { interrupted = false; throw Object.assign(new Error("network interrupted"), { code: "NETWORK_INTERRUPTED" }); } return "verified" as const; } };
+    const engine = new SyncEngine(repository, new MockConnectivity("online"), transport, {}, uploader);
+    await expect(engine.syncOnce()).resolves.toMatchObject({ failed: 1, synced: 0 });
+    expect(events).toEqual(["upload"]);
+    await expect(repository.getEvidence("evidence-upload")).resolves.toMatchObject({ uploadStatus: "failed", uploadErrorCode: "NETWORK_INTERRUPTED" });
+    await expect(repository.getEvidence("evidence-upload")).resolves.toMatchObject({ contentHash });
+    await expect(engine.syncOnce()).resolves.toMatchObject({ synced: 1 });
+    expect(events).toEqual(["upload", "upload", "cut"]);
+    await expect(repository.getEvidence("evidence-upload")).resolves.toMatchObject({ uploadStatus: "verified" });
   });
 
   it("does not work while offline and keeps pending queue", async () => {

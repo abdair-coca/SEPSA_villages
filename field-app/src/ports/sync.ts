@@ -1,5 +1,6 @@
 import type { FieldCapture, SyncStatus } from "../domain";
 import type { RemoteOperationReceipt } from "./authorization";
+import type { EvidenceReference } from "../domain";
 
 export interface SyncItem {
   operationId: string;
@@ -51,4 +52,9 @@ export type SyncTransportResponse =
 export interface SyncTransport {
   send(payload: SyncPayload): Promise<SyncTransportResponse>;
   lookup(operationId: string): Promise<import("./authorization").RemoteResult>;
+}
+
+/** PILOT_PROVISIONAL evidence upload seam; sends durable bytes before CUT sync. */
+export interface EvidenceUploadPort {
+  uploadEvidence(evidence: EvidenceReference): Promise<"verified">;
 }

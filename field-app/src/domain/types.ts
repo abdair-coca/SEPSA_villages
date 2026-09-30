@@ -274,6 +274,8 @@ export interface EvidenceReference {
   optimized: boolean;
   content?: Blob;
   contentHash?: string;
+  uploadStatus?: "pending" | "uploading" | "verified" | "failed" | "review-required";
+  uploadErrorCode?: string;
 }
 
 export interface OperationRecord {

@@ -252,7 +252,7 @@ test("admin assignment locks only order and debtor rows with nullable technician
   }
 });
 
-test("acknowledges a cut while keeping photo evidence local", async () => {
+test("acknowledges a cut only after pilot evidence verification", async () => {
   const pool = new SyncPool();
   const server = createServer((request, response) => {
     void new Application(pool as unknown as Pool, config, clearPaymentAuthority).handle(request, response);
@@ -280,7 +280,7 @@ test("acknowledges a cut while keeping photo evidence local", async () => {
     assert.equal(pool.client.auditResult, "accepted");
     assert.deepEqual(
       { evidence_refs: (pool.client.auditMetadata as { evidence_refs: unknown[] }).evidence_refs, evidence_storage: (pool.client.auditMetadata as { evidence_storage: string }).evidence_storage, authorization_token: (pool.client.auditMetadata as { authorization_token?: unknown }).authorization_token },
-      { evidence_refs: ["evidence-local-1"], evidence_storage: "LOCAL_ONLY", authorization_token: undefined },
+      { evidence_refs: ["evidence-local-1"], evidence_storage: undefined, authorization_token: undefined },
     );
   } finally {
     await close(server);
@@ -424,6 +424,57 @@ test("runtime without a payment adapter defaults to UNKNOWN and reserves no auth
     assert.equal((await response.json() as { code: string }).code, "PAYMENT_REQUIRES_REVIEW");
     assert.equal(pool.client.authorizationReserved, false);
     assert.equal(pool.client.authorizationConsumed, false);
+  } finally { await close(server); }
+});
+
+test("rejects CUT before authorization consumption when evidence upload is absent", async () => {
+  const pool = new SyncPool(undefined, false, "2099-09-22T14:05:00.000Z", {}, 1, false);
+  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config).handle(request, response); });
+  await listen(server);
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, { method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" }, body: JSON.stringify(localEvidencePayload()) });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json() as { code: string }).code, "CONFLICT");
+    assert.equal(pool.client.authorizationConsumed, false);
+    assert.equal(pool.client.orderExecuted, false);
+  } finally { await close(server); }
+});
+
+test("keeps controlled photo exception and reason in accepted audit payload", async () => {
+  const pool = new SyncPool();
+  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config, clearPaymentAuthority).handle(request, response); });
+  await listen(server);
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+    const payload = { ...localEvidencePayload(), evidence_refs: [], exception_reason: "saltar_control_fotos: cámara fuera de servicio" };
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, { method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" }, body: JSON.stringify(payload) });
+    assert.equal(response.status, 200);
+    assert.equal(pool.client.authorizationConsumed, true);
+    assert.equal((pool.client.auditMetadata as { exception_reason: string }).exception_reason, payload.exception_reason);
+  } finally { await close(server); }
+});
+
+test("verifies evidence bytes server-side and makes upload retry idempotent", async () => {
+  const pool = new EvidencePool();
+  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, { ...config, maxBodyBytes: 4096 }).handle(request, response); });
+  await listen(server);
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
+    const bytes = Buffer.from("synthetic jpeg evidence");
+    const payload = { evidence_id: "evidence-upload-1", order_id: "order-1", operation_id: "cut-local-evidence-1", device_id: "device-1", mime_type: "image/jpeg", content_hash: createHash("sha256").update(bytes).digest("hex"), content_base64: bytes.toString("base64") };
+    const send = () => fetch(`http://127.0.0.1:${address.port}/v1/evidence/assets`, { method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" }, body: JSON.stringify(payload) });
+    assert.equal((await send()).status, 200);
+    assert.equal((await send()).status, 200);
+    assert.equal(pool.client.assets.size, 1);
+    const rebound = await fetch(`http://127.0.0.1:${address.port}/v1/evidence/assets`, { method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" }, body: JSON.stringify({ ...payload, operation_id: "different-operation" }) });
+    assert.equal(rebound.status, 409);
+    assert.equal((await rebound.json() as { code: string }).code, "EVIDENCE_BINDING_CONFLICT");
+    const mismatch = await fetch(`http://127.0.0.1:${address.port}/v1/evidence/assets`, { method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" }, body: JSON.stringify({ ...payload, content_hash: "0".repeat(64) }) });
+    assert.equal(mismatch.status, 422);
   } finally { await close(server); }
 });
 
@@ -694,6 +745,40 @@ class LoginPool {
   }
 }
 
+class LoginFlowPool {
+  revoked = false;
+  async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
+    if (text.includes("SELECT user_id, username, display_name, role, password_hash")) {
+      return { rows: [{ user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", password_hash: "scrypt$16384$8$1$DGPitTZ--gEW7HtAcRpHdg$coTqCTgT-b8lAaNmr53P6w2clR4WDBcACmGWjCN6FpR0fT1FQ1oMosbxIkdtkNu3eTtMn_waaRZsR35nyZvFLA", enabled: true } as unknown as T], rowCount: 1 };
+    }
+    if (text.includes("FROM sessions s JOIN users u")) {
+      return { rows: this.revoked ? [] : [{ session_id: "session-1", user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } as unknown as T], rowCount: this.revoked ? 0 : 1 };
+    }
+    throw new Error(`Unexpected pool query: ${text}`);
+  }
+  async connect(): Promise<LoginFlowClient> { return new LoginFlowClient(this); }
+}
+
+class LoginFlowClient {
+  constructor(private readonly pool: LoginFlowPool) {}
+  async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
+    if (text === "BEGIN" || text === "COMMIT" || text.includes("INSERT INTO sessions") || text.includes("INSERT INTO audit_events")) return { rows: [], rowCount: 1 };
+    if (text.includes("UPDATE sessions SET revoked_at")) { this.pool.revoked = true; return { rows: [], rowCount: 1 }; }
+    throw new Error(`Unexpected client query: ${text}`);
+  }
+  release(): void {}
+}
+
+class SessionGuardPool {
+  queryText = "";
+  constructor(private readonly state: "expired" | "revoked" | "disabled") {}
+  async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
+    this.queryText = text;
+    if (!text.includes("FROM sessions s JOIN users u")) throw new Error(`Unexpected ${this.state} session query.`);
+    return { rows: [], rowCount: 0 };
+  }
+}
+
 class LoginClient {
   async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
     if (text === "BEGIN" || text === "COMMIT" || text.includes("INSERT INTO sessions") || text.includes("INSERT INTO audit_events")) return { rows: [], rowCount: 1 };
@@ -811,8 +896,8 @@ function paymentOrder(): Record<string, unknown> {
 class SyncPool {
   readonly client: SyncClient;
 
-  constructor(private readonly existingOperation?: Record<string, unknown>, private readonly priorLegacyReject = false, private readonly authorizationExpiresAt = "2099-09-22T14:05:00.000Z", private readonly authorizationOverrides: Record<string, unknown> = {}, private readonly rejectedAuditDelaySeconds = 1) {
-    this.client = new SyncClient(existingOperation, priorLegacyReject, authorizationExpiresAt, authorizationOverrides, rejectedAuditDelaySeconds);
+  constructor(private readonly existingOperation?: Record<string, unknown>, private readonly priorLegacyReject = false, private readonly authorizationExpiresAt = "2099-09-22T14:05:00.000Z", private readonly authorizationOverrides: Record<string, unknown> = {}, private readonly rejectedAuditDelaySeconds = 1, private readonly evidenceVerified = true) {
+    this.client = new SyncClient(existingOperation, priorLegacyReject, authorizationExpiresAt, authorizationOverrides, rejectedAuditDelaySeconds, evidenceVerified);
   }
 
   async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
@@ -838,13 +923,14 @@ class SyncClient {
   auditMetadata: unknown;
   recoveryAuditValues?: unknown[];
 
-  constructor(private readonly existingOperation?: Record<string, unknown>, private readonly priorLegacyReject = false, private readonly authorizationExpiresAt = "2099-09-22T14:05:00.000Z", private readonly authorizationOverrides: Record<string, unknown> = {}, private readonly rejectedAuditDelaySeconds = 1) {}
+  constructor(private readonly existingOperation?: Record<string, unknown>, private readonly priorLegacyReject = false, private readonly authorizationExpiresAt = "2099-09-22T14:05:00.000Z", private readonly authorizationOverrides: Record<string, unknown> = {}, private readonly rejectedAuditDelaySeconds = 1, private readonly evidenceVerified = true) {}
 
   async query<T extends Record<string, unknown>>(text: string, values: unknown[] = []): Promise<{ rows: T[]; rowCount: number }> {
     if (text === "BEGIN" || text === "COMMIT" || text === "ROLLBACK") return { rows: [], rowCount: 0 };
     if (text.includes("SELECT operation_id, technician_id, device_id, status, payload_hash, conflict_reason FROM sync_operations")) return { rows: this.existingOperation ? [this.existingOperation as T] : [], rowCount: this.existingOperation ? 1 : 0 };
     if (text.includes("INSERT INTO sync_operations")) return { rows: [], rowCount: 1 };
     if (text.includes("FOR UPDATE OF o, d")) return { rows: [syncOrder() as unknown as T], rowCount: 1 };
+    if (text.includes("FROM evidence_assets")) return { rows: (this.evidenceVerified ? (values[0] as string[]) : []).map((evidence_id) => ({ evidence_id } as unknown as T)), rowCount: this.evidenceVerified ? (values[0] as string[]).length : 0 };
     if (text.includes("FROM payment_observations")) return { rows: [], rowCount: 0 };
     if (text.includes("FROM cut_authorizations")) {
       return {
@@ -880,6 +966,34 @@ class SyncClient {
     throw new Error(`Unexpected client query: ${text}`);
   }
 
+  release(): void {}
+}
+
+class EvidencePool {
+  readonly client = new EvidenceClient();
+  async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
+    if (text.includes("FROM sessions")) return { rows: [{ session_id: "session-1", user_id: "technician-1", username: "tech.one", display_name: "Tech", role: "TECHNICIAN" } as unknown as T], rowCount: 1 };
+    throw new Error(`Unexpected evidence pool query: ${text}`);
+  }
+  async connect(): Promise<EvidenceClient> { return this.client; }
+}
+
+class EvidenceClient {
+  readonly assets = new Map<string, Record<string, unknown>>();
+  async query<T extends Record<string, unknown>>(text: string, values: unknown[] = []): Promise<{ rows: T[]; rowCount: number }> {
+    if (["BEGIN", "COMMIT", "ROLLBACK"].includes(text)) return { rows: [], rowCount: 0 };
+    if (text.includes("SELECT assigned_technician_id FROM orders")) return { rows: [{ assigned_technician_id: "technician-1" } as unknown as T], rowCount: 1 };
+    if (text.includes("FROM evidence_assets")) {
+      const row = this.assets.get(String(values[0]));
+      return { rows: row ? [row as T] : [], rowCount: row ? 1 : 0 };
+    }
+    if (text.startsWith("INSERT INTO evidence_assets")) {
+      this.assets.set(String(values[0]), { order_id: values[1], operation_id: values[2], technician_id: values[3], device_id: values[4], mime_type: values[5], content_hash: values[6] } as Record<string, unknown>);
+      return { rows: [], rowCount: 1 };
+    }
+    if (text.startsWith("INSERT INTO audit_events")) return { rows: [], rowCount: 1 };
+    throw new Error(`Unexpected evidence client query: ${text}`);
+  }
   release(): void {}
 }
 
