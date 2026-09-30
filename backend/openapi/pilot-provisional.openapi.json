@@ -3,7 +3,7 @@
   "info": {
     "title": "SEPSA pilot provisional API",
     "version": "0.1.0",
-    "description": "PROVISIONAL · NO OFICIAL · PILOT_PROVISIONAL. Captura observada del backend del piloto; no representa contrato aprobado por SEPSA."
+    "description": "PROVISIONAL · NO OFICIAL · PILOT_PROVISIONAL. Captura observada del backend del piloto; no representa contrato aprobado por SEPSA. HTTP agrega X-Request-Id y security headers en todas las respuestas; CORS usa CORS_ORIGIN exacto. Login emite cookie HttpOnly; Secure requiere COOKIE_SECURE=true o NODE_ENV=production. Login limita intentos y puede responder 429 con Retry-After."
   },
   "servers": [
     {
@@ -79,7 +79,7 @@
                 "schema": {
                   "type": "string"
                 },
-                "description": "Cookie de sesión; Secure solo si origen CORS usa HTTPS; SameSite=Lax; Path=/."
+            "description": "Cookie de sesión HttpOnly; Secure depende de COOKIE_SECURE o NODE_ENV=production; SameSite=Lax; Path=/."
               }
             },
             "content": {
@@ -94,6 +94,15 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "description": "Límite de login alcanzado; incluye Retry-After.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer", "minimum": 1 }
+              }
+            },
             "$ref": "#/components/responses/Error"
           }
         }
@@ -846,7 +855,6 @@
           "session_id",
           "expires_at",
           "user",
-          "session_token",
           "source"
         ],
         "properties": {
@@ -856,9 +864,6 @@
           "expires_at": {
             "type": "string",
             "format": "date-time"
-          },
-          "session_token": {
-            "type": "string"
           },
           "source": {
             "$ref": "#/components/schemas/Source"
@@ -1919,6 +1924,8 @@
   },
   "x-payment-integration": {
     "availability": "NOT_IMPLEMENTED",
+    "internalAuthority": "PaymentAuthority with CLEAR, PAYMENT_CONFIRMED, and UNKNOWN decisions; runtime without configured source returns UNKNOWN",
+    "atomicityLimit": "A local PostgreSQL transaction cannot make an external payment ledger check and cut consumption atomic",
     "pending": "TODO: VALIDAR CON SEPSA",
     "endpoints": []
   },

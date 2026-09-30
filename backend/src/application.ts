@@ -4,6 +4,8 @@ import type { Pool, PoolClient } from "pg";
 import { hashToken, verifyPassword, createOpaqueToken } from "./auth.js";
 import { withTransaction } from "./db.js";
 import { HttpError, errorBody, isRecord, parseBearerToken, parseJsonBody, requiredInteger, requiredString, sendJson, sendNoContent } from "./http.js";
+import { checkPaymentSafely, unavailablePaymentAuthority, type PaymentAuthority, type PaymentCheckContext } from "./payment-authority.js";
+import { ConsoleSecurityLogger, type SecurityEvent, type SecurityLogger } from "./security-logger.js";
 import type { Role, SessionUser, SyncPayload } from "./types.js";
 import type { Config } from "./config.js";
 
@@ -32,18 +34,36 @@ const PROVISIONAL_SOURCE = "PILOT_PROVISIONAL";
 const NO_DATA_FILTER_VALUE = "__NO_DATA__";
 
 export class Application {
-  constructor(private readonly pool: Pool, private readonly config: Config) {}
+  private readonly loginAttempts = new Map<string, { startedAt: number; count: number }>();
+  constructor(
+    private readonly pool: Pool,
+    private readonly config: Config,
+    private readonly paymentAuthority: PaymentAuthority = unavailablePaymentAuthority,
+    private readonly securityLogger: SecurityLogger = new ConsoleSecurityLogger(),
+  ) {}
 
   async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const requestId = validRequestId(request.headers["x-request-id"]) ?? randomUUID();
+    response.setHeader("x-request-id", requestId);
+    response.setHeader("x-content-type-options", "nosniff");
+    response.setHeader("x-frame-options", "DENY");
+    response.setHeader("referrer-policy", "no-referrer");
+    response.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=()");
+    if (this.config.cookieSecure) response.setHeader("strict-transport-security", "max-age=31536000");
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-      this.setCorsHeaders(response);
-      if (request.method === "OPTIONS") return sendNoContent(response);
+      if (request.headers.origin === this.config.corsOrigin) this.setCorsHeaders(response);
+      if (request.method === "OPTIONS") {
+        if (request.headers.origin !== this.config.corsOrigin) throw new HttpError(403, "CORS_ORIGIN_REJECTED", "Request origin is not allowed.");
+        return sendNoContent(response);
+      }
       if (request.method === "GET" && url.pathname === "/healthz") return await this.health(response);
       this.validateOrigin(request);
       await this.route(request, response, url);
     } catch (error) {
       const body = errorBody(error);
+      this.logEvent("http.request.rejected", { requestId, result: body.code, status: body.status });
+      if (body.status === 429) response.setHeader("retry-after", String(this.config.loginRateLimitWindowSeconds ?? 60));
       if (!response.headersSent) sendJson(response, body.status, { code: body.code, message: body.message });
       else response.end();
     }
@@ -59,7 +79,31 @@ export class Application {
 
   private validateOrigin(request: IncomingMessage): void {
     const origin = request.headers.origin;
-    if (request.method === "POST" && origin && origin !== this.config.corsOrigin) throw new HttpError(403, "CSRF_ORIGIN_REJECTED", "Request origin is not allowed.");
+    const cookieFlow = !parseBearerToken(request.headers.authorization);
+    if (request.method === "POST" && ((origin !== undefined && origin !== this.config.corsOrigin) || (!origin && cookieFlow))) throw new HttpError(403, "CSRF_ORIGIN_REJECTED", "Request origin is not allowed.");
+    if (request.method === "POST" && request.headers["sec-fetch-site"] === "cross-site") throw new HttpError(403, "CSRF_FETCH_METADATA_REJECTED", "Cross-site request is not allowed.");
+  }
+
+  private logEvent(event: SecurityEvent["event"], fields: Omit<SecurityEvent, "event">): void {
+    this.securityLogger.log({ event, ...fields });
+  }
+
+  private enforceLoginRateLimit(request: IncomingMessage, username: string): void {
+    const now = Date.now();
+    const windowMs = (this.config.loginRateLimitWindowSeconds ?? 60) * 1000;
+    const key = `${request.socket.remoteAddress ?? "unknown"}\u0000${username.trim().toLocaleLowerCase("en-US")}`;
+    let entry = this.loginAttempts.get(key);
+    if (entry && now - entry.startedAt >= windowMs) entry = undefined;
+    if (!entry) {
+      if (this.loginAttempts.size >= (this.config.loginRateLimitMaxEntries ?? 10_000)) {
+        for (const [candidate, value] of this.loginAttempts) if (now - value.startedAt >= windowMs) this.loginAttempts.delete(candidate);
+        if (this.loginAttempts.size >= (this.config.loginRateLimitMaxEntries ?? 10_000)) this.loginAttempts.delete(this.loginAttempts.keys().next().value as string);
+      }
+      entry = { startedAt: now, count: 0 };
+      this.loginAttempts.set(key, entry);
+    }
+    entry.count += 1;
+    if (entry.count > (this.config.loginRateLimitMax ?? 5)) throw new HttpError(429, "LOGIN_RATE_LIMITED", "Too many login attempts. Try again later.");
   }
 
   private async route(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
@@ -99,12 +143,14 @@ export class Application {
     const body = await parseJsonBody(request, this.config.maxBodyBytes);
     const username = requiredString(body.username, "username");
     const password = requiredString(body.password, "password");
+    this.enforceLoginRateLimit(request, username);
     const result = await this.pool.query<UserRow>(
       "SELECT user_id, username, display_name, role, password_hash, enabled FROM users WHERE username = $1 AND source = $2",
       [username, PROVISIONAL_SOURCE],
     );
     const user = result.rows[0];
     if (!user || !user.enabled || !(await verifyPassword(password, user.password_hash))) {
+      this.logEvent("auth.login", { requestId: String(response.getHeader("x-request-id")), result: "rejected" });
       throw new HttpError(401, "INVALID_CREDENTIALS", "Username or password is invalid.");
     }
     const token = createOpaqueToken();
@@ -117,12 +163,12 @@ export class Application {
       );
       await insertAudit(client, { actorId: user.user_id, actorRole: user.role, action: "LOGIN", result: "accepted", entityId: sessionId });
     });
-    response.setHeader("set-cookie", sessionCookie(token, this.config.sessionTtlSeconds, this.config.corsOrigin));
+    response.setHeader("set-cookie", sessionCookie(token, this.config.sessionTtlSeconds, this.config.cookieSecure === true));
+    this.logEvent("auth.login", { requestId: String(response.getHeader("x-request-id")), result: "accepted" });
     sendJson(response, 200, {
       session_id: sessionId,
       expires_at: expiresAt,
       user: { user_id: user.user_id, username: user.username, display_name: user.display_name, role: user.role },
-      session_token: token,
       source: PROVISIONAL_SOURCE,
     });
   }
@@ -133,13 +179,14 @@ export class Application {
       const result = await client.query("UPDATE sessions SET revoked_at = now() WHERE session_id = $1 AND revoked_at IS NULL", [user.sessionId]);
       if (result.rowCount === 1) await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "LOGOUT", result: "accepted", entityId: user.sessionId });
     });
-    response.setHeader("set-cookie", clearSessionCookie(this.config.corsOrigin));
+    response.setHeader("set-cookie", clearSessionCookie(this.config.cookieSecure === true));
+    this.logEvent("auth.logout", { requestId: String(response.getHeader("x-request-id")), result: "accepted" });
     sendNoContent(response);
   }
 
   private async requireSession(request: IncomingMessage): Promise<SessionUser> {
     const token = parseBearerToken(request.headers.authorization) ?? parseCookie(request.headers.cookie, "sepsa_session");
-    if (!token) throw new HttpError(401, "UNAUTHENTICATED", "Valid bearer session is required.");
+    if (!token) throw new HttpError(401, "UNAUTHENTICATED", "Valid session is required.");
     const result = await this.pool.query<SessionRow>(
       `SELECT s.session_id, u.user_id, u.username, u.display_name, u.role
        FROM sessions s JOIN users u ON u.user_id = s.user_id
@@ -353,6 +400,18 @@ export class Application {
       if (order.version !== orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
       if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "Order is not eligible for a cut authorization.");
       if (order.physical_status !== "NONE") throw new HttpError(409, "PHYSICAL_STATUS_NOT_ELIGIBLE", "Physical status must be NONE before a new cut authorization.");
+      const priorPayment = await hasPriorPaymentObservation(client, order.account_id, order.supply_id);
+      const payment = priorPayment ? { status: "PAYMENT_CONFIRMED" as const } : await checkPaymentSafely(this.paymentAuthority, paymentCheckContext(order, user, operationId, deviceId), this.config.paymentAuthorityTimeoutMs);
+      if (payment.status !== "CLEAR") {
+        if (payment.status === "PAYMENT_CONFIRMED" && !priorPayment) await recordPaymentObservation(client, user, order, operationId, deviceId);
+        await insertAudit(client, {
+          actorId: user.userId, actorRole: user.role, action: "AUTHORIZE_CUT", result: "rejected",
+          orderId, operationId, deviceId,
+          reason: payment.status === "PAYMENT_CONFIRMED" ? "A confirmed payment blocks cut authorization pending review." : "Payment authority is unknown; cut authorization requires review.",
+          metadata: { payment_authority: payment.status },
+        });
+        return { blocked: true as const, code: "PAYMENT_REQUIRES_REVIEW", message: "Payment status blocks cut authorization; human review is required." };
+      }
       const authorizationId = cryptoRandomUuid();
       const token = createOpaqueToken();
       const expiresAt = new Date(Date.now() + this.config.authorizationTtlSeconds * 1000).toISOString();
@@ -364,6 +423,12 @@ export class Application {
       await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "AUTHORIZE_CUT", result: "accepted", entityId: authorizationId, orderId, operationId, deviceId });
       return { authorization_id: authorizationId, token, order_id: orderId, technician_id: user.userId, device_id: deviceId, operation_id: operationId, version: orderVersion, issued_at: new Date().toISOString(), expires_at: expiresAt, source: PROVISIONAL_SOURCE };
     });
+    if ("blocked" in result) {
+      this.logEvent("authorization.cut", { requestId: String(response.getHeader("x-request-id")), result: "blocked" });
+      sendJson(response, 409, { code: result.code, message: result.message });
+      return;
+    }
+    this.logEvent("authorization.cut", { requestId: String(response.getHeader("x-request-id")), result: "reserved" });
     sendJson(response, 200, result);
   }
 
@@ -376,9 +441,11 @@ export class Application {
     payload.technician_id = user.userId;
     const result = await withTransaction(this.pool, async (client) => this.applySync(client, user, payload));
     if (result.status === "conflict") {
+      this.logEvent("sync.operation", { requestId: String(response.getHeader("x-request-id")), result: "conflict" });
       sendJson(response, 409, { code: "CONFLICT", message: result.message, operation_id: payload.operation_id });
       return;
     }
+    this.logEvent("sync.operation", { requestId: String(response.getHeader("x-request-id")), result: "accepted" });
     sendJson(response, 200, { status: "acknowledged", ...syncReceipt(payload), source: PROVISIONAL_SOURCE });
   }
 
@@ -416,6 +483,15 @@ export class Application {
     const grant = authorization.rows[0];
     if (!grant || grant.operation_id !== payload.operation_id || grant.order_id !== payload.order_id || grant.technician_id !== user.userId || grant.device_id !== payload.device_id || grant.order_version !== payload.order_version || grant.status !== "RESERVED" || grant.token_hash !== hashToken(payload.authorization_token)) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
     if (new Date(grant.expires_at).getTime() <= Date.now()) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
+    const priorPayment = await hasPriorPaymentObservation(client, order.account_id, order.supply_id);
+    const payment = priorPayment ? { status: "PAYMENT_CONFIRMED" as const } : await checkPaymentSafely(this.paymentAuthority, paymentCheckContext(order, user, payload.operation_id, payload.device_id), this.config.paymentAuthorityTimeoutMs);
+    if (payment.status !== "CLEAR") {
+      if (payment.status === "PAYMENT_CONFIRMED" && !priorPayment) await recordPaymentObservation(client, user, order, payload.operation_id, payload.device_id);
+      const message = payment.status === "PAYMENT_CONFIRMED"
+        ? "A confirmed payment blocks CUT synchronization pending review."
+        : "Payment authority is unknown; CUT synchronization requires review.";
+      return await rejectSync(client, user, payload, message);
+    }
     await client.query("UPDATE cut_authorizations SET status = 'CONSUMED', consumed_at = now(), consumed_operation_id = $2 WHERE authorization_id = $1 AND status = 'RESERVED'", [grant.authorization_id, payload.operation_id]);
     const updatedOrder = await client.query("UPDATE orders SET status = 'EJECUTADO', physical_status = 'CONFIRMED', version = version + 1, updated_at = now() WHERE order_id = $1 AND version = $2", [payload.order_id, payload.order_version]);
     if (updatedOrder.rowCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed while consuming authorization.");
@@ -531,6 +607,40 @@ async function commandReplay(client: PoolClient, operationId: string, operationT
   if (row.operation_type !== operationType || row.actor_id !== actorId || row.request_hash !== requestHash) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Operation identifier is already bound to another command.");
   if (row.response === null || row.response === undefined) throw new HttpError(409, "OPERATION_IN_PROGRESS", "Operation is already in progress.");
   return row.response;
+}
+
+function paymentCheckContext(order: OrderRow, user: SessionUser, operationId: string, deviceId: string): PaymentCheckContext {
+  return {
+    orderId: order.order_id,
+    accountId: order.account_id,
+    supplyId: order.supply_id,
+    actorId: user.userId,
+    actorRole: user.role,
+    deviceId,
+    operationId,
+  };
+}
+
+async function hasPriorPaymentObservation(client: PoolClient, accountId: string, supplyId: string): Promise<boolean> {
+  const result = await client.query("SELECT observation_id FROM payment_observations WHERE account_id = $1 OR supply_id = $2 LIMIT 1", [accountId, supplyId]);
+  return result.rows.length > 0;
+}
+
+async function recordPaymentObservation(client: PoolClient, user: SessionUser, order: OrderRow, operationId: string, deviceId: string): Promise<void> {
+  const observedAt = new Date().toISOString();
+  const inserted = await client.query(
+    `INSERT INTO payment_observations(observation_id, operation_id, order_id, account_id, supply_id, actor_id, actor_role, device_id, source, observed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (operation_id) DO NOTHING`,
+    [cryptoRandomUuid(), operationId, order.order_id, order.account_id, order.supply_id, user.userId, user.role, deviceId, PROVISIONAL_SOURCE, observedAt],
+  );
+  if (inserted.rowCount === 1) {
+    await insertAudit(client, {
+      actorId: user.userId, actorRole: user.role, action: "PAYMENT_CONFIRMED_OBSERVED", result: "accepted",
+      entityId: operationId, orderId: order.order_id, operationId, deviceId,
+      metadata: { payment_authority: "PAYMENT_CONFIRMED", source: PROVISIONAL_SOURCE, observed_at: observedAt },
+    });
+  }
 }
 
 async function rejectSync(client: PoolClient, user: SessionUser, payload: SyncPayload, message: string): Promise<{ status: "conflict"; message: string }> {
@@ -660,8 +770,13 @@ function parseCookie(header: string | undefined, name: string): string | undefin
   return header?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || undefined;
 }
 
-function sessionCookie(token: string, maxAge: number, corsOrigin: string): string {
-  const secure = corsOrigin.startsWith("https://") ? "; Secure" : "";
+function validRequestId(value: string | string[] | undefined): string | undefined {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidate) ? candidate : undefined;
+}
+
+function sessionCookie(token: string, maxAge: number, secureEnabled: boolean): string {
+  const secure = secureEnabled ? "; Secure" : "";
   return `sepsa_session=${encodeURIComponent(token)}; Max-Age=${maxAge}; HttpOnly; SameSite=Lax; Path=/${secure}`;
 }
 

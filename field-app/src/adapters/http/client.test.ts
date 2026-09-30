@@ -2,13 +2,34 @@ import { describe, expect, it } from "vitest";
 import { HttpPilotClient } from "./client";
 
 describe("PILOT_PROVISIONAL HTTP client", () => {
+  it("uses browser HttpOnly cookies through login, restored session, and logout", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const client = new HttpPilotClient({
+      baseUrl: "http://localhost:8080",
+      fetchImpl: async (input, init = {}) => {
+        requests.push({ url: String(input), init });
+        return String(input).endsWith("/auth/logout") ? new Response(null, { status: 204 }) : json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
+      },
+    });
+    const session = await client.authenticate({ username: "admin", password: "password" });
+    expect(session.sessionToken).toBeUndefined();
+    const restoredClient = new HttpPilotClient({ baseUrl: "http://localhost:8080", fetchImpl: async (input, init = {}) => {
+      requests.push({ url: String(input), init });
+      return new Response(null, { status: 204 });
+    } });
+    restoredClient.restoreSession(session);
+    await restoredClient.logout(session);
+    expect(requests.map((request) => request.init.credentials)).toEqual(["include", "include"]);
+    expect(requests.every((request) => !(request.init.headers as Record<string, string>).authorization)).toBe(true);
+  });
+
   it("loads enabled technicians from the authoritative API", async () => {
     const requests: string[] = [];
     const client = new HttpPilotClient({
       baseUrl: "http://localhost:8080",
       fetchImpl: async (input) => {
         requests.push(String(input));
-        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
+        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
         if (String(input).endsWith("/technicians")) return json({ technicians: [{ user_id: "technician-1", username: "tech.one", display_name: "Técnico Uno", role: "TECHNICIAN", enabled: true, source: "PILOT_PROVISIONAL" }] });
         return json({ debtors: [] });
       },
@@ -25,7 +46,7 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
       baseUrl: "http://localhost:8080",
       fetchImpl: async (input, init = {}) => {
         requests.push({ url: String(input), init });
-        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
+        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
         if (String(input).endsWith("/orders/batch")) return json({ batch_id: "batch-1", requested_debtor_ids: ["debtor-1"], created: [{ order_id: "order-1", debtor_id: "debtor-1", account_id: "account-1", assigned_technician_id: "", status: "GENERADO", physical_status: "NONE", version: 1, created_by: "admin-1", created_at: "2026-09-13T00:00:00.000Z" }], skipped: [] });
         return json({ debtors: [] });
       },
@@ -46,7 +67,7 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     const client = new HttpPilotClient({
       baseUrl: "http://localhost:8080",
       fetchImpl: async (input) => String(input).endsWith("/auth/login")
-        ? json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } })
+        ? json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } })
         : json({ debtors: [{ debtor_id: "debtor-1", account_id: "account-1", supply_id: "supply-1", customer_name: "Customer", address: "Address", references: "", meter_id: "meter-1", area: "B", area_name: "BETANZOS", locality: "078 - COA COA", route: "078", route_name: "COA COA", debt_cents: 100, months_pending: 1, updated_at: "2026-09-14T00:00:00.000Z", kardex: [], source: "PILOT_PROVISIONAL" }] }),
     });
     const session = await client.authenticate({ username: "admin", password: "password" });
@@ -60,7 +81,7 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
       baseUrl: "http://localhost:8080",
       fetchImpl: async (input, init = {}) => {
         requests.push({ url: String(input), init });
-        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } });
+        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } });
         if (String(input).endsWith("/authorizations/cut")) return json({ authorization_id: "auth-1", token: "opaque-1", order_id: "order-1", technician_id: "tech-1", device_id: "device-1", operation_id: "cut-1", version: 2, issued_at: "2026-09-12T09:00:00.000Z", expires_at: "2026-09-12T09:05:00.000Z" });
         return json({ status: "acknowledged", operation_id: "cut-1" });
       },
@@ -81,7 +102,7 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     const client = new HttpPilotClient({
       baseUrl: "http://localhost:8080",
       fetchImpl: async (input) => String(input).endsWith("/auth/login")
-        ? json({ session_id: "session-1", session_token: "session-token-12345678901234567890", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } })
+        ? json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } })
         : json({ package: packageValue, checksum: "tampered" }),
     });
     const session = await client.authenticate({ username: "tech", password: "password" });

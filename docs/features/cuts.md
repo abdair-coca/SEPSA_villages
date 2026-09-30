@@ -21,6 +21,7 @@ Registrar una visita o un corte físico sobre una orden asignada, con contexto s
 - GPS: coordenadas válidas o `saltar_control_coordenadas` con justificación.
 - Evidencia: JPEG/PNG optimizada o `saltar_control_fotos` con justificación.
 - Sin autorización concluyente y vigente no se corta.
+- Reserva y consumo de autorización consultan `PaymentAuthority` bajo transacción local; solo `CLEAR` permite avanzar. El runtime sin fuente/adaptador de pagos devuelve `UNKNOWN` y bloquea CUT. Un pago confirmado previo prevalece; sync permanece en conflicto y la autorización no se consume. Ver [pagos y concurrencia](payments.md).
 - El éxito visual aparece solo después de verificar persistencia local.
 
 ## Estados especiales

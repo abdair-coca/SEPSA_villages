@@ -8,7 +8,7 @@ import type { Config } from "../src/config.js";
 import { assertSchema } from "./contract-schema.js";
 
 const fixtures = JSON.parse(await readFile(new URL("./fixtures/pilot-contract.json", import.meta.url), "utf8")) as Record<string, unknown>;
-const config: Config = { host: "127.0.0.1", port: 0, databaseUrl: "", sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, maxBodyBytes: 1024 * 1024, corsOrigin: "http://localhost:5173" };
+const config: Config = { host: "127.0.0.1", port: 0, databaseUrl: "", sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, paymentAuthorityTimeoutMs: 3000, maxBodyBytes: 1024 * 1024, corsOrigin: "http://localhost:5173" };
 
 test("synthetic fixtures conform to canonical request and response schemas", () => {
   assertSchema("CreateOrderRequest", fixtures.orderCreateRequest);
@@ -114,7 +114,7 @@ async function start(role: "ADMIN" | "TECHNICIAN"): Promise<{ url: string; close
       return { rows: [], rowCount: 1 };
     }, release() {} }; },
   } as unknown as Pool;
-  const app = new Application(pool, config);
+  const app = new Application(pool, config, { async checkPayment() { return { status: "CLEAR" }; } });
   const server = createServer((request, response) => { void app.handle(request, response); });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const address = server.address();

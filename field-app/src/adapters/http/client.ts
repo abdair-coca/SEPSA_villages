@@ -38,7 +38,6 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
       permissions: permissionsForRole(response.user.role),
       issuedAt: new Date().toISOString(),
       authenticity: "PILOT_PROVISIONAL",
-      sessionToken: response.session_token,
       expiresAt: response.expires_at,
     };
     this.activeSession = session;
@@ -194,7 +193,6 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     if (this.mode === "offline") throw networkUnknown();
     const headers: Record<string, string> = { accept: "application/json" };
     if (init.body !== undefined) headers["content-type"] = "application/json";
-    if (session?.sessionToken) headers.authorization = `Bearer ${session.sessionToken}`;
     let response: Response;
     try {
       response = await this.fetchImpl(this.baseUrl + path, { method: init.method, headers, credentials: "include", body: init.body === undefined ? undefined : JSON.stringify(init.body) });

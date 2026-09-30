@@ -22,6 +22,7 @@ Enviar operaciones locales sin perderlas, duplicarlas ni convertir un resultado 
 - La cola sobrevive a recarga, cierre, reinicio y pérdida de red.
 - Cada operación tiene un identificador único y payload estable.
 - El backend verifica sesión, alcance del técnico, versión, hash/idempotencia y auditoría.
+- Antes de consumir autorización de CUT, el backend vuelve a consultar `PaymentAuthority` dentro de la transacción. Solo `CLEAR` confirma. `PAYMENT_CONFIRMED` se guarda como observación append-only y deja operación en `conflict`; `UNKNOWN`, timeout y error también dejan conflicto para revisión. Ninguno consume autorización ni reintenta corte.
 - Conflictos se conservan; no usar última escritura gana.
 - Operaciones inciertas o marcadas para revisión no se reenvían automáticamente.
 - `CLAIMED` significa intención física durable local; no representa confirmación remota.

@@ -6,7 +6,6 @@ export interface LoginResponseDto {
   session_id: string;
   expires_at: string;
   user: { user_id: string; username: string; display_name: string; role: PilotRole };
-  session_token: string;
   source: PilotSource;
 }
 export interface CreateOrderRequestDto { operation_id: string; debtor_id: string; purpose: "CUT"; }
@@ -43,7 +42,7 @@ export interface AuditEventDto {
   device_id: string | null; occurred_at: string; transition: unknown; metadata: unknown;
 }
 
-/** Proposed future adapter boundary only. No payment transport exists in this pilot. */
+/** HTTP contract remains unimplemented; the internal PaymentAuthority seam is not a payment transport. */
 export interface PaymentIntegrationAvailabilityDto {
   availability: "NOT_IMPLEMENTED";
   pending: ["TODO: VALIDAR CON SEPSA"];
