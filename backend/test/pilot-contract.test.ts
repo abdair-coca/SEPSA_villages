@@ -105,6 +105,7 @@ async function start(role: "ADMIN" | "TECHNICIAN"): Promise<{ url: string; close
       if (text.includes("FROM sessions")) return { rows: [{ session_id: "synthetic-session", user_id: "synthetic-user", username: "synthetic-user", display_name: "Synthetic User", role }], rowCount: 1 };
       if (text.includes("FROM sync_operations")) return { rows: [], rowCount: 0 };
       if (text.includes("SELECT audit_id, actor_id")) return { rows: [{ audit_id: "synthetic-audit-01", actor_id: "synthetic-user", actor_role: "ADMIN", action: "SYNTHETIC", entity_id: null, order_id: null, operation_id: null, result: "accepted", reason: null, device_id: null, occurred_at: "2026-09-29T12:00:00.000Z", transition: null, metadata: {} }], rowCount: 1 };
+      if (text.includes("COUNT(*)::text AS total FROM audit_events")) return { rows: [{ total: "1" }], rowCount: 1 };
       if (text.includes("FROM orders o")) return { rows: [syntheticOrderRow()], rowCount: 1 };
       throw new Error("Unexpected contract test query.");
     },

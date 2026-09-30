@@ -205,11 +205,29 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Tamaño de página; máximo 100.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 100 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Desplazamiento; mutuamente excluyente con cursor.",
+            "schema": { "type": "integer", "minimum": 0, "default": 0 }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor numérico de continuación devuelto por la página previa; mutuamente excluyente con offset.",
+            "schema": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
           }
         ],
         "responses": {
           "200": {
-            "description": "Morosos; filtro y tope observados de 100",
+            "description": "Morosos paginados con orden estable y tope de 100 por página.",
             "content": {
               "application/json": {
                 "schema": {
@@ -645,11 +663,29 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Tamaño de página; máximo 100.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 100 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Desplazamiento; mutuamente excluyente con cursor.",
+            "schema": { "type": "integer", "minimum": 0, "default": 0 }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor numérico de continuación devuelto por la página previa; mutuamente excluyente con offset.",
+            "schema": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
           }
         ],
         "responses": {
           "200": {
-            "description": "Auditoría; solo ADMIN, máximo 1000 eventos",
+            "description": "Auditoría paginada; solo ADMIN; orden estable por fecha y UUID.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1073,7 +1109,11 @@
             "items": {
               "$ref": "#/components/schemas/Debtor"
             }
-          }
+          },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "offset": { "type": "integer", "minimum": 0 },
+          "total": { "type": "integer", "minimum": 0 },
+          "next_cursor": { "type": ["string", "null"] }
         },
         "additionalProperties": false
       },
@@ -1881,7 +1921,11 @@
             "items": {
               "$ref": "#/components/schemas/AuditEvent"
             }
-          }
+          },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "offset": { "type": "integer", "minimum": 0 },
+          "total": { "type": "integer", "minimum": 0 },
+          "next_cursor": { "type": ["string", "null"] }
         },
         "additionalProperties": false
       },

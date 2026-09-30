@@ -16,4 +16,6 @@ export interface PilotEvidenceUploadResponseDto { status: "verified"; evidence_i
 export interface PilotPackageResponseDto { package: { package_id: string; technician_id: string; device_id: string; version: number; downloaded_at: string; orders: PilotOrderResponseDto[] }; checksum: string; }
 export interface PilotTechnicianResponseDto { technicians: unknown[]; }
 export interface PilotLookupResponseDto { status: "confirmed" | "not_found" | "unknown"; operation_id: string; error_code?: string; order_id?: string; technician_id?: string; device_id?: string; order_version?: number; action?: "CUT" | "VISIT"; recorded_at?: string; evidence_refs?: string[]; field_capture?: import("../../domain").FieldCapture; }
-export interface PilotAuditResponseDto { audit: unknown[]; }
+export interface PilotPageDto { limit?: number; offset?: number; total?: number; next_cursor?: string | null; }
+export interface PilotAuditResponseDto extends PilotPageDto { audit: unknown[]; }
+export interface PilotDebtorsResponseDto extends PilotPageDto { debtors: unknown[]; }

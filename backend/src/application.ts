@@ -32,6 +32,8 @@ interface CommandRow { operation_type: string; actor_id: string; request_hash: s
 
 const PROVISIONAL_SOURCE = "PILOT_PROVISIONAL";
 const NO_DATA_FILTER_VALUE = "__NO_DATA__";
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 100;
 
 export class Application {
   private readonly loginAttempts = new Map<string, { startedAt: number; count: number }>();
@@ -213,6 +215,7 @@ export class Application {
     const minMonthsPending = minMonthsText === "" ? 0 : Number(minMonthsText);
     if (!Number.isSafeInteger(minMonthsPending) || minMonthsPending < 0) throw new HttpError(400, "INVALID_REQUEST", "min_months_pending must be a non-negative integer.");
     const supplyStatus = (url.searchParams.get("supply_status") ?? "").trim();
+    const page = pageRequest(url);
     const result = await this.pool.query<DebtorRow>(
        `SELECT debtor_id, account_id, supply_id, customer_name, address, reference_text, meter_id, area, locality,
                route, debt_cents, months_pending, updated_at, kardex, circuit, customer_ci, contact_phone, tariff,
@@ -229,10 +232,23 @@ export class Application {
            AND ($5 = '' OR ($5 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(route), '') IS NULL) OR regexp_replace(LOWER(BTRIM(route)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($5)), '\\s+', ' ', 'g'))
            AND ($6 = 0 OR months_pending >= $6)
            AND ($7 = '' OR ($7 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(supply_status), '') IS NULL) OR regexp_replace(LOWER(BTRIM(supply_status)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($7)), '\\s+', ' ', 'g'))
-        ORDER BY updated_at DESC LIMIT 100`,
-       [PROVISIONAL_SOURCE, search, area, locality, route, minMonthsPending, supplyStatus],
+        ORDER BY updated_at DESC NULLS LAST, debtor_id ASC LIMIT $8 OFFSET $9`,
+       [PROVISIONAL_SOURCE, search, area, locality, route, minMonthsPending, supplyStatus, page.limit, page.offset],
     );
-    sendJson(response, 200, { source: PROVISIONAL_SOURCE, debtors: result.rows.map(toDebtor) });
+    const count = await this.pool.query<{ total: string }>(
+      `SELECT COUNT(*)::text AS total FROM debtors WHERE source = $1 AND ($2 = '' OR concat_ws(' ', debtor_id, account_id, supply_id, customer_name, address, reference_text,
+         meter_id, area, locality, route, debt_cents::text, months_pending::text, updated_at::text, kardex::text, circuit,
+         customer_ci, contact_phone, tariff, supply_status, enabling_title, route_order::text, cadastral_latitude::text,
+         cadastral_longitude::text, meter_brand, meter_index, meter_multiplier::text, claims::text, payment_plan::text,
+         suspension_date::text, reconnection_manual::text, reconnection_date::text, reconnection_technician) ILIKE '%' || $2 || '%')
+       AND ($3 = '' OR ($3 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(area), '') IS NULL) OR regexp_replace(LOWER(BTRIM(area)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($3)), '\\s+', ' ', 'g'))
+       AND ($4 = '' OR ($4 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(locality), '') IS NULL) OR regexp_replace(LOWER(BTRIM(locality)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($4)), '\\s+', ' ', 'g'))
+       AND ($5 = '' OR ($5 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(route), '') IS NULL) OR regexp_replace(LOWER(BTRIM(route)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($5)), '\\s+', ' ', 'g'))
+       AND ($6 = 0 OR months_pending >= $6)
+       AND ($7 = '' OR ($7 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(supply_status), '') IS NULL) OR regexp_replace(LOWER(BTRIM(supply_status)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($7)), '\\s+', ' ', 'g'))`,
+      [PROVISIONAL_SOURCE, search, area, locality, route, minMonthsPending, supplyStatus],
+    );
+    sendJson(response, 200, { source: PROVISIONAL_SOURCE, debtors: result.rows.map(toDebtor), ...pageResponse(page, Number(count.rows[0]?.total ?? 0), result.rows.length) });
   }
 
   private async listTechnicians(response: ServerResponse, user: SessionUser): Promise<void> {
@@ -623,12 +639,14 @@ export class Application {
     this.requireRole(user, "ADMIN");
     const orderId = url.searchParams.get("order_id");
     if (orderId && !isUuid(orderId)) throw new HttpError(400, "INVALID_REQUEST", "order_id must be a UUID.");
+    const page = pageRequest(url);
     const result = await this.pool.query<{ audit_id: string; actor_id: string; actor_role: Role | null; action: string; entity_id: string | null; order_id: string | null; operation_id: string | null; result: string; reason: string | null; device_id: string | null; occurred_at: string; transition: unknown; metadata: unknown }>(
       `SELECT audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, reason, device_id, occurred_at, transition, metadata
-       FROM audit_events WHERE source = $1 AND ($2::uuid IS NULL OR order_id = $2::uuid) ORDER BY occurred_at ASC LIMIT 1000`,
-      [PROVISIONAL_SOURCE, orderId],
+       FROM audit_events WHERE source = $1 AND ($2::uuid IS NULL OR order_id = $2::uuid) ORDER BY occurred_at ASC, audit_id ASC LIMIT $3 OFFSET $4`,
+      [PROVISIONAL_SOURCE, orderId, page.limit, page.offset],
     );
-    sendJson(response, 200, { source: PROVISIONAL_SOURCE, audit: result.rows });
+    const count = await this.pool.query<{ total: string }>("SELECT COUNT(*)::text AS total FROM audit_events WHERE source = $1 AND ($2::uuid IS NULL OR order_id = $2::uuid)", [PROVISIONAL_SOURCE, orderId]);
+    sendJson(response, 200, { source: PROVISIONAL_SOURCE, audit: result.rows, ...pageResponse(page, Number(count.rows[0]?.total ?? 0), result.rows.length) });
   }
 }
 
@@ -803,6 +821,36 @@ function toOrder(row: OrderRow): Record<string, unknown> {
 
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function pageRequest(url: URL): { limit: number; offset: number } {
+  const limitText = url.searchParams.get("limit");
+  const offsetText = url.searchParams.get("offset");
+  const cursor = url.searchParams.get("cursor");
+  if (offsetText !== null && cursor !== null) throw new HttpError(400, "INVALID_REQUEST", "Use either offset or cursor, not both.");
+  const limit = limitText === null ? DEFAULT_PAGE_SIZE : parseIntegerParam(limitText, "limit");
+  const offset = offsetText !== null ? parseIntegerParam(offsetText, "offset") : cursor !== null ? parseIntegerParam(cursor, "cursor") : 0;
+  if (limit < 1 || limit > MAX_PAGE_SIZE) throw new HttpError(400, "INVALID_REQUEST", `limit must be between 1 and ${MAX_PAGE_SIZE}.`);
+  if (offset < 0 || offset > 1_000_000_000) throw new HttpError(400, "INVALID_REQUEST", "offset must be between 0 and 1000000000.");
+  return { limit, offset };
+}
+
+function parseIntegerParam(value: string, name: string): number {
+  if (!/^(0|[1-9]\d*)$/.test(value)) throw new HttpError(400, "INVALID_REQUEST", `${name} must be a non-negative integer.`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new HttpError(400, "INVALID_REQUEST", `${name} must be a safe integer.`);
+  return parsed;
+}
+
+function parsePositiveVersion(value: string, name: string): number {
+  const parsed = parseIntegerParam(value, name);
+  if (parsed < 0) throw new HttpError(400, "INVALID_REQUEST", `${name} must be non-negative.`);
+  return parsed;
+}
+
+function pageResponse(page: { limit: number; offset: number }, total: number, returned: number): { limit: number; offset: number; total: number; next_cursor: string | null } {
+  const next = page.offset + returned;
+  return { ...page, total, next_cursor: next < total ? String(next) : null };
 }
 
 function cryptoRandomUuid(): string {

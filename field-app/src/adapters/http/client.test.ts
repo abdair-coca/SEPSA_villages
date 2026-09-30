@@ -63,6 +63,30 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     expect(JSON.parse(String(requests[2]?.init.body))).toEqual({ batch_id: "batch-1", debtor_ids: ["debtor-1"], purpose: "CUT" });
   });
 
+  it("follows server cursors for complete debtor and audit results, exposes page seam", async () => {
+    const urls: string[] = [];
+    const client = new HttpPilotClient({ baseUrl: "http://localhost:8080", fetchImpl: async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
+      if (url.includes("/v1/debtors")) {
+        const cursor = new URL(url).searchParams.get("cursor");
+        const index = cursor === "100" ? 1 : 0;
+        return json({ debtors: [debtorDto(index)], total: 101, next_cursor: index === 0 ? "100" : null });
+      }
+      const cursor = new URL(url).searchParams.get("cursor");
+      const index = cursor === "100" ? 1 : 0;
+      return json({ audit: [auditDto(index)], total: 101, next_cursor: index === 0 ? "100" : null });
+    } });
+    const session = await client.authenticate({ username: "admin", password: "password" });
+
+    await expect(client.findDebtors({ session })).resolves.toHaveLength(2);
+    await expect(client.listAudit({ session })).resolves.toHaveLength(2);
+    await expect(client.findDebtorsPage({ session }, "100")).resolves.toMatchObject({ nextCursor: undefined, total: 101, debtors: [{ debtorId: "debtor-1" }] });
+    expect(urls.filter((url) => url.includes("/v1/debtors")).every((url) => new URL(url).searchParams.get("limit") === "100")).toBe(true);
+    expect(urls).toContain("http://localhost:8080/v1/audit?limit=100&cursor=100");
+  });
+
   it("maps authoritative area and route names for filter labels", async () => {
     const client = new HttpPilotClient({
       baseUrl: "http://localhost:8080",
@@ -113,4 +137,12 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
 
 function json(value: unknown): Response {
   return new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } });
+}
+
+function debtorDto(index: number): Record<string, unknown> {
+  return { debtor_id: `debtor-${index}`, account_id: `account-${index}`, supply_id: `supply-${index}`, customer_name: "Synthetic", address: "Synthetic", references: "", meter_id: "meter", area: "A", locality: "B", route: "C", debt_cents: 100, months_pending: 1, updated_at: "2026-09-01T00:00:00.000Z", kardex: [], source: "PILOT_PROVISIONAL" };
+}
+
+function auditDto(index: number): Record<string, unknown> {
+  return { audit_id: `audit-${index}`, actor_id: "admin-1", actor_role: "ADMIN", action: "SYNTHETIC", result: "accepted", occurred_at: "2026-09-01T00:00:00.000Z", source: "PILOT_PROVISIONAL" };
 }

@@ -2,7 +2,7 @@ import { assertCan, permissionsForRole, type AuditEvent, type ConnectivityMode, 
 import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, RemoteResult } from "../../ports/authorization";
 import type { EvidenceUploadPort, SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
-import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
+import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
 
 interface HttpClientOptions {
   baseUrl: string;
@@ -60,6 +60,17 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   }
 
   async findDebtors(query: DebtorQuery): Promise<DebtorRecord[]> {
+    const all: DebtorRecord[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.findDebtorsPage(query, cursor);
+      all.push(...page.debtors);
+      cursor = page.nextCursor;
+    } while (cursor !== undefined);
+    return all;
+  }
+
+  async findDebtorsPage(query: DebtorQuery, cursor?: string): Promise<{ debtors: DebtorRecord[]; nextCursor?: string; total?: number }> {
     const session = this.requireSession(query.session);
     const params = new URLSearchParams();
     if (query.query?.trim()) params.set("query", query.query.trim());
@@ -68,8 +79,10 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     if ("route" in query && query.route?.trim()) params.set("route", query.route.trim());
     if (query.minMonthsPending !== undefined) params.set("min_months_pending", String(query.minMonthsPending));
     if (query.supplyStatus?.trim()) params.set("supply_status", query.supplyStatus.trim());
-    const response = await this.request<{ debtors: unknown[] }>(`/v1/debtors?${params}`, { method: "GET" }, session);
-    return response.debtors.map(mapDebtor);
+    params.set("limit", "100");
+    if (cursor !== undefined) params.set("cursor", cursor);
+    const response = await this.request<PilotDebtorsResponseDto>(`/v1/debtors?${params}`, { method: "GET" }, session);
+    return { debtors: response.debtors.map(mapDebtor), nextCursor: response.next_cursor ?? undefined, total: response.total };
   }
 
   async listTechnicians(session: Session): Promise<TechnicianRecord[]> {
@@ -142,9 +155,19 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
 
   async listAudit(query: { orderId?: string; session?: Session } = {}): Promise<AuditEvent[]> {
     const session = this.requireSession(query.session);
-    const params = query.orderId ? `?order_id=${encodeURIComponent(query.orderId)}` : "";
-    const response = await this.request<PilotAuditResponseDto>(`/v1/audit${params}`, { method: "GET" }, session);
-    return response.audit.map(mapAudit);
+    const params = new URLSearchParams();
+    if (query.orderId) params.set("order_id", query.orderId);
+    params.set("limit", "100");
+    const all: AuditEvent[] = [];
+    let cursor: string | undefined;
+    do {
+      if (cursor !== undefined) params.set("cursor", cursor);
+      else params.delete("cursor");
+      const response = await this.request<PilotAuditResponseDto>(`/v1/audit?${params}`, { method: "GET" }, session);
+      all.push(...response.audit.map(mapAudit));
+      cursor = response.next_cursor ?? undefined;
+    } while (cursor !== undefined);
+    return all;
   }
 
   async requestCut(input: AuthRequest): Promise<AuthResponse> {
