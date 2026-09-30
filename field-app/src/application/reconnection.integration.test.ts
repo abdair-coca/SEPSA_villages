@@ -126,8 +126,9 @@ describe("reconnection process", () => {
     const transport = new MockSyncTransport();
     transport.lookupResponse = { status: "not_found", operationId };
     const report = await new SyncEngine(repository, new MockConnectivity("online"), transport).syncOnce();
-    expect(report.synced).toBe(1);
+    expect(report.failed).toBe(1);
     expect(transport.lookups).toEqual([operationId]);
-    expect(transport.sent).toHaveLength(1);
+    expect(transport.sent).toHaveLength(0);
+    await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "failed", uncertain: true }]);
   });
 });

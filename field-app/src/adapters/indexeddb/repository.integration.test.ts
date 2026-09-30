@@ -90,7 +90,7 @@ function openVersionOneDatabase(name: string): Promise<IDBDatabase> {
 }
 
 describe("IndexedDB local repository", () => {
-  it("upgrades a v1 database by adding drafts and preserves all seven stores and records", async () => {
+  it("upgrades a v1 database with new stores and preserves all existing records without inventing transitions", async () => {
     const dbName = "draft-upgrade-v1";
     dbNames.push(dbName);
     const oldDb = await openVersionOneDatabase(dbName);
@@ -117,7 +117,7 @@ describe("IndexedDB local repository", () => {
     const upgraded = await openFieldDatabase(dbName);
     expect(upgraded.version).toBe(FIELD_DB_VERSION);
     expect([...upgraded.objectStoreNames].sort()).toEqual([...FIELD_STORES].sort());
-    const read = upgraded.transaction([...expected.map((entry) => entry.store), "drafts"], "readonly");
+    const read = upgraded.transaction([...expected.map((entry) => entry.store), "drafts", "physicalTransitions"], "readonly");
     for (const entry of expected) {
       await expect(new Promise((resolve, reject) => {
         const request = read.objectStore(entry.store).get(entry.value[entry.keyPath]);
@@ -127,6 +127,11 @@ describe("IndexedDB local repository", () => {
     }
     expect(await new Promise<number>((resolve, reject) => {
       const request = read.objectStore("drafts").count();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    })).toBe(0);
+    expect(await new Promise<number>((resolve, reject) => {
+      const request = read.objectStore("physicalTransitions").count();
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     })).toBe(0);

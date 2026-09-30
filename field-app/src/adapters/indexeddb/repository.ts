@@ -1,11 +1,14 @@
 import type {
   EvidenceReference,
   OperationRecord,
+  PhysicalStatus,
+  PhysicalTransition,
   VisitRecord,
   WorkOrder,
   WorkPackage,
   WorkPackageEnvelope,
 } from "../../domain";
+import { generateOperationId } from "../../domain";
 import type {
   AtomicOperationChange,
   CaptureDraft,
@@ -169,6 +172,16 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return record as StoredRecord;
   }
 
+  async listPhysicalTransitions(operationId: string): Promise<PhysicalTransition[]> {
+    const db = await this.dbPromise;
+    const transaction = db.transaction("physicalTransitions", "readonly");
+    const transitions = await requestResult(transaction.objectStore("physicalTransitions").getAll()) as PhysicalTransition[];
+    await transactionComplete(transaction);
+    return transitions
+      .filter((item) => item.operationId === operationId && this.identityMatches(item))
+      .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt) || left.before.orderVersion - right.before.orderVersion);
+  }
+
   async getCaptureDraft(key: CaptureDraftKey): Promise<CaptureDraft | undefined> {
     this.assertDraftScope(key);
     const draft = await this.readStore<StoredCaptureDraft>("drafts", this.draftKey(key));
@@ -223,7 +236,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
       return { status: "rejected", reason: "Operation is outside this technician and device scope." };
     }
     const db = await this.dbPromise;
-    const transaction = db.transaction(["operations", "visits", "orders", "sync", "evidence"], "readwrite");
+    const transaction = db.transaction(["operations", "visits", "orders", "sync", "evidence", "physicalTransitions"], "readwrite");
     const operations = transaction.objectStore("operations");
     const visits = transaction.objectStore("visits");
     const existing = (await requestResult(operations.get(record.operationId))) ?? (await requestResult(visits.get(record.operationId)));
@@ -256,6 +269,9 @@ export class IndexedDbLocalRepository implements LocalRepository {
       transaction.objectStore("orders").put(toStoredOrder(change.order, this.orderKey(change.order.orderId)));
       transaction.objectStore("sync").put(change.syncItem);
       if (change.evidence) await this.putEvidence(transaction, change.evidence);
+      if (record.kind !== "VISIT" && record.physicalStatus !== (current.physicalStatus ?? "NONE")) {
+        this.appendPhysicalTransition(transaction, record, current.physicalStatus ?? "NONE", record.physicalStatus, current.version ?? expectedOrderVersion, change.order.version ?? expectedOrderVersion + 1, record.updatedAt, "PHYSICAL_ACTION_CLAIMED");
+      }
     } catch (error) {
       transaction.abort();
       throw error;
@@ -325,7 +341,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
       throw new Error("Operation is outside this technician and device scope.");
     }
     const db = await this.dbPromise;
-    const storeNames = change.order ? ["operations", "visits", "orders", "sync", "evidence"] : ["operations", "visits", "sync", "evidence"];
+    const storeNames = ["operations", "visits", "orders", "sync", "evidence", "physicalTransitions"];
     const transaction = db.transaction(storeNames, "readwrite");
     if (change.order && expectedOrderVersion !== undefined) {
       const current = fromStoredOrder(await requestResult(transaction.objectStore("orders").get(this.orderKey(record.orderId))) as StoredOrderOrder | undefined);
@@ -361,6 +377,12 @@ export class IndexedDbLocalRepository implements LocalRepository {
       this.putRecord(transaction, record);
       transaction.objectStore("sync").put(change.syncItem);
       if (change.evidence) await this.putEvidence(transaction, change.evidence);
+      if (record.kind !== "VISIT" && existing && existing.kind !== "VISIT" && record.physicalStatus !== existing.physicalStatus) {
+        const order = change.order ?? fromStoredOrder(await requestResult(transaction.objectStore("orders").get(this.orderKey(record.orderId))) as StoredOrderOrder | undefined);
+        const afterVersion = change.order?.version ?? order?.version;
+        if (afterVersion === undefined) throw new Error("Physical transition requires an order version.");
+        this.appendPhysicalTransition(transaction, record, existing.physicalStatus, record.physicalStatus, expectedOrderVersion ?? order?.version ?? afterVersion, afterVersion, record.updatedAt, record.errorCode ?? (record.physicalStatus === "CONFIRMED" ? "REMOTE_RECEIPT_VALIDATED" : "PHYSICAL_STATUS_UPDATED"));
+      }
     } catch (error) {
       transaction.abort();
       throw error;
@@ -421,7 +443,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean; remoteConfirmed?: boolean },
   ): Promise<void> {
     const db = await this.dbPromise;
-    const transaction = db.transaction(["operations", "visits", "orders", "sync"], "readwrite");
+    const transaction = db.transaction(["operations", "visits", "orders", "sync", "physicalTransitions"], "readwrite");
     const syncStore = transaction.objectStore("sync");
     const current = (await requestResult(syncStore.get(operationId))) as SyncItem | undefined;
     if (!current || !this.identityMatches(current)) {
@@ -453,17 +475,19 @@ export class IndexedDbLocalRepository implements LocalRepository {
         transaction.abort();
         throw new Error("Operation is outside this technician and device scope.");
       }
-      const confirmedRecord = options.remoteConfirmed && record.kind !== "VISIT"
-        ? { ...record, status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: status, errorCode: undefined } as OperationRecord
-        : { ...record, syncStatus: status, errorCode: options.errorCode } as StoredRecord;
-      this.putRecord(transaction, confirmedRecord);
       if (options.remoteConfirmed && record.kind !== "VISIT") {
+        const confirmedRecord: OperationRecord = { ...record, status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: status, errorCode: undefined, updatedAt: options.now };
+        this.putRecord(transaction, confirmedRecord);
         const order = fromStoredOrder(await requestResult(transaction.objectStore("orders").get(this.orderKey(record.orderId))) as StoredOrderOrder | undefined);
         if (!order) {
           transaction.abort();
           throw new Error("Confirmed operation order is missing from local repository.");
         }
-        transaction.objectStore("orders").put(toStoredOrder({ ...order, status: record.action === "CUT" ? "EJECUTADO" : "RECONEXIÓN", physicalStatus: "CONFIRMED" }, this.orderKey(order.orderId)));
+        const nextOrder: WorkOrder = { ...order, status: record.action === "CUT" ? "EJECUTADO" : "RECONEXIÓN", physicalStatus: "CONFIRMED", version: (order.version ?? 0) + 1 };
+        transaction.objectStore("orders").put(toStoredOrder(nextOrder, this.orderKey(order.orderId)));
+        if (record.physicalStatus !== "CONFIRMED") this.appendPhysicalTransition(transaction, confirmedRecord, record.physicalStatus, "CONFIRMED", order.version ?? 0, nextOrder.version ?? 0, options.now, "REMOTE_RECEIPT_VALIDATED");
+      } else {
+        this.putRecord(transaction, { ...record, syncStatus: status, errorCode: options.errorCode } as StoredRecord);
       }
     }
     await transactionComplete(transaction);
@@ -480,10 +504,10 @@ export class IndexedDbLocalRepository implements LocalRepository {
   async recoverPhysicalUnknown(
     operationId: string,
     now: string,
-    lease?: { owner: string; leaseToken: string },
+    lease?: { owner: string; leaseToken: string; errorCode?: string },
   ): Promise<StoredRecord | undefined> {
     const db = await this.dbPromise;
-    const transaction = db.transaction(["sync", "operations", "visits", "orders"], "readwrite");
+    const transaction = db.transaction(["sync", "operations", "visits", "orders", "physicalTransitions"], "readwrite");
     const syncStore = transaction.objectStore("sync");
     const currentSync = await requestResult(syncStore.get(operationId)) as SyncItem | undefined;
     if (!currentSync || !this.identityMatches(currentSync)) {
@@ -515,16 +539,19 @@ export class IndexedDbLocalRepository implements LocalRepository {
         transaction.abort();
         throw new Error("Physical recovery cannot prove current order version.");
       }
+      const reason = lease?.errorCode ?? "RESPONSE_UNKNOWN";
       nextRecord = {
         ...record,
         status: "PHYSICAL_UNKNOWN",
         physicalStatus: "PHYSICAL_UNKNOWN",
         syncStatus: "failed",
-        errorCode: "RESPONSE_UNKNOWN",
+        errorCode: reason,
         updatedAt: now,
       } as OperationRecord;
-      nextSync = { ...nextSync, errorCode: "RESPONSE_UNKNOWN" };
-      transaction.objectStore("orders").put(toStoredOrder({ ...currentOrder, physicalStatus: "PHYSICAL_UNKNOWN", version: currentOrder.version + 1 }, this.orderKey(currentOrder.orderId)));
+      nextSync = { ...nextSync, errorCode: reason };
+      const nextOrder = { ...currentOrder, physicalStatus: "PHYSICAL_UNKNOWN" as const, version: currentOrder.version + 1 };
+      transaction.objectStore("orders").put(toStoredOrder(nextOrder, this.orderKey(currentOrder.orderId)));
+      this.appendPhysicalTransition(transaction, nextRecord, currentOrder.physicalStatus ?? "NONE", "PHYSICAL_UNKNOWN", currentOrder.version, nextOrder.version, now, reason);
     }
     if (!lease) {
       nextSync = { ...nextSync, leaseOwner: undefined, leaseExpiresAt: undefined, leaseToken: undefined };
@@ -587,6 +614,32 @@ export class IndexedDbLocalRepository implements LocalRepository {
 
   private putRecord(transaction: IDBTransaction, record: StoredRecord): void {
     transaction.objectStore(record.kind === "VISIT" ? "visits" : "operations").put(record);
+  }
+
+  private appendPhysicalTransition(
+    transaction: IDBTransaction,
+    record: OperationRecord,
+    before: PhysicalStatus,
+    after: PhysicalStatus,
+    beforeVersion: number,
+    afterVersion: number,
+    occurredAt: string,
+    reason: string,
+  ): void {
+    const transition: PhysicalTransition = {
+      transitionId: generateOperationId("physical-transition"),
+      operationId: record.operationId,
+      orderId: record.orderId,
+      actorId: record.technicianId,
+      actorRole: "TECHNICIAN",
+      technicianId: record.technicianId,
+      deviceId: record.deviceId,
+      occurredAt,
+      reason,
+      before: { physicalStatus: before, orderVersion: beforeVersion },
+      after: { physicalStatus: after, orderVersion: afterVersion },
+    };
+    transaction.objectStore("physicalTransitions").add(transition);
   }
 
   private identityMatches(value: { technicianId?: string; deviceId?: string }): boolean {

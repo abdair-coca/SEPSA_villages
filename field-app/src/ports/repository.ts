@@ -1,5 +1,6 @@
 import type {
   OperationRecord,
+  PhysicalTransition,
   EvidenceReference,
   FieldCapture,
   VisitRecord,
@@ -53,6 +54,7 @@ export interface LocalRepository {
   loadAssignedPackage(): Promise<WorkPackage>;
   getOrder(orderId: string): Promise<WorkOrder | undefined>;
   getRecord(operationId: string): Promise<StoredRecord | undefined>;
+  listPhysicalTransitions?(operationId: string): Promise<PhysicalTransition[]>;
   /** Atomically claims operation id and order state using expected order version. */
   claimCut(change: AtomicOperationChange, expectedOrderVersion: number): Promise<ClaimResult>;
   /** Same atomic claim as a cut, but for a reconnection action. */
@@ -64,7 +66,7 @@ export interface LocalRepository {
   listSyncItems(): Promise<SyncItem[]>;
   getEvidence?(evidenceId: string): Promise<EvidenceReference | undefined>;
   claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number, options?: { allowManualReview?: boolean }): Promise<SyncClaimResult>;
-  recoverPhysicalUnknown(operationId: string, now: string, lease?: { owner: string; leaseToken: string }): Promise<StoredRecord | undefined>;
+  recoverPhysicalUnknown(operationId: string, now: string, lease?: { owner: string; leaseToken: string; errorCode?: string }): Promise<StoredRecord | undefined>;
   updateSyncState(
     operationId: string,
     status: SyncItem["status"],

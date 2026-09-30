@@ -1,7 +1,8 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
 import { executeCut } from "./process";
-import { LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON, SyncEngine } from "./sync";
+import { executeOfflineVisit } from "./visit";
+import { LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON, SyncEngine, toPayload } from "./sync";
 import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
 import { MockAuthorizationAdapter, MockConnectivity, MockSyncTransport } from "../adapters/mock";
 import { ResponseLostError } from "../ports/authorization";
@@ -41,30 +42,81 @@ async function persistUncertain(repository: IndexedDbLocalRepository, operationI
 }
 
 describe("durable sync engine", () => {
-  it("looks up uncertain operation before forwarding it", async () => {
+  it("keeps not-found operation uncertain and never forwards it again", async () => {
     const repository = await setup("sync-lookup");
     await persistUncertain(repository, "operation-lookup-00000000-0000-4000-8000-000000000017");
     const transport = new MockSyncTransport();
-    transport.response = { status: "acknowledged", operationId: "operation-lookup-00000000-0000-4000-8000-000000000017" };
     transport.lookupResponse = { status: "not_found", operationId: "operation-lookup-00000000-0000-4000-8000-000000000017" };
     const engine = new SyncEngine(repository, new MockConnectivity("online"), transport);
     const report = await engine.syncOnce();
-    expect(report.synced).toBe(1);
+    expect(report.failed).toBe(1);
     expect(transport.lookups).toEqual(["operation-lookup-00000000-0000-4000-8000-000000000017"]);
-    expect(transport.sent.map((item) => item.operationId)).toEqual(["operation-lookup-00000000-0000-4000-8000-000000000017"]);
-    expect(await repository.listSyncItems()).toMatchObject([{ status: "synced", uncertain: false, attempts: 1 }]);
+    expect(transport.sent).toHaveLength(0);
+    expect(await repository.listSyncItems()).toMatchObject([{ status: "failed", uncertain: true, attempts: 1 }]);
+    const history = await repository.listPhysicalTransitions("operation-lookup-00000000-0000-4000-8000-000000000017");
+    expect(history).toMatchObject([
+      { actorId: "tech-1", actorRole: "TECHNICIAN", deviceId: "device-1", reason: "PHYSICAL_ACTION_CLAIMED", before: { physicalStatus: "NONE", orderVersion: 1 }, after: { physicalStatus: "CLAIMED", orderVersion: 2 } },
+      { actorId: "tech-1", actorRole: "TECHNICIAN", deviceId: "device-1", reason: "RESPONSE_LOST", before: { physicalStatus: "CLAIMED", orderVersion: 2 }, after: { physicalStatus: "PHYSICAL_UNKNOWN", orderVersion: 3 } },
+    ]);
+    await engine.syncOnce();
+    expect(transport.sent).toHaveLength(0);
+    expect(await repository.getRecord("operation-lookup-00000000-0000-4000-8000-000000000017")).toMatchObject({ status: "PHYSICAL_UNKNOWN", physicalStatus: "PHYSICAL_UNKNOWN" });
   });
 
   it("does not forward when lookup confirms remote processing", async () => {
     const repository = await setup("sync-confirmed");
     await persistUncertain(repository, "operation-confirmed-00000000-0000-4000-8000-000000000018");
     const transport = new MockSyncTransport();
-    transport.lookupResponse = { status: "confirmed", operationId: "operation-confirmed-00000000-0000-4000-8000-000000000018" };
+    const record = await repository.getRecord("operation-confirmed-00000000-0000-4000-8000-000000000018");
+    if (!record || record.kind === "VISIT") throw new Error("Expected physical operation.");
+    transport.lookupResponse = { status: "confirmed", ...toPayload(record) };
     const engine = new SyncEngine(repository, new MockConnectivity("online"), transport);
     await engine.syncOnce();
     expect(transport.lookups).toEqual(["operation-confirmed-00000000-0000-4000-8000-000000000018"]);
     expect(transport.sent).toHaveLength(0);
     expect(await repository.listSyncItems()).toMatchObject([{ status: "synced", uncertain: false, attempts: 1 }]);
+  });
+
+  it("reconciles a lost response through one exact lookup without a second send", async () => {
+    const repository = await setup("sync-lost-response");
+    const operationId = "operation-lost-response-00000000-0000-4000-8000-000000000029";
+    const authorization = new MockAuthorizationAdapter();
+    authorization.requestResponse = { status: "authorized", grant: { ...authGrant(operationId), consumption: "deferred" } };
+    await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-lost-response", orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
+    const transport = new MockSyncTransport();
+    transport.response = { status: "unknown", operationId, errorCode: "RESPONSE_LOST" };
+    const engine = new SyncEngine(repository, new MockConnectivity("online"), transport);
+    await expect(engine.syncOnce()).resolves.toMatchObject({ failed: 1 });
+    const unknown = await repository.getRecord(operationId);
+    if (!unknown || unknown.kind === "VISIT") throw new Error("Expected physical operation.");
+    expect(unknown).toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN", status: "PHYSICAL_UNKNOWN" });
+    transport.lookupResponse = { status: "confirmed", ...toPayload(unknown) };
+    await expect(engine.syncOnce()).resolves.toMatchObject({ synced: 1 });
+    expect(transport.sent).toHaveLength(1);
+    expect(transport.lookups).toEqual([operationId]);
+    await expect(repository.getRecord(operationId)).resolves.toMatchObject({ physicalStatus: "CONFIRMED", syncStatus: "synced" });
+  });
+
+  it("rejects lookup receipts with mismatched actor, device, order, version, or capture", async () => {
+    const overrides = [
+      { technicianId: "other-tech" },
+      { deviceId: "other-device" },
+      { orderId: "other-order" },
+      { orderVersion: 2 },
+      { fieldCapture: { ...validFieldCapture("x"), reading: { ...validFieldCapture("x").reading, value: 456 } } },
+    ];
+    for (const [index, override] of overrides.entries()) {
+      const repository = await setup(`sync-proof-mismatch-${index}`);
+      const operationId = `operation-proof-mismatch-${index}-00000000-0000-4000-8000-00000000002a`;
+      await persistUncertain(repository, operationId);
+      const record = await repository.getRecord(operationId);
+      if (!record || record.kind === "VISIT") throw new Error("Expected physical operation.");
+      const transport = new MockSyncTransport();
+      transport.lookupResponse = { status: "confirmed", ...toPayload(record), ...override };
+      await expect(new SyncEngine(repository, new MockConnectivity("online"), transport).syncOnce()).resolves.toMatchObject({ failed: 1 });
+      expect(transport.sent).toHaveLength(0);
+      await expect(repository.getRecord(operationId)).resolves.toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN" });
+    }
   });
 
   it("preserves local and remote versions as conflict", async () => {
@@ -81,7 +133,7 @@ describe("durable sync engine", () => {
     expect(await repository.listSyncItems()).toMatchObject([{ status: "failed", errorCode: "REMOTE_CONFLICT" }]);
   });
 
-  it("retries the legacy local-photo conflict without deleting the local evidence", async () => {
+  it("keeps a legacy local-photo conflict in review without retrying its cut", async () => {
     const repository = await setup("sync-local-photo-retry");
     const operationId = "operation-local-photo-retry-00000000-0000-4000-8000-00000000001f";
     const evidenceId = "evidence-local-photo-retry";
@@ -97,10 +149,9 @@ describe("durable sync engine", () => {
     await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "failed", manualReview: true }]);
     await expect(repository.getEvidence(evidenceId)).resolves.toMatchObject({ evidenceId, operationId });
 
-    transport.response = { status: "acknowledged", operationId };
-    await expect(engine.syncOnce()).resolves.toMatchObject({ synced: 1 });
-    expect(transport.sent).toHaveLength(2);
-    await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "synced", manualReview: false }]);
+    await expect(engine.syncOnce()).resolves.toMatchObject({ synced: 0, skipped: 1 });
+    expect(transport.sent).toHaveLength(1);
+    await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "failed", manualReview: true }]);
     await expect(repository.getEvidence(evidenceId)).resolves.toMatchObject({ evidenceId, operationId });
   });
 
@@ -125,6 +176,24 @@ describe("durable sync engine", () => {
     transport.response = { status: "acknowledged", operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b" };
     await new SyncEngine(repository, new MockConnectivity("online"), transport).syncOnce();
     expect(transport.sent[0]).toMatchObject({ action: "VISIT", attemptedAction: "CUT", operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b" });
+  });
+
+  it("allows cut authorization with authoritative version after a synced visit", async () => {
+    const repository = await setup("sync-visit-then-cut");
+    const visitId = "operation-visit-before-cut-00000000-0000-4000-8000-00000000002b";
+    await executeOfflineVisit({ repository, order: cutOrder, operationId: visitId, technicianId: "tech-1", deviceId: "device-1", reason: "Visita de verificación", now: "2026-09-12T09:00:00.000Z" });
+    const transport = new MockSyncTransport();
+    await expect(new SyncEngine(repository, new MockConnectivity("online"), transport).syncOnce()).resolves.toMatchObject({ synced: 1 });
+    await expect(repository.getOrder("order-sync")).resolves.toMatchObject({ version: 1, physicalStatus: "NONE" });
+
+    const operationId = "operation-cut-after-visit-00000000-0000-4000-8000-00000000002c";
+    const authorization = new MockAuthorizationAdapter();
+    authorization.requestResponse = { status: "authorized", grant: { ...authGrant(operationId), consumption: "deferred" } };
+    const order = await repository.getOrder("order-sync");
+    if (!order) throw new Error("Expected assigned order.");
+    const result = await executeCut({ repository, authorization, order, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-after-visit", orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
+    expect(result.outcome).toBe("pending_sync");
+    expect(authorization.requestCalls).toMatchObject([{ orderVersion: 1, operationId }]);
   });
 
   it("sends deferred authorization data and confirms local state after server acknowledgement", async () => {
@@ -156,7 +225,11 @@ describe("durable sync engine", () => {
     expect(report.synced).toBe(1);
     expect(transport.sent[0]).toMatchObject({ orderVersion: 1, authorizationId: "auth-deferred-cut", authorizationToken: "opaque-deferred-token" });
     await expect(repository.getRecord(operationId)).resolves.toMatchObject({ status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: "synced" });
-    await expect(repository.getOrder("order-sync")).resolves.toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED", version: 2 });
+    await expect(repository.getOrder("order-sync")).resolves.toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED", version: 3 });
+    await expect(repository.listPhysicalTransitions(operationId)).resolves.toMatchObject([
+      { before: { physicalStatus: "NONE", orderVersion: 1 }, after: { physicalStatus: "CLAIMED", orderVersion: 2 } },
+      { before: { physicalStatus: "CLAIMED", orderVersion: 2 }, after: { physicalStatus: "CONFIRMED", orderVersion: 3 }, reason: "REMOTE_RECEIPT_VALIDATED" },
+    ]);
   });
 
   it("keeps ack id mismatch uncertain and never retries manual-review conflict", async () => {
@@ -183,7 +256,7 @@ describe("durable sync engine", () => {
     expect(await conflictRepository.listSyncItems()).toMatchObject([{ status: "failed", manualReview: true }]);
   });
 
-  it("looks up recovered cut intents before send", async () => {
+  it("keeps recovered cut intents unknown when lookup does not find a receipt", async () => {
     const repository = await setup("sync-recovered-intent");
     const operationId = "operation-recovered-00000000-0000-4000-8000-000000000027";
     const operation: OperationRecord = {
@@ -211,9 +284,10 @@ describe("durable sync engine", () => {
     const transport = new MockSyncTransport();
     transport.lookupResponse = { status: "not_found", operationId };
     const report = await new SyncEngine(repository, new MockConnectivity("online"), transport).syncOnce();
-    expect(report.synced).toBe(1);
+    expect(report.failed).toBe(1);
     expect(transport.lookups).toEqual([operationId]);
-    expect(transport.sent).toHaveLength(1);
+    expect(transport.sent).toHaveLength(0);
+    await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "failed", uncertain: true }]);
   });
 
   it("recovers pending claimed intents before lookup and never sends them", async () => {

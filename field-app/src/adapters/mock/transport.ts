@@ -28,7 +28,9 @@ export class MockSyncTransport implements SyncTransport {
     this.sent.push(payload);
     return withRetries(() => {
       this.sendAttempts += 1;
-      return this.networkCall(() => ({ ...structuredClone(this.response), operationId: this.response.operationId || payload.operationId }));
+      return this.networkCall(() => this.response.status === "acknowledged"
+        ? { ...receiptFor(payload), ...structuredClone(this.response), operationId: this.response.operationId || payload.operationId }
+        : { ...structuredClone(this.response), operationId: this.response.operationId || payload.operationId });
     }, this.retryPolicy);
   }
 
@@ -45,4 +47,17 @@ export class MockSyncTransport implements SyncTransport {
     if (this.mode === "weak" && this.weakAttempts++ < this.weakFailures) throw new NetworkUnknownError();
     return response();
   }
+}
+
+function receiptFor(payload: SyncPayload) {
+  return {
+    orderId: payload.orderId,
+    technicianId: payload.technicianId,
+    deviceId: payload.deviceId,
+    orderVersion: payload.orderVersion,
+    action: payload.action,
+    recordedAt: payload.recordedAt,
+    evidenceRefs: [...payload.evidenceRefs],
+    fieldCapture: structuredClone(payload.fieldCapture),
+  };
 }

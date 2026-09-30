@@ -300,6 +300,20 @@ export interface OperationRecord {
   fieldCapture?: FieldCapture;
 }
 
+export interface PhysicalTransition {
+  transitionId: string;
+  operationId: string;
+  orderId: string;
+  actorId: string;
+  actorRole: Role;
+  technicianId: string;
+  deviceId: string;
+  occurredAt: string;
+  reason: string;
+  before: { physicalStatus: PhysicalStatus; orderVersion: number };
+  after: { physicalStatus: PhysicalStatus; orderVersion: number };
+}
+
 export function generateOperationId(prefix = "operation"): string {
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/i.test(prefix)) {
     throw new Error("Operation identifier prefix is invalid.");

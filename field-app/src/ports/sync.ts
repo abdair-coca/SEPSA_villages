@@ -1,4 +1,5 @@
 import type { FieldCapture, SyncStatus } from "../domain";
+import type { RemoteOperationReceipt } from "./authorization";
 
 export interface SyncItem {
   operationId: string;
@@ -42,7 +43,7 @@ export interface SyncPayload {
 }
 
 export type SyncTransportResponse =
-  | { status: "acknowledged"; operationId: string }
+  | ({ status: "acknowledged"; operationId: string } & Partial<RemoteOperationReceipt>)
   | { status: "conflict"; operationId: string; remote: unknown; reason: string }
   | { status: "unknown"; operationId: string; errorCode?: string };
 

@@ -1,7 +1,8 @@
-import { assertCan, permissionsForRole, type AuditEvent, type BatchOrderSkip, type ConnectivityMode, type CreateOrdersBatchResult, type DataSource, type DebtorQuery, type DebtorRecord, type DemoCredentials, type KardexEntry, type OperationRecord, type Session, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackageEnvelope } from "../../domain";
+import { assertCan, permissionsForRole, type AuditEvent, type ConnectivityMode, type CreateOrdersBatchResult, type DataSource, type DebtorQuery, type DebtorRecord, type DemoCredentials, type KardexEntry, type OperationRecord, type Session, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackageEnvelope } from "../../domain";
 import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, RemoteResult } from "../../ports/authorization";
 import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
+import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
 
 interface HttpClientOptions {
   baseUrl: string;
@@ -9,12 +10,6 @@ interface HttpClientOptions {
 }
 
 interface ApiErrorBody { code?: string; message?: string; }
-interface LoginResponse { session_id: string; session_token?: string; expires_at: string; user: { user_id: string; username: string; display_name: string; role: "ADMIN" | "TECHNICIAN" }; }
-interface BatchOrderResponse { batch_id: string; requested_debtor_ids: string[]; created: unknown[]; skipped: Array<{ debtor_id: string; reason: BatchOrderSkip["reason"]; message: string }>; }
-interface AuthorizationResponse { authorization_id: string; token: string; order_id: string; technician_id: string; device_id: string; operation_id: string; version: number; issued_at: string; expires_at: string; }
-interface PackageResponse { package: { package_id: string; technician_id: string; device_id: string; version: number; downloaded_at: string; orders: unknown[] }; checksum: string; }
-interface TechnicianResponse { technicians: unknown[]; }
-
 export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, AuthorizationAdapter, SyncTransport {
   readonly simulation = "PILOT_PROVISIONAL" as const;
   private readonly baseUrl: string;
@@ -33,7 +28,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   }
 
   async authenticate(input: DemoCredentials): Promise<Session> {
-    const response = await this.request<LoginResponse>("/v1/auth/login", { method: "POST", body: input });
+    const response = await this.request<PilotLoginResponseDto>("/v1/auth/login", { method: "POST", body: input });
     const session: Session = {
       sessionId: response.session_id,
       userId: response.user.user_id,
@@ -80,32 +75,32 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
 
   async listTechnicians(session: Session): Promise<TechnicianRecord[]> {
     const authorized = this.requireSession(session);
-    const response = await this.request<TechnicianResponse>("/v1/technicians", { method: "GET" }, authorized);
+    const response = await this.request<PilotTechnicianResponseDto>("/v1/technicians", { method: "GET" }, authorized);
     return response.technicians.map(mapTechnician);
   }
 
   async createOrder(input: { operationId: string; debtorId: string; purpose: "CUT"; session?: Session }): Promise<WorkOrder> {
     const session = this.requireSession(input.session);
-    const response = await this.request<{ order: unknown } | unknown>("/v1/orders", { method: "POST", body: { operation_id: input.operationId, debtor_id: input.debtorId, purpose: input.purpose } }, session);
+    const response = await this.request<PilotOrderResponseDto>("/v1/orders", { method: "POST", body: { operation_id: input.operationId, debtor_id: input.debtorId, purpose: input.purpose } }, session);
     return mapOrder("order" in asRecord(response) ? asRecord(response).order : response);
   }
 
   async createOrdersBatch(input: { batchId: string; debtorIds: string[]; purpose: "CUT"; session?: Session }): Promise<CreateOrdersBatchResult> {
     const session = this.requireSession(input.session);
-    const response = await this.request<BatchOrderResponse>("/v1/orders/batch", { method: "POST", body: { batch_id: input.batchId, debtor_ids: input.debtorIds, purpose: input.purpose } }, session);
+    const response = await this.request<PilotBatchOrderResponseDto>("/v1/orders/batch", { method: "POST", body: { batch_id: input.batchId, debtor_ids: input.debtorIds, purpose: input.purpose } }, session);
     return { batchId: response.batch_id, requestedDebtorIds: response.requested_debtor_ids, created: response.created.map(mapOrder), skipped: response.skipped.map((item) => ({ debtorId: item.debtor_id, reason: item.reason, message: item.message })) };
   }
 
   async assignOrder(input: { operationId: string; orderId: string; technicianId: string; expectedOrderVersion: number; session?: Session }): Promise<WorkOrder> {
     const session = this.requireSession(input.session);
-    const response = await this.request<unknown>(`/v1/orders/${encodeURIComponent(input.orderId)}/assignment`, { method: "POST", body: { operation_id: input.operationId, technician_id: input.technicianId, expected_version: input.expectedOrderVersion } }, session);
+    const response = await this.request<PilotOrderResponseDto>(`/v1/orders/${encodeURIComponent(input.orderId)}/assignment`, { method: "POST", body: { operation_id: input.operationId, technician_id: input.technicianId, expected_version: input.expectedOrderVersion } }, session);
     return mapOrder(response);
   }
 
   async downloadAssigned(technicianId: string, deviceId: string, session?: Session): Promise<WorkPackageEnvelope> {
     const authorized = this.requireSession(session);
     if (authorized.userId !== technicianId) throw new Error("Technician identity does not match session.");
-    const response = await this.request<PackageResponse>(`/v1/technician/orders?device_id=${encodeURIComponent(deviceId)}`, { method: "GET" }, authorized);
+    const response = await this.request<PilotPackageResponseDto>(`/v1/technician/orders?device_id=${encodeURIComponent(deviceId)}`, { method: "GET" }, authorized);
     if (response.checksum !== await digestJson(response.package)) throw new Error("Server work package integrity validation failed.");
     const workPackage = {
       packageId: response.package.package_id,
@@ -128,7 +123,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   async authorizeTechnicalOrder(input: TechnicalOrderAuthorizationInput): Promise<TechnicalOrderAuthorizationResult> {
     const session = this.requireSession(input.session);
     try {
-      await this.request<AuthorizationResponse>("/v1/authorizations/cut", { method: "POST", body: { operation_id: input.operationId, order_id: input.orderId, device_id: input.deviceId, order_version: input.orderVersion } }, session);
+      await this.request<PilotAuthorizationResponseDto>("/v1/authorizations/cut", { method: "POST", body: { operation_id: input.operationId, order_id: input.orderId, device_id: input.deviceId, order_version: input.orderVersion } }, session);
       return { status: "authorized", order: { orderId: input.orderId, assignedTechnicianId: input.technicianId, status: "GENERADO", physicalStatus: "NONE", version: input.orderVersion } };
     } catch (error) {
       return { status: "not_authorized", errorCode: errorCode(error, "AUTHORIZATION_UNKNOWN") };
@@ -149,13 +144,13 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   async listAudit(query: { orderId?: string; session?: Session } = {}): Promise<AuditEvent[]> {
     const session = this.requireSession(query.session);
     const params = query.orderId ? `?order_id=${encodeURIComponent(query.orderId)}` : "";
-    const response = await this.request<{ audit: unknown[] }>(`/v1/audit${params}`, { method: "GET" }, session);
+    const response = await this.request<PilotAuditResponseDto>(`/v1/audit${params}`, { method: "GET" }, session);
     return response.audit.map(mapAudit);
   }
 
   async requestCut(input: AuthRequest): Promise<AuthResponse> {
     const session = this.requireActiveSession();
-    const response = await this.request<AuthorizationResponse>("/v1/authorizations/cut", { method: "POST", body: { operation_id: input.operationId, order_id: input.orderId, device_id: input.deviceId, order_version: input.orderVersion } }, session);
+    const response = await this.request<PilotAuthorizationResponseDto>("/v1/authorizations/cut", { method: "POST", body: { operation_id: input.operationId, order_id: input.orderId, device_id: input.deviceId, order_version: input.orderVersion } }, session);
     return { operationId: response.operation_id, status: "authorized", grant: { authorizationId: response.authorization_id, token: response.token, orderId: response.order_id, technicianId: response.technician_id, deviceId: response.device_id, operationId: response.operation_id, version: response.version, issuedAt: response.issued_at, expiresAt: response.expires_at, consumption: "deferred" } };
   }
 
@@ -165,8 +160,8 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
 
   async send(payload: SyncPayload, session = this.requireActiveSession()): Promise<SyncTransportResponse> {
     try {
-      await this.request<unknown>("/v1/sync/operations", { method: "POST", body: toWirePayload(payload) }, session);
-      return { status: "acknowledged", operationId: payload.operationId };
+      const response = await this.request<PilotSyncResponseDto>("/v1/sync/operations", { method: "POST", body: toWirePayload(payload) }, session);
+      return { status: "acknowledged", operationId: response.operation_id, orderId: response.order_id, technicianId: response.technician_id, deviceId: response.device_id, orderVersion: response.order_version, action: response.action, recordedAt: response.recorded_at, evidenceRefs: response.evidence_refs, fieldCapture: response.field_capture };
     } catch (error) {
       if (error instanceof HttpPilotError && error.status === 409) return { status: "conflict", operationId: payload.operationId, remote: error.body, reason: error.code };
       throw error;
@@ -174,8 +169,12 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   }
 
   async lookup(operationId: string): Promise<RemoteResult> {
-    const response = await this.request<{ status: "confirmed" | "not_found" | "unknown"; operation_id: string; error_code?: string }>(`/v1/sync/operations/${encodeURIComponent(operationId)}`, { method: "GET" }, this.requireActiveSession());
-    return { status: response.status, operationId: response.operation_id, errorCode: response.error_code };
+    const response = await this.request<PilotLookupResponseDto>(`/v1/sync/operations/${encodeURIComponent(operationId)}`, { method: "GET" }, this.requireActiveSession());
+    if (response.status !== "confirmed") return { status: response.status, operationId: response.operation_id, errorCode: response.error_code };
+    if (!response.order_id || !response.technician_id || !response.device_id || !response.action || !response.recorded_at || !Array.isArray(response.evidence_refs)) {
+      return { status: "unknown", operationId: response.operation_id, errorCode: "LOOKUP_RECEIPT_INCOMPLETE" };
+    }
+    return { status: "confirmed", operationId: response.operation_id, orderId: response.order_id, technicianId: response.technician_id, deviceId: response.device_id, orderVersion: response.order_version, action: response.action, recordedAt: response.recorded_at, evidenceRefs: response.evidence_refs, fieldCapture: response.field_capture };
   }
 
   private requireSession(session?: Session): Session {

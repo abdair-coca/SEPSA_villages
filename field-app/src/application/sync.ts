@@ -42,19 +42,13 @@ export class SyncEngine {
     await this.recoverAfterRestart();
     if (!this.connectivity.isUsable()) return { processed: 0, synced: 0, failed: 0, skipped: 0 };
     const report: SyncReport = { processed: 0, synced: 0, failed: 0, skipped: 0 };
-    const retryableManualReview = new Set(
-      (await this.repository.listConflicts?.() ?? [])
-        .filter((conflict) => isLegacyLocalEvidenceConflict(conflict.remote))
-        .map((conflict) => conflict.operationId),
-    );
     const items = await this.repository.listSyncItems();
     for (const item of items) {
-      const allowManualReview = Boolean(item.manualReview && retryableManualReview.has(item.operationId));
-      if (item.status === "synced" || (item.manualReview && !allowManualReview)) {
+      if (item.status === "synced" || item.manualReview) {
         report.skipped += 1;
         continue;
       }
-      const claim = await this.claim(item, allowManualReview);
+      const claim = await this.claim(item);
       if (claim.status !== "claimed") {
         report.skipped += 1;
         continue;
@@ -104,9 +98,13 @@ export class SyncEngine {
         await this.fail(item, "LOOKUP_OPERATION_ID_MISMATCH", true);
         return "failed";
       }
-      if (lookup.status === "confirmed") {
+      if (lookup.status === "confirmed" && receiptMatches(lookup, toPayload(record))) {
         await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true, manualReview: false });
         return "synced";
+      }
+      if (lookup.status === "confirmed") {
+        await this.fail(item, "LOOKUP_RECEIPT_MISMATCH", true);
+        return "failed";
       }
       await this.fail(item, lookup.status === "unknown" ? lookup.errorCode ?? "LOOKUP_UNKNOWN" : "LOOKUP_NOT_FOUND", true);
       return "failed";
@@ -124,15 +122,20 @@ export class SyncEngine {
         await this.fail(item, "LOOKUP_OPERATION_ID_MISMATCH", true);
         return "failed";
       }
-      if (lookup.status === "confirmed") {
+      if (lookup.status === "confirmed" && receiptMatches(lookup, toPayload(record))) {
         await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true, manualReview: false });
         return "synced";
+      }
+      if (lookup.status === "confirmed") {
+        await this.fail(item, "LOOKUP_RECEIPT_MISMATCH", true);
+        return "failed";
       }
       if (lookup.status === "unknown") {
         await this.fail(item, lookup.errorCode ?? "LOOKUP_UNKNOWN", true);
         return "failed";
       }
-      await this.repository.updateSyncState(item.operationId, "syncing", { owner: this.owner, leaseToken: leaseToken(item), now: this.now(), uncertain: false, errorCode: undefined });
+      await this.fail(item, "LOOKUP_NOT_FOUND", true);
+      return "failed";
     }
 
     try {
@@ -141,11 +144,16 @@ export class SyncEngine {
         await this.fail(item, "RESPONSE_OPERATION_ID_MISMATCH", true);
         return "failed";
       }
-      if (response.status === "acknowledged") {
+      if (response.status === "acknowledged" && receiptMatches(response, toPayload(record))) {
         await this.finish(item, "synced", { uncertain: false, remoteConfirmed: record.kind !== "VISIT", manualReview: false });
         return "synced";
       }
+      if (response.status === "acknowledged") {
+        await this.fail(item, "RESPONSE_RECEIPT_MISMATCH", true);
+        return "failed";
+      }
       if (response.status === "conflict") {
+        await this.markPhysicalUnknown(item, "REMOTE_CONFLICT");
         const conflict = {
           conflictId: `conflict-${item.operationId}-${this.now()}`,
           operationId: item.operationId,
@@ -172,7 +180,18 @@ export class SyncEngine {
   }
 
   private async fail(item: SyncItem, code: string, uncertain: boolean): Promise<void> {
+    if (uncertain) await this.markPhysicalUnknown(item, code);
     await this.finish(item, "failed", { errorCode: code, uncertain });
+  }
+
+  private async markPhysicalUnknown(item: SyncItem, errorCode: string): Promise<void> {
+    const record = await this.repository.getRecord(item.operationId);
+    if (!record || !isPendingPhysicalOperation(record)) return;
+    await this.repository.recoverPhysicalUnknown(item.operationId, this.now(), {
+      owner: this.owner,
+      leaseToken: leaseToken(item),
+      errorCode,
+    });
   }
 }
 
@@ -222,8 +241,27 @@ function isLeaseFencingError(error: unknown): boolean {
   return error instanceof Error && /fencing token|lease belongs to another owner/i.test(error.message);
 }
 
-function isLegacyLocalEvidenceConflict(remote: unknown): boolean {
-  return typeof remote === "object" && remote !== null && "message" in remote && typeof remote.message === "string" && remote.message === LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON;
+function receiptMatches(receipt: unknown, payload: SyncPayload): boolean {
+  if (!receipt || typeof receipt !== "object") return false;
+  const value = receipt as Partial<SyncPayload> & { operationId?: string };
+  return value.operationId === payload.operationId &&
+    value.orderId === payload.orderId &&
+    value.technicianId === payload.technicianId &&
+    value.deviceId === payload.deviceId &&
+    value.orderVersion === payload.orderVersion &&
+    value.action === payload.action &&
+    value.recordedAt === payload.recordedAt &&
+    canonicalJson(value.evidenceRefs) === canonicalJson(payload.evidenceRefs) &&
+    canonicalJson(value.fieldCapture) === canonicalJson(payload.fieldCapture);
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 export { toPayload };

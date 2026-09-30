@@ -1,4 +1,4 @@
-export const FIELD_DB_VERSION = 2;
+export const FIELD_DB_VERSION = 3;
 export const FIELD_STORES = [
   "package",
   "orders",
@@ -8,6 +8,7 @@ export const FIELD_STORES = [
   "sync",
   "conflicts",
   "drafts",
+  "physicalTransitions",
 ] as const;
 
 export type FieldStoreName = (typeof FIELD_STORES)[number];
@@ -65,6 +66,8 @@ function keyPathFor(storeName: FieldStoreName): string {
       return "conflictId";
     case "drafts":
       return "draftId";
+    case "physicalTransitions":
+      return "transitionId";
   }
 }
 

@@ -61,9 +61,20 @@ export interface ConsumeResponse {
 }
 
 export type RemoteResult =
-  | { status: "confirmed"; operationId?: string }
+  | ({ status: "confirmed"; operationId?: string } & Partial<RemoteOperationReceipt>)
   | { status: "not_found"; operationId?: string }
   | { status: "unknown"; operationId?: string; errorCode?: string };
+
+export interface RemoteOperationReceipt {
+  orderId: string;
+  technicianId: string;
+  deviceId: string;
+  orderVersion?: number;
+  action: "CUT" | "RECONNECTION" | "VISIT";
+  recordedAt: string;
+  evidenceRefs: string[];
+  fieldCapture?: import("../domain").FieldCapture;
+}
 
 export interface AuthorizationAdapter {
   requestCut(input: AuthRequest): Promise<AuthResponse>;
