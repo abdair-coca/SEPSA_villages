@@ -4,6 +4,7 @@
 @import "@fontsource/manrope/latin-700.css";
 @import "./styles/tokens.css";
 @import "./styles/shared-shell.css";
+@import "./styles/controls.css";
 
 * { box-sizing: border-box; }
 body { min-width: 0; margin: 0; background: var(--warm-bg); }
@@ -1483,30 +1484,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
    Bandeja de Cortes & Mobile Technician Cards (boceto-mvp alignment)
    ========================================================================== */
 
-.search-bar-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  margin-bottom: var(--space-12, 12px);
-}
-
-.search-bar-wrap .search-field {
-  flex: 1;
-  margin-bottom: 0;
-}
-
-.search-clear-btn {
-  position: absolute;
-  right: 10px;
-  background: transparent;
-  border: none;
-  color: var(--muted, #666);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 50%;
-}
-
 /* Quick filter chips */
 .filter-row {
   display: flex;
@@ -1840,7 +1817,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 .field-map-container--fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--layer-fullscreen);
   display: flex;
   width: 100vw;
   height: 100dvh;
@@ -2504,9 +2481,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 .panel-subtitle { max-width: 48ch; margin: var(--space-8) 0 0; color: var(--muted); font-size: 14px; line-height: 20px; }
 .count-badge { border: 1px solid #f0d5a2; color: #9b4a17; background: #fff6e1; }
 .admin-search-form--extended { display: grid; grid-template-columns: 1fr; gap: var(--space-12); }
-.search-field--large { min-height: 56px; margin-bottom: 0; padding-inline: var(--space-16); border-color: #cfc8bb; border-radius: var(--radius-8); }
-.search-field--large svg { width: 18px; height: 18px; color: var(--accent); }
-.search-field--large input { font-size: 16px; line-height: 24px; }
 .compact-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-8); }
 .admin-search-form--extended .text-field { margin: 0; }
 .admin-search-form--extended .text-field span { color: #59635d; font-size: 12px; line-height: 16px; font-weight: 700; }
@@ -2695,7 +2669,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .field-app .filter-chip {
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 var(--space-12);
   border-radius: var(--radius-6);
   box-shadow: none;
@@ -2769,7 +2743,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
 .field-app .order-card__action-btn,
 .field-app .order-card__map-btn {
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 var(--space-8);
   border: 0;
   border-radius: var(--radius-4);
@@ -3444,6 +3418,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 .notification__text {
   min-width: 0;
   flex: 1;
+  overflow-wrap: anywhere;
 }
 
 .notification__actions {
@@ -3462,7 +3437,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .notification__action {
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 var(--space-8);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -3470,8 +3445,8 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .notification__dismiss {
-  width: 36px;
-  height: 36px;
+  width: var(--control-height);
+  height: var(--control-height);
   padding: 0;
   font-size: 20px;
   line-height: 24px;
@@ -4164,7 +4139,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .order-list-row .order-card__action-btn {
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 var(--space-12);
   border: 1px solid var(--line);
   border-radius: var(--radius-6);
@@ -4259,29 +4234,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 }
 
-/* Standardized admin order review */
-:root {
-  --sepsa-bg: #F6F3ED;
-  --sepsa-surface: #FFFFFF;
-  --sepsa-surface-soft: #FBF9F5;
-  --sepsa-text: #172033;
-  --sepsa-text-secondary: #667085;
-  --sepsa-text-muted: #98A2B3;
-  --sepsa-border: #E5E7EB;
-  --sepsa-border-strong: #D0D5DD;
-  --sepsa-orange: #E85D04;
-  --sepsa-orange-hover: #C94D00;
-  --sepsa-orange-soft: #FFF1E6;
-  --sepsa-green: #1F9D61;
-  --sepsa-green-soft: #EAF8F1;
-  --sepsa-yellow: #D99A16;
-  --sepsa-yellow-soft: #FFF7DB;
-  --sepsa-red: #D92D20;
-  --sepsa-red-soft: #FEECEB;
-  --sepsa-blue: #2563EB;
-  --sepsa-blue-soft: #EEF4FF;
-  --sepsa-neutral-soft: #F2F4F7;
-}
+/* Standardized admin order review; palette lives in styles/tokens.css. */
 
 .operations-app {
   background: var(--sepsa-bg);
@@ -5834,15 +5787,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
 /* Technician mobile workspace: calm, operational, and thumb-first. */
 .field-app {
-  --ink: #172033;
-  --muted: #68717d;
-  --warm-bg: #f6f3ed;
-  --surface: #fffdf9;
-  --paper: #ffffff;
-  --line: #e8e1d7;
-  --accent: #e85d04;
-  --accent-soft: #fff0e4;
-  --warning: #b87915;
   min-height: 100dvh;
   overflow-x: hidden;
   color: var(--ink);
@@ -7204,7 +7148,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     right: 0;
     bottom: 0;
     left: 0;
-    z-index: 21;
+    z-index: var(--layer-navigation);
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     min-height: calc(68px + env(safe-area-inset-bottom));
@@ -7586,15 +7530,16 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
 .field-app .current-order-card__identity p {
   margin-top: var(--space-2);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: var(--text-body);
+  line-height: var(--text-body-line);
+  overflow-wrap: anywhere;
 }
 
 .field-app .current-order-card__technical {
   display: block;
   margin-top: var(--space-2);
-  font-size: 10px;
-  line-height: 12px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption-line);
 }
 
 .field-app .current-order-card__identity .status-badge {
@@ -7641,11 +7586,10 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .field-app .current-order-card__data-row strong {
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--text-body);
+  line-height: var(--text-body-line);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .field-app .current-order-card__data-value--primary {
@@ -7775,7 +7719,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   left: var(--space-8);
   z-index: 4;
   display: inline-flex;
-  min-height: 36px;
+  min-height: var(--control-height);
   align-items: center;
   gap: var(--space-8);
   padding: 0 var(--space-12);
@@ -7805,9 +7749,9 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .field-app .current-order-card__actions button {
-  min-height: 40px;
-  font-size: 11px;
-  line-height: 16px;
+  min-height: var(--control-height);
+  font-size: var(--text-control);
+  line-height: var(--text-control-line);
 }
 
 .field-app .home-secondary-grid {
@@ -8076,7 +8020,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
   .field-app .current-order-card__actions .primary-action {
     width: 100%;
-    min-height: 40px;
+    min-height: var(--control-height);
   }
 
   .field-app .orders-tray .order-card:nth-child(n + 2) {
@@ -8269,8 +8213,8 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 
   .field-app .orders-tray {
-    gap: var(--space-4);
-    padding: var(--space-8);
+    gap: var(--space-8);
+    padding: var(--space-12);
   }
 
   .field-app .orders-tray__heading {
@@ -8284,8 +8228,8 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
   .field-app .orders-tray__heading h2 {
     margin: 0;
-    font-size: 18px;
-    line-height: 24px;
+    font-size: var(--text-heading);
+    line-height: var(--text-heading-line);
   }
 
   .field-app .orders-tray .order-filters {
@@ -8311,7 +8255,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
   .field-app .order-filter-disclosure > summary {
     display: flex;
-    min-height: 36px;
+    min-height: var(--control-height);
     align-items: center;
     justify-content: space-between;
     gap: var(--space-8);
@@ -8320,8 +8264,8 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     border-radius: var(--radius-6);
     color: var(--ink);
     background: #fff;
-    font-size: 12px;
-    line-height: 16px;
+    font-size: var(--text-control);
+    line-height: var(--text-control-line);
     font-weight: 700;
     list-style: none;
     cursor: pointer;
@@ -8378,7 +8322,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
   .field-app .order-filter-disclosure .filter-chip {
     min-width: 0;
-    min-height: 40px;
+    min-height: var(--control-height);
     justify-content: space-between;
     gap: var(--space-4);
     white-space: nowrap;
@@ -8390,8 +8334,8 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 
   .field-app .orders-tray .order-card {
-    gap: var(--space-4);
-    padding: var(--space-8);
+    gap: var(--space-8);
+    padding: var(--space-12);
   }
 
   .field-app .orders-tray .order-card__header {
@@ -8403,13 +8347,14 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 
   .field-app .orders-tray .order-card__customer {
-    font-size: 16px;
-    line-height: 20px;
+    font-size: 18px;
+    line-height: 24px;
+    overflow-wrap: anywhere;
   }
 
   .field-app .orders-tray .order-card__supply {
-    font-size: 12px;
-    line-height: 16px;
+    font-size: var(--text-body);
+    line-height: var(--text-body-line);
   }
 
   .field-app .orders-tray .order-card__footer {
@@ -8966,20 +8911,20 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 /* Fase 4: captura por pasos, anclada al viewport visible con teclado. */
 .field-app .capture-wizard { display: flex; flex-direction: column; gap: var(--space-8); min-height: 0; padding: var(--space-12); border: 1px solid var(--line); border-radius: var(--radius-8); background: var(--surface); }
 .field-app .capture-wizard__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); color: var(--muted); font-size: 12px; }
-.field-app .capture-wizard__back { min-height: 40px; padding: 0 var(--space-8); border: 0; color: var(--ink); background: transparent; font-weight: 600; }
+.field-app .capture-wizard__back { min-height: var(--control-height); padding: 0 var(--space-8); border: 0; color: var(--ink); background: transparent; font-weight: 600; }
 .field-app .capture-wizard__identity { display: flex; flex-direction: column; min-width: 0; }
-.field-app .capture-wizard__identity strong, .field-app .capture-wizard__identity span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field-app .capture-wizard__identity strong, .field-app .capture-wizard__identity span { overflow-wrap: anywhere; }
 .field-app .capture-wizard__identity span { color: var(--muted); font-size: 12px; }
-.field-app .capture-wizard__body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.field-app .capture-wizard__body { flex: 1 1 auto; min-height: 0; min-width: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: var(--space-8); }
 .field-app .capture-wizard__body h3 { margin: 0 0 var(--space-8); font-size: 20px; line-height: 28px; }
 .field-app .capture-wizard .text-field, .field-app .capture-wizard .file-field { margin: var(--space-8) 0; gap: var(--space-4); }
-.field-app .capture-wizard .text-field input, .field-app .capture-wizard .text-field select, .field-app .capture-wizard .text-field textarea { width: 100%; min-height: 40px; }
+.field-app .capture-wizard .text-field input, .field-app .capture-wizard .text-field select, .field-app .capture-wizard .text-field textarea { width: 100%; min-height: var(--control-height); font-size: 16px; line-height: 24px; }
 .field-app .capture-wizard .text-field textarea { resize: none; }
 .field-app .capture-wizard .file-field input { max-width: 100%; }
 .field-app .capture-wizard .file-field input.file-field__input { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; }
-.field-app .capture-wizard .file-field__choose { min-height: 40px; justify-content: center; }
+.field-app .capture-wizard .file-field__choose { min-height: var(--control-height); justify-content: center; }
 .field-app .capture-wizard__review p { margin: var(--space-8) 0; font-size: 14px; line-height: 20px; }
-.field-app .capture-wizard__error { flex: 0 0 auto; margin: 0; }
+.field-app .capture-wizard__error { flex: 0 0 auto; max-height: 25dvh; overflow-y: auto; margin: 0; }
 .field-app .capture-wizard__authorization-note { padding: var(--space-8); border: 1px solid #557d93; border-radius: var(--radius-4); color: #405c79; background: #edf5f8; }
 .field-app .capture-wizard__footer { flex: 0 0 auto; padding-bottom: env(safe-area-inset-bottom); }
 .field-app .capture-wizard__footer .primary-action { width: 100%; min-height: 44px; justify-content: center; }
@@ -9018,7 +8963,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   .field-app .capture-wizard__identity { display: none; }
   .field-app .capture-wizard__body h3 { margin-bottom: var(--space-4); font-size: 18px; line-height: 24px; }
   .field-app .capture-wizard .text-field, .field-app .capture-wizard .file-field { margin: var(--space-4) 0; }
-  .field-app .capture-wizard .checkbox-field { min-height: 40px; }
+  .field-app .capture-wizard .checkbox-field { min-height: var(--control-height); }
   .field-app .capture-wizard__review p { margin: var(--space-4) 0; }
 }
 
@@ -9693,57 +9638,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     padding-bottom: 12px;
   }
 
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__topbar {
-    min-height: 48px;
-    gap: 8px;
-    padding: 8px 12px;
-    border-radius: 22px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-brand {
-    gap: 6px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-brand strong {
-    font-size: 18px;
-    line-height: 22px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-brand span {
-    font-size: 9px;
-    line-height: 12px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__topbar-actions {
-    gap: 8px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-status-badge {
-    min-height: 28px;
-    gap: 5px;
-    padding-inline: 8px;
-    font-size: 10px;
-    line-height: 14px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-status-badge__dot {
-    width: 7px;
-    height: 7px;
-    flex-basis: 7px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__account-trigger {
-    min-height: 32px;
-    gap: 8px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__avatar {
-    width: 32px;
-    height: 32px;
-    flex-basis: 32px;
-    font-size: 11px;
-  }
-
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__body {
     gap: 12px;
   }
@@ -9787,63 +9681,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     padding-bottom: 8px;
   }
 
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__topbar {
-    min-height: 40px;
-    gap: 6px;
-    padding: 6px 10px;
-    border-radius: 18px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-brand {
-    gap: 5px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-brand strong {
-    font-size: 15px;
-    line-height: 18px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-brand span {
-    font-size: 8px;
-    line-height: 10px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__topbar-actions {
-    gap: 6px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-status-badge {
-    min-height: 24px;
-    gap: 4px;
-    padding-inline: 6px;
-    font-size: 8px;
-    line-height: 10px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-status-badge__dot {
-    width: 6px;
-    height: 6px;
-    flex-basis: 6px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__account-trigger {
-    min-height: 28px;
-    gap: 6px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__avatar {
-    width: 28px;
-    height: 28px;
-    flex-basis: 28px;
-    font-size: 10px;
-  }
-
-  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__chevron {
-    width: 7px;
-    height: 7px;
-    border-width: 2px;
-  }
-
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__body {
     gap: 8px;
   }
@@ -9883,13 +9720,13 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 
   .field-app:has(.field-home) .field-header-context__label {
-    font-size: 9px;
-    line-height: 11px;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
   }
 
   .field-app:has(.field-home) .field-header-context__copy strong {
-    font-size: 11px;
-    line-height: 14px;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
   }
 
   .field-app:has(.field-home) .field-header-context__divider {
@@ -9901,12 +9738,12 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   }
 
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button {
-    min-height: 42px;
+    min-height: var(--control-height);
     gap: 5px;
     padding-inline: 10px;
     border-radius: 12px;
-    font-size: clamp(12px, 4vw, 15px);
-    line-height: 18px;
+    font-size: var(--text-control);
+    line-height: var(--text-control-line);
   }
 
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > .icon {
@@ -9929,30 +9766,30 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update,
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry {
-    min-height: 38px;
+    min-height: var(--control-height);
     border-radius: 12px;
   }
 
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update {
     padding: 4px 8px;
-    font-size: 8px;
-    line-height: 11px;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
   }
 
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update strong {
-    font-size: 10px;
-    line-height: 13px;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
   }
 
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update .last-update-exact {
-    font-size: 8px;
+    font-size: var(--text-caption);
   }
 
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry {
     gap: 4px;
     padding: 4px 8px;
-    font-size: 10px;
-    line-height: 13px;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
   }
 
   .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon {
@@ -10046,118 +9883,4 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
     padding: 8px 0;
   }
 
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__topbar {
-    min-height: 48px;
-    gap: 8px;
-    padding: 8px 12px;
-    border-radius: 22px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-brand {
-    gap: 6px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-brand strong {
-    font-size: 18px;
-    line-height: 22px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-brand span {
-    font-size: 9px;
-    line-height: 12px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__topbar-actions {
-    gap: 8px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-status-badge {
-    min-height: 28px;
-    gap: 5px;
-    padding-inline: 8px;
-    font-size: 10px;
-    line-height: 14px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-status-badge__dot {
-    width: 7px;
-    height: 7px;
-    flex-basis: 7px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__account-trigger {
-    min-height: 32px;
-    gap: 8px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__avatar {
-    width: 32px;
-    height: 32px;
-    flex-basis: 32px;
-    font-size: 11px;
-  }
-}
-
-@media (max-width: 430px) {
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] {
-    padding-top: 4px;
-    padding-bottom: 4px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__topbar {
-    min-height: 40px;
-    gap: 6px;
-    padding: 6px 10px;
-    border-radius: 18px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-brand {
-    gap: 5px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-brand strong {
-    font-size: 15px;
-    line-height: 18px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-brand span {
-    font-size: 8px;
-    line-height: 10px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__topbar-actions {
-    gap: 6px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-status-badge {
-    min-height: 24px;
-    gap: 4px;
-    padding-inline: 6px;
-    font-size: 8px;
-    line-height: 10px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-status-badge__dot {
-    width: 6px;
-    height: 6px;
-    flex-basis: 6px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__account-trigger {
-    min-height: 28px;
-    gap: 6px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__avatar {
-    width: 28px;
-    height: 28px;
-    flex-basis: 28px;
-    font-size: 10px;
-  }
-
-  .field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__chevron {
-    width: 7px;
-    height: 7px;
-    border-width: 2px;
-  }
 }

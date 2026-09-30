@@ -8,6 +8,34 @@
   --accent: #c45b19;
   --accent-soft: #fff1d2;
   --warning: #e7a629;
+  /* Existing Admin palette; aliases preserve each surface's current appearance. */
+  --sepsa-bg: #F6F3ED;
+  --sepsa-surface: #FFFFFF;
+  --sepsa-surface-soft: #FBF9F5;
+  --sepsa-text: #172033;
+  --sepsa-text-secondary: #667085;
+  --sepsa-text-muted: #98A2B3;
+  --sepsa-border: #E5E7EB;
+  --sepsa-border-strong: #D0D5DD;
+  --sepsa-orange: #E85D04;
+  --sepsa-orange-hover: #C94D00;
+  --sepsa-orange-soft: #FFF1E6;
+  --sepsa-green: #1F9D61;
+  --sepsa-green-soft: #EAF8F1;
+  --sepsa-yellow: #D99A16;
+  --sepsa-yellow-soft: #FFF7DB;
+  --sepsa-red: #D92D20;
+  --sepsa-red-soft: #FEECEB;
+  --sepsa-blue: #2563EB;
+  --sepsa-blue-soft: #EEF4FF;
+  --sepsa-neutral-soft: #F2F4F7;
+  --field-ink: #172033;
+  --field-muted: #68717d;
+  --field-bg: #f6f3ed;
+  --field-surface: #fffdf9;
+  --field-line: #e8e1d7;
+  --field-accent-soft: #fff0e4;
+  --field-warning: #b87915;
   --space-2: 2px;
   --space-4: 4px;
   --space-8: 8px;
@@ -25,7 +53,30 @@
   --radius-8: 8px;
   --radius-12: 12px;
   --radius-16: 16px;
+  --radius-24: 24px;
+  --radius-32: 32px;
+  --radius-pill: 999px;
   --radius-full: 50%;
+  --text-caption: 12px;
+  --text-caption-line: 16px;
+  --text-body: 14px;
+  --text-body-line: 20px;
+  --text-control: 14px;
+  --text-control-line: 20px;
+  --text-heading: 20px;
+  --text-heading-line: 28px;
+  --control-height: 44px;
+  --layer-content: 0;
+  --layer-dropdown: 20;
+  --layer-navigation: 30;
+  --layer-header: 500;
+  --layer-fullscreen: 1000;
+  --layer-modal: 2000;
+  --header-ink: #142745;
+  --header-muted: #728095;
+  --header-line: #ebe7e0;
+  --header-surface: #ffffff;
+  --header-shadow: 0 12px 34px rgba(33, 42, 59, .06);
   --ease-field: cubic-bezier(.32, .72, 0, 1);
   --motion-control: 180ms;
   --motion-enter: 280ms;
@@ -36,4 +87,18 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   font-variant-numeric: tabular-nums;
+}
+
+/* Portals carry the owning role's theme outside animated page containers. */
+.field-app,
+[data-ui-theme="field"] {
+  --ink: var(--field-ink);
+  --muted: var(--field-muted);
+  --warm-bg: var(--field-bg);
+  --surface: var(--field-surface);
+  --paper: var(--sepsa-surface);
+  --line: var(--field-line);
+  --accent: var(--sepsa-orange);
+  --accent-soft: var(--field-accent-soft);
+  --warning: var(--field-warning);
 }

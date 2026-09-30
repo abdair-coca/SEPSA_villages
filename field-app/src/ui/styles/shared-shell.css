@@ -1,10 +1,5 @@
 /* Shared authenticated shell. Page content remains owned by each role. */
 .app-header.app-shell[data-shell="shared"] {
-  --header-ink: #142745;
-  --header-muted: #728095;
-  --header-line: #ebe7e0;
-  --header-surface: #ffffff;
-  --header-shadow: 0 12px 34px rgba(33, 42, 59, .06);
   position: relative;
   display: flex;
   width: min(1280px, calc(100% - 48px));
@@ -27,7 +22,7 @@
   gap: 24px;
   padding: 14px 24px;
   border: 1px solid var(--header-line);
-  border-radius: 32px;
+  border-radius: var(--radius-32);
   background: var(--header-surface);
   box-shadow: var(--header-shadow);
 }
@@ -35,7 +30,7 @@
 .app-header__topbar-transition {
   position: relative;
   min-width: 0;
-  z-index: 500;
+  z-index: var(--layer-header);
   animation: app-header-view-enter var(--motion-enter) var(--ease-field) both;
 }
 
@@ -61,7 +56,7 @@
 }
 
 .app-header.app-shell[data-shell="shared"] .app-brand strong {
-  color: #e85d04;
+  color: var(--sepsa-orange);
   font-size: 25px;
   line-height: 32px;
   letter-spacing: .02em;
@@ -122,10 +117,10 @@
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  background: #e85d04;
+  background: var(--sepsa-orange);
   font-size: 16px;
   line-height: 20px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .app-header__chevron {
@@ -146,7 +141,7 @@
   position: absolute;
   top: calc(100% + 12px);
   right: 0;
-  z-index: 20;
+  z-index: var(--layer-dropdown);
   display: grid;
   width: min(300px, calc(100vw - 32px));
   gap: 12px;
@@ -216,7 +211,7 @@
 .app-header__menu-action {
   display: flex;
   min-width: 0;
-  min-height: 40px;
+  min-height: var(--control-height);
   align-items: center;
   gap: 9px;
   padding: 8px 10px;
@@ -264,7 +259,7 @@
 }
 
 .app-header__logout {
-  min-height: 40px;
+  min-height: var(--control-height);
   padding: 0 10px;
   border: 1px solid #f3c1a5;
   border-radius: 10px;
@@ -483,14 +478,20 @@
     gap: 6px;
   }
 
+  .operations-app .app-header.app-shell[data-shell="shared"] .app-brand {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
   .app-header.app-shell[data-shell="shared"] .app-brand strong {
     font-size: 18px;
     line-height: 24px;
   }
 
   .app-header.app-shell[data-shell="shared"] .app-brand span {
-    font-size: 9px;
-    line-height: 12px;
+    font-size: 10px;
+    line-height: 16px;
   }
 
   .app-header__topbar-actions {
@@ -501,8 +502,8 @@
     min-height: 32px;
     gap: 6px;
     padding-inline: 8px;
-    font-size: 10px;
-    line-height: 14px;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
   }
 
   .app-header.app-shell[data-shell="shared"] .app-status-badge__dot {
