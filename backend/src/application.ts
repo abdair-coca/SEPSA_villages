@@ -387,12 +387,26 @@ export class Application {
   private async technicianOrders(response: ServerResponse, user: SessionUser, url: URL): Promise<void> {
     this.requireRole(user, "TECHNICIAN");
     const deviceId = requiredString(url.searchParams.get("device_id"), "device_id");
-    const result = await this.pool.query<OrderRow>(orderSelect("o.assigned_technician_id = $1 AND o.source = $2", "o.updated_at DESC"), [user.userId, PROVISIONAL_SOURCE]);
-    const orders = result.rows.map(toOrder);
-    const packageValue = { package_id: cryptoRandomUuid(), technician_id: user.userId, device_id: deviceId, version: Date.now(), downloaded_at: new Date().toISOString(), orders, source: PROVISIONAL_SOURCE };
+    const knownVersionText = url.searchParams.get("known_version");
+    const knownVersion = knownVersionText === null ? 0 : parsePositiveVersion(knownVersionText, "known_version");
+    const packageValue = await withTransaction(this.pool, async (client) => {
+      await client.query(
+        "INSERT INTO work_package_versions(technician_id, device_id, last_version) VALUES ($1, $2, 0) ON CONFLICT (technician_id, device_id) DO NOTHING",
+        [user.userId, deviceId],
+      );
+      const currentVersion = await client.query<{ last_version: string }>("SELECT last_version::text FROM work_package_versions WHERE technician_id = $1 AND device_id = $2 FOR UPDATE", [user.userId, deviceId]);
+      const lastVersion = Number(currentVersion.rows[0]?.last_version ?? 0);
+      const nextVersion = Math.max(Date.now(), lastVersion + 1, knownVersion + 1);
+      if (!Number.isSafeInteger(nextVersion)) throw new HttpError(400, "INVALID_REQUEST", "known_version exceeds safe integer range.");
+      const result = await client.query<OrderRow>(orderSelect("o.assigned_technician_id = $1 AND o.source = $2", "o.updated_at DESC NULLS LAST, o.order_id ASC"), [user.userId, PROVISIONAL_SOURCE]);
+      const orders = result.rows.map(toOrder);
+      const generatedAt = new Date().toISOString();
+      await client.query("UPDATE work_package_versions SET last_version = $3, updated_at = now() WHERE technician_id = $1 AND device_id = $2", [user.userId, deviceId, nextVersion]);
+      return { package_id: cryptoRandomUuid(), technician_id: user.userId, device_id: deviceId, version: nextVersion, downloaded_at: generatedAt, orders, source: PROVISIONAL_SOURCE };
+    });
     const checksum = digest(packageValue);
     await withTransaction(this.pool, async (client) => {
-      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "DOWNLOAD_ASSIGNED", result: "accepted", deviceId, metadata: { package_id: packageValue.package_id, technician_id: packageValue.technician_id, device_id: packageValue.device_id, version: packageValue.version, downloaded_at: packageValue.downloaded_at, order_ids: orders.map((order) => order.order_id) } });
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "DOWNLOAD_ASSIGNED", result: "accepted", deviceId, metadata: { package_id: packageValue.package_id, technician_id: packageValue.technician_id, device_id: packageValue.device_id, version: packageValue.version, downloaded_at: packageValue.downloaded_at, order_ids: packageValue.orders.map((order) => order.order_id) } });
     });
     sendJson(response, 200, { package: packageValue, authenticity: PROVISIONAL_SOURCE, integrity: PROVISIONAL_SOURCE, validation: "PILOT_PROVISIONAL_VALID", checksum });
   }

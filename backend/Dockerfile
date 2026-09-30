@@ -14,5 +14,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
+COPY scripts ./scripts
+COPY sql/007_work_package_versions.sql ./sql/007_work_package_versions.sql
 EXPOSE 8080
-CMD ["sh", "-c", "node migrations/20260923-load-excel-20260922.mjs && node dist/src/server.js"]
+CMD ["sh", "-c", "node scripts/apply-package-version-migration.mjs && node migrations/20260923-load-excel-20260922.mjs && node dist/src/server.js"]

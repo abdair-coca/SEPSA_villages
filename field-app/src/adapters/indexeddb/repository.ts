@@ -91,6 +91,17 @@ export class IndexedDbLocalRepository implements LocalRepository {
     const orderStore = transaction.objectStore("orders");
     const syncStore = transaction.objectStore("sync");
     const currentEnvelope = fromStoredEnvelope(await requestResult(packageStore.get(this.packageKey(envelope.package.packageId))) as StoredPackageEnvelope | undefined);
+    const existingEnvelopes = (await requestResult(packageStore.getAll()) as StoredPackageEnvelope[])
+      .map(fromStoredEnvelope)
+      .filter((stored): stored is WorkPackageEnvelope => Boolean(stored))
+      .filter((stored) => stored.package.technicianId === this.technicianId && stored.package.deviceId === this.deviceId);
+    const latestVersion = existingEnvelopes.reduce((latest, stored) => Math.max(latest, stored.package.version), 0);
+    const exactReplay = existingEnvelopes.some((stored) => stored.package.packageId === envelope.package.packageId
+      && stored.package.version === envelope.package.version && stored.checksum === envelope.checksum);
+    if (envelope.package.version < latestVersion || (envelope.package.version === latestVersion && !exactReplay)) {
+      transaction.abort();
+      throw new Error("Work package version is stale or conflicts with the latest package.");
+    }
     const currentOrders = await Promise.all(envelope.package.orders.map((order) => requestResult(orderStore.get(this.orderKey(order.orderId))))).then((orders) => orders.map(fromStoredOrder)) as Array<WorkOrder | undefined>;
     const localOrders = (await requestResult(orderStore.getAll()) as StoredOrderOrder[]).map(fromStoredOrder).filter((order): order is WorkOrder => Boolean(order));
     for (let index = 0; index < currentOrders.length; index += 1) {
@@ -133,6 +144,17 @@ export class IndexedDbLocalRepository implements LocalRepository {
       throw error;
     }
     await transactionComplete(transaction);
+  }
+
+  async latestPackageVersion(): Promise<number> {
+    const db = await this.dbPromise;
+    const transaction = db.transaction("package", "readonly");
+    const envelopes = await requestResult(transaction.objectStore("package").getAll()) as StoredPackageEnvelope[];
+    await transactionComplete(transaction);
+    return envelopes.map(fromStoredEnvelope)
+      .filter((envelope): envelope is WorkPackageEnvelope => Boolean(envelope))
+      .filter((envelope) => this.identityMatches(envelope.package))
+      .reduce((latest, envelope) => Math.max(latest, envelope.package.version), 0);
   }
 
   async putPackage(workPackage: WorkPackage | WorkPackageEnvelope): Promise<void> {

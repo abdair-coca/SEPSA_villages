@@ -3,9 +3,9 @@ import type { IdentityPort, OperationsAuthorityPort } from "../ports";
 
 type DownloadAuthority = OperationsAuthorityPort & IdentityPort;
 
-export async function downloadAssigned(authority: DownloadAuthority, session: Session, deviceId: string): Promise<WorkPackageEnvelope> {
+export async function downloadAssigned(authority: DownloadAuthority, session: Session, deviceId: string, knownVersion?: number): Promise<WorkPackageEnvelope> {
   await authority.authorize(session, "DOWNLOAD_ASSIGNED");
-  return authority.downloadAssigned(session.userId, deviceId, session);
+  return authority.downloadAssigned(session.userId, deviceId, session, knownVersion);
 }
 
 export function createDownloadCase(authority: DownloadAuthority, identity: IdentityPort) {

@@ -195,6 +195,25 @@ describe("IndexedDB local repository", () => {
     await reopened.close();
   });
 
+  it("requires strictly increasing package versions while preserving exact replays and historical high versions", async () => {
+    const { dbName, workPackage } = packageFor("monotonic-package-version");
+    const repository = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });
+    repositories.push(repository);
+    await repository.savePackage(workPackage);
+    await expect(repository.savePackage(workPackage)).resolves.toBeUndefined();
+
+    const changedAtSameVersion = createSimulatedPackageEnvelope({ ...workPackage, orders: [orderFor({ orderId: "changed" })] });
+    await expect(repository.savePackage(changedAtSameVersion)).rejects.toThrow(/version is stale or conflicts/);
+    await expect(repository.savePackage({ ...workPackage, version: 0 })).rejects.toThrow(/version is stale or conflicts/);
+
+    const highVersion = Date.now() + 100_000;
+    const historical = createSimulatedPackageEnvelope({ ...workPackage, packageId: "legacy-high-version", version: highVersion });
+    await repository.savePackage(historical);
+    await expect(repository.latestPackageVersion()).resolves.toBe(highVersion);
+    await expect(repository.savePackage({ ...packageFor("lower-after-legacy").workPackage, version: highVersion - 1 })).rejects.toThrow(/version is stale or conflicts/);
+    await expect(repository.savePackage({ ...packageFor("higher-after-legacy").workPackage, version: highVersion + 1 })).resolves.toBeUndefined();
+  });
+
   it("rejects altered package without replacing last valid package", async () => {
     const { dbName, workPackage } = packageFor("package-integrity");
     const repository = new IndexedDbLocalRepository({ dbName, technicianId: "tech-1", deviceId: "device-1" });

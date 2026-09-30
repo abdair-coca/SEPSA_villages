@@ -109,10 +109,12 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     return mapOrder(response);
   }
 
-  async downloadAssigned(technicianId: string, deviceId: string, session?: Session): Promise<WorkPackageEnvelope> {
+  async downloadAssigned(technicianId: string, deviceId: string, session?: Session, knownVersion?: number): Promise<WorkPackageEnvelope> {
     const authorized = this.requireSession(session);
     if (authorized.userId !== technicianId) throw new Error("Technician identity does not match session.");
-    const response = await this.request<PilotPackageResponseDto>(`/v1/technician/orders?device_id=${encodeURIComponent(deviceId)}`, { method: "GET" }, authorized);
+    const params = new URLSearchParams({ device_id: deviceId });
+    if (knownVersion !== undefined) params.set("known_version", String(knownVersion));
+    const response = await this.request<PilotPackageResponseDto>(`/v1/technician/orders?${params}`, { method: "GET" }, authorized);
     if (response.checksum !== await digestJson(response.package)) throw new Error("Server work package integrity validation failed.");
     const workPackage = {
       packageId: response.package.package_id,

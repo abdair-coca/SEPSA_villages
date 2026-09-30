@@ -35,7 +35,7 @@ export interface OperationsAuthorityPort {
   createOrder(input: CreateOrderCommand): Promise<WorkOrder>;
   createOrdersBatch(input: CreateOrdersBatchCommand): Promise<CreateOrdersBatchResult>;
   assignOrder(input: AssignOrderCommand): Promise<WorkOrder>;
-  downloadAssigned(technicianId: string, deviceId: string, session?: Session): Promise<WorkPackageEnvelope>;
+  downloadAssigned(technicianId: string, deviceId: string, session?: Session, knownVersion?: number): Promise<WorkPackageEnvelope>;
   recordSyncedOperation(operation: OperationRecord | VisitRecord, session: Session): Promise<void>;
   authorizeTechnicalOrder(input: TechnicalOrderAuthorizationInput): Promise<TechnicalOrderAuthorizationResult>;
   lookupSyncedOperation(operationId: string, session: Session, technicianId: string, deviceId: string): Promise<RemoteResult>;

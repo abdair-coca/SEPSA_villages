@@ -161,7 +161,8 @@ function TechnicianRuntime({ authority, session, onLogout, remote = false }: { a
 
 async function loadPackage(authority: IdentityPort & OperationsAuthorityPort, session: Session, deviceId: string, repository: IndexedDbLocalRepository): Promise<WorkPackageEnvelope> {
   try {
-    const envelope = await downloadAssigned(authority, session, deviceId);
+    const knownVersion = await repository.latestPackageVersion();
+    const envelope = await downloadAssigned(authority, session, deviceId, knownVersion);
     await repository.savePackage(envelope);
     return envelope;
   } catch (remoteError) {
