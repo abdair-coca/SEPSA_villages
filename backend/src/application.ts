@@ -885,8 +885,8 @@ function sessionCookie(token: string, maxAge: number, secureEnabled: boolean): s
   return `sepsa_session=${encodeURIComponent(token)}; Max-Age=${maxAge}; HttpOnly; SameSite=Lax; Path=/${secure}`;
 }
 
-function clearSessionCookie(corsOrigin: string): string {
-  const secure = corsOrigin.startsWith("https://") ? "; Secure" : "";
+function clearSessionCookie(secureEnabled: boolean): string {
+  const secure = secureEnabled ? "; Secure" : "";
   return `sepsa_session=; Max-Age=0; HttpOnly; SameSite=Lax; Path=/${secure}`;
 }
 
