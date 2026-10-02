@@ -5,7 +5,7 @@ import { selectVisibleOrders } from "../app/index";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../domain";
-import { AppHeader } from "./AppHeader";
+import { AppHeader, type AppHeaderRoleSwitch } from "./AppHeader";
 import { FieldMap } from "./FieldMap";
 import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconScissors, IconUser } from "./Icons";
 import { Notification } from "./Notification";
@@ -23,6 +23,7 @@ export interface FieldAppProps {
   enableReconnection?: boolean;
   onRefreshAssigned?: () => Promise<void>;
   onLogout?: () => void;
+  roleSwitch?: AppHeaderRoleSwitch;
 }
 
 type NavigationTab = "home" | "orders" | "map" | "queue";
@@ -43,6 +44,7 @@ export function FieldApp({
   enableReconnection = true,
   onRefreshAssigned,
   onLogout,
+  roleSwitch,
 }: FieldAppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
   const [isProbingNetwork, setIsProbingNetwork] = useState(false);
@@ -152,6 +154,7 @@ export function FieldApp({
         variant={state.tab === "home" ? "standard" : "minimal"}
         viewKey={state.tab}
         onLogout={onLogout}
+        roleSwitch={roleSwitch ? { ...roleSwitch, disabled: roleSwitch.disabled || Boolean(state.busyAction) || isRefreshingAssigned || isProbingNetwork } : undefined}
         context={state.tab === "home" ? (
           <div className="field-header-context-card">
             <div className="field-header-context__item">

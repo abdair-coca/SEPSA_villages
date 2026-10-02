@@ -11,6 +11,7 @@ const sqlFiles = [
   "003_reference_fields.sql",
   "004_e2e_seed.sql",
   "005_definitive_seed.sql",
+  "007_role_grants.sql",
 ];
 
 const databaseUrl = process.env.DATABASE_URL?.trim();

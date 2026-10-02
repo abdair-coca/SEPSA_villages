@@ -13,6 +13,7 @@
     "pilot:bootstrap": "node scripts/bootstrap-pilot.mjs",
     "pilot:field-test": "python scripts/import-debtors-xlsx.py",
     "pilot:migrate:field-test": "node migrations/20260923-load-excel-20260922.mjs",
+    "pilot:migrate:roles": "node migrations/20261002-role-grants.mjs",
     "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {

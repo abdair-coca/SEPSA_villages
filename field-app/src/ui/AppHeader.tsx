@@ -38,6 +38,15 @@ export interface AppHeaderProps {
   status?: AppHeaderStatus;
   actions?: ReactNode;
   onLogout?: () => void;
+  roleSwitch?: AppHeaderRoleSwitch;
+}
+
+export interface AppHeaderRoleSwitch {
+  label: string;
+  busy?: boolean;
+  disabled?: boolean;
+  error?: string;
+  onSelect: () => void;
 }
 
 export function AppHeader(props: AppHeaderProps) {
@@ -125,6 +134,17 @@ export function AppHeader(props: AppHeaderProps) {
                   <span>{props.user.roleLabel}</span>
                   {props.user.authenticity ? <span>Entorno · {props.user.authenticity}</span> : null}
                 </div>
+                {props.roleSwitch ? (
+                  <div className="app-header__menu-actions" role="group" aria-label="Rol activo">
+                    <span className="app-header__menu-section-title">Cambiar rol</span>
+                    <button className="app-header__menu-action" type="button" role="menuitem"
+                      disabled={props.roleSwitch.disabled || props.roleSwitch.busy}
+                      aria-busy={props.roleSwitch.busy || undefined} onClick={props.roleSwitch.onSelect}>
+                      {props.roleSwitch.busy ? "Cambiando rol…" : props.roleSwitch.label}
+                    </button>
+                    {props.roleSwitch.error ? <p className="app-header__role-error" role="alert">{props.roleSwitch.error}</p> : null}
+                  </div>
+                ) : null}
                 {props.menuActions?.length ? (
                   <div className="app-header__menu-actions" role="group" aria-label="Sincronización">
                     <span className="app-header__menu-section-title">Sincronización</span>

@@ -25,6 +25,8 @@ export interface Session {
   username: string;
   displayName?: string;
   role: Role;
+  /** Roles explicitly granted by the authoritative backend. */
+  roles?: Role[];
   permissions: AuthorizedAction[];
   issuedAt: string;
   authenticity: DataSource;

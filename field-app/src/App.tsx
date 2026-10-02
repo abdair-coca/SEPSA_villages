@@ -7,6 +7,7 @@ import { AppStateCard, ExitConfirmationModal, FieldApp, LoginScreen, OperationsA
 import type { Session, WorkPackageEnvelope } from "./domain";
 import type { IdentityPort, OperationsAuthorityPort } from "./ports";
 import { clearStoredSession, persistSession, readStoredSession } from "./application/session-persistence";
+import { AppHeader, type AppHeaderRoleSwitch } from "./ui/AppHeader";
 
 const authority = typeof indexedDB === "undefined" ? undefined : new IndexedDbAuthorityRepository();
 const pilotBackendUrl = resolvePilotBackendUrl();
@@ -106,13 +107,68 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function ConnectedApp({ authority, session, onAuthenticated, onLogout }: { authority: IdentityPort & OperationsAuthorityPort & HttpPilotClient; session?: Session; onAuthenticated: (session: Session) => void; onLogout: () => void }) {
+  const [switching, setSwitching] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(Boolean(session));
+  const [roleError, setRoleError] = useState<string>();
+  const switchingRef = useRef(false);
+  const scopeRef = useRef(session);
+  scopeRef.current = session;
+
+  useEffect(() => {
+    if (!session) { setCheckingSession(false); return; }
+    let active = true;
+    setCheckingSession(true);
+    authority.restoreSession(session);
+    void authority.currentSession(session).then((current) => {
+      if (active) onAuthenticated(current);
+    }).catch((error: unknown) => {
+      if (!active) return;
+      if (error instanceof Error && "status" in error && error.status === 401) onLogout();
+      else setRoleError("No pudimos validar los roles. Compruebe la conexión y vuelva a intentar.");
+    }).finally(() => { if (active) setCheckingSession(false); });
+    return () => { active = false; };
+  }, [authority, session?.sessionId]);
+
+  const switchRole = async (): Promise<void> => {
+    if (!session || switchingRef.current || checkingSession) return;
+    switchingRef.current = true;
+    setSwitching(true);
+    setRoleError(undefined);
+    const targetRole = session.role === "ADMIN" ? "TECHNICIAN" : "ADMIN";
+    try {
+      const next = await authority.switchRole(session, targetRole);
+      if (scopeRef.current === session) onAuthenticated(next);
+    } catch (error) {
+      if (scopeRef.current !== session) return;
+      if (error instanceof Error && error.name === "NetworkUnknownError") {
+        try {
+          const current = await authority.currentSession(session);
+          if (scopeRef.current !== session) return;
+          onAuthenticated(current);
+          if (current.role === targetRole) return;
+        } catch { /* An uncertain remote result requires recovery on retry or reload. */ }
+        setRoleError("No pudimos confirmar el rol activo. Compruebe la conexión y reintente o recargue. Sus pendientes siguen guardados.");
+      } else setRoleError(error instanceof Error ? error.message : "No pudimos cambiar el rol. Vuelva a intentar.");
+    } finally {
+      switchingRef.current = false;
+      setSwitching(false);
+    }
+  };
+
   if (!session) return <LoginScreen authority={authority} onAuthenticated={onAuthenticated} />;
   const logout = () => { void authority.logout(session).catch(() => undefined); onLogout(); };
-  if (session.role === "ADMIN") return <OperationsApp authority={authority} session={session} onLogout={logout} />;
-  return <TechnicianRuntime authority={authority} session={session} onLogout={logout} remote />;
+  const roleSwitch: AppHeaderRoleSwitch | undefined = session.roles?.includes("ADMIN") && session.roles.includes("TECHNICIAN") ? {
+    label: session.role === "ADMIN" ? "Cambiar a Técnico" : "Cambiar a Administrador",
+    busy: switching,
+    disabled: checkingSession,
+    error: roleError,
+    onSelect: () => void switchRole(),
+  } : undefined;
+  if (session.role === "ADMIN") return <OperationsApp authority={authority} session={session} onLogout={logout} roleSwitch={roleSwitch} />;
+  return <TechnicianRuntime authority={authority} session={session} onLogout={logout} roleSwitch={roleSwitch} remote />;
 }
 
-function TechnicianRuntime({ authority, session, onLogout, remote = false }: { authority: IdentityPort & OperationsAuthorityPort; session: Session; onLogout: () => void; remote?: boolean }) {
+function TechnicianRuntime({ authority, session, onLogout, roleSwitch, remote = false }: { authority: IdentityPort & OperationsAuthorityPort; session: Session; onLogout: () => void; roleSwitch?: AppHeaderRoleSwitch; remote?: boolean }) {
   const [store, setStore] = useState<ReturnType<typeof createAuthenticatedTechnicianStore>>();
   const [refreshAssigned, setRefreshAssigned] = useState<(() => Promise<void>)>();
   const [error, setError] = useState<string>();
@@ -154,9 +210,15 @@ function TechnicianRuntime({ authority, session, onLogout, remote = false }: { a
     return () => clearInterval(interval);
   }, [refreshAssigned]);
 
-  if (error) return <AppStateCard as="main" className="state-card" tone="error" title="No pudimos abrir jornada" description={error} action={{ label: "Volver al inicio", onClick: onLogout }} />;
-  if (!store) return <AppStateCard as="main" className="state-card" tone="loading" title="Descargando jornada" description="Validando identidad y órdenes asignadas." />;
-  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection={!remote} onRefreshAssigned={refreshAssigned} onLogout={onLogout} />;
+  if (error || !store) return <div className="field-app">
+    {roleSwitch ? <AppHeader role="field" title="Jornada de campo" description="Órdenes asignadas y trabajo de campo."
+      user={{ displayName: session.displayName ?? session.username, roleLabel: "Técnico" }}
+      roleSwitch={roleSwitch} onLogout={onLogout} /> : null}
+    {error
+      ? <AppStateCard as="main" className="state-card" tone="error" title="No pudimos abrir jornada" description={error} action={{ label: "Volver al inicio", onClick: onLogout }} />
+      : <AppStateCard as="main" className="state-card" tone="loading" title="Descargando jornada" description="Validando identidad y órdenes asignadas." />}
+  </div>;
+  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection={!remote} onRefreshAssigned={refreshAssigned} onLogout={onLogout} roleSwitch={roleSwitch} />;
 }
 
 async function loadPackage(authority: IdentityPort & OperationsAuthorityPort, session: Session, deviceId: string, repository: IndexedDbLocalRepository): Promise<WorkPackageEnvelope> {

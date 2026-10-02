@@ -9,6 +9,8 @@ export interface AuthenticatedUser {
 
 export interface SessionUser extends AuthenticatedUser {
   sessionId: string;
+  roles: Role[];
+  expiresAt: string;
 }
 
 export interface SyncPayload {

@@ -304,7 +304,7 @@ class LoginPool {
   async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
     if (text.includes("SELECT user_id, username, display_name, role, password_hash")) {
       return {
-        rows: [{ user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", password_hash: "scrypt$16384$8$1$DGPitTZ--gEW7HtAcRpHdg$coTqCTgT-b8lAaNmr53P6w2clR4WDBcACmGWjCN6FpR0fT1FQ1oMosbxIkdtkNu3eTtMn_waaRZsR35nyZvFLA", enabled: true } as unknown as T],
+        rows: [{ user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", roles: ["ADMIN"], password_hash: "scrypt$16384$8$1$DGPitTZ--gEW7HtAcRpHdg$coTqCTgT-b8lAaNmr53P6w2clR4WDBcACmGWjCN6FpR0fT1FQ1oMosbxIkdtkNu3eTtMn_waaRZsR35nyZvFLA", enabled: true } as unknown as T],
         rowCount: 1,
       };
     }

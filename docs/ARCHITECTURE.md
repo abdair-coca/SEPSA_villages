@@ -75,6 +75,8 @@ Estos endpoints describen el piloto actual, no un contrato oficial de SEPSA.
 
 El frontend usa permisos para orientar la experiencia; el backend vuelve a validar la sesión y el rol. Un técnico solo recibe y opera órdenes asignadas a su identidad. Las sesiones remotas no deben convertirse en secretos persistidos en almacenamiento de la aplicación.
 
+En el piloto conectado, `users.role` es el rol inicial; `user_role_grants` define los roles concedidos y `sessions.active_role` el rol activo de cada sesión. La migración `007_role_grants.sql` conserva únicamente el rol actual de las cuentas existentes y concede ese mismo rol al insertar una cuenta; el segundo rol debe concederse explícitamente en la base de datos. Solo una cuenta con ambos grants puede usar «Cambiar a Técnico» / «Cambiar a Administrador» en el menú de perfil. `POST /v1/auth/role` valida los grants actuales y audita el cambio; cada petición verifica que el rol activo sigue concedido. `GET /v1/auth/session` recupera la sesión autoritativa al recargar o ante un cambio incierto. Cambiar rol requiere conexión, conserva identidad y dispositivo, y reutiliza el mismo almacenamiento IndexedDB de borradores, evidencias y cola. La lista y validación de técnicos usan el grant `TECHNICIAN`, incluso cuando su rol inicial es `ADMIN`.
+
 ## Límites importantes
 
 - El backend provisional no es la API oficial.
