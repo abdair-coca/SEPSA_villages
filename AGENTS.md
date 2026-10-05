@@ -60,7 +60,6 @@ No active task.
 | Order creation and assignment | `docs/features/assignments.md` |
 | Cut, visit, GPS, photo or field capture | `docs/features/cuts.md` + `docs/features/readings.md` |
 | Offline queue or retry | `docs/features/synchronization.md` |
-| Payment concurrency | `docs/features/payments.md` |
 
 ## Before editing
 
@@ -74,11 +73,10 @@ No active task.
 
 - Roles are `ADMIN` and `TECHNICIAN`; a technician operates only assigned orders, with authorisation enforced by the authoritative layer.
 - Validate and persist locally before confirming an offline-capable operation; keep it in the durable queue until valid sync confirmation.
-- No physical cut without online, conclusive, current, single-use authorisation immediately before execution. Offline, timeout, unknown, payment or conflict never authorise.
-- A confirmed concurrent payment prevails over an unconsumed cut authorisation. Preserve the event and audit history.
+- No physical cut without online, conclusive, current, single-use authorisation immediately before execution. Offline, timeout, unknown, or conflict never authorise.
 - A cut capture requires a real final meter reading, GPS and photo, or only the documented controlled exception with an auditable reason. Never invent data.
-- Preserve unique operation IDs, versions, audit trail and conflicts. Do not use last-write-wins for payments, assignments, cancellations, authorisations or physical results.
-- The technician does not collect or record payments in the cut flow. Excel, mocks and the current backend are provisional; mark unknown semantics `TODO: VALIDAR CON SEPSA`.
+- Preserve unique operation IDs, versions, audit trail and conflicts. Do not use last-write-wins for assignments, cancellations, authorisations or physical results.
+- Excel, mocks and the current backend are provisional; mark unknown semantics `TODO: VALIDAR CON SEPSA`.
 
 ## Verification and delivery
 
