@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Pool, PoolClient } from "pg";
+import sharp from "sharp";
 import { hashToken, verifyPassword, createOpaqueToken } from "./auth.js";
 import { withTransaction } from "./db.js";
 import { HttpError, errorBody, isRecord, parseBearerToken, parseJsonBody, requiredInteger, requiredString, sendJson, sendNoContent } from "./http.js";
-import { checkPaymentSafely, unavailablePaymentAuthority, type PaymentAuthority, type PaymentCheckContext } from "./payment-authority.js";
 import { ConsoleSecurityLogger, type SecurityEvent, type SecurityLogger } from "./security-logger.js";
 import type { Role, SessionUser, SyncPayload } from "./types.js";
 import type { Config } from "./config.js";
@@ -19,7 +19,7 @@ interface DebtorRow {
   contact_phone: string | null; tariff: string; supply_status: string; enabling_title: string | null;
   route_order: number | null; cadastral_latitude: number | null; cadastral_longitude: number | null;
   meter_brand: string | null; meter_index: string | null; meter_multiplier: number | null;
-  claims: boolean | null; payment_plan: boolean | null; suspension_date: string | null;
+  claims: boolean | null; suspension_date: string | null;
   reconnection_manual: boolean | null; reconnection_date: string | null; reconnection_technician: string | null; context: unknown;
 }
 interface OrderRow {
@@ -34,13 +34,16 @@ const PROVISIONAL_SOURCE = "PILOT_PROVISIONAL";
 const NO_DATA_FILTER_VALUE = "__NO_DATA__";
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
+const MAX_EVIDENCE_DIMENSION = 4096;
+const MAX_EVIDENCE_PIXELS = 16_000_000;
+const EVIDENCE_DECODE_TIMEOUT_SECONDS = 5;
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 export class Application {
   private readonly loginAttempts = new Map<string, { startedAt: number; count: number }>();
   constructor(
     private readonly pool: Pool,
     private readonly config: Config,
-    private readonly paymentAuthority: PaymentAuthority = unavailablePaymentAuthority,
     private readonly securityLogger: SecurityLogger = new ConsoleSecurityLogger(),
   ) {}
 
@@ -123,6 +126,10 @@ export class Application {
     if (request.method === "POST" && assignment) return await this.assignOrder(request, response, user, assignment[1]);
     if (request.method === "GET" && path === "/v1/technician/orders") return await this.technicianOrders(response, user, url);
     if (request.method === "POST" && path === "/v1/authorizations/cut") return await this.authorizeCut(request, response, user);
+    if (request.method === "POST" && path === "/v1/authorizations/reconnection") return await this.authorizeReconnection(request, response, user);
+    if (request.method === "POST" && path === "/v1/authorizations/reconnection/consume") return await this.consumeReconnectionEnablement(request, response, user);
+    const reconnectionEnablementLookup = /^\/v1\/authorizations\/reconnection\/([^/]+)$/.exec(path);
+    if (request.method === "GET" && reconnectionEnablementLookup) return await this.lookupReconnectionEnablement(response, user, reconnectionEnablementLookup[1]);
     if (request.method === "POST" && path === "/v1/evidence/assets") return await this.uploadEvidence(request, response, user);
     if (request.method === "POST" && path === "/v1/sync/operations") return await this.syncOperation(request, response, user);
     const operationReview = /^\/v1\/sync\/operations\/([^/]+)\/review$/.exec(path);
@@ -218,14 +225,14 @@ export class Application {
     const page = pageRequest(url);
     const result = await this.pool.query<DebtorRow>(
        `SELECT debtor_id, account_id, supply_id, customer_name, address, reference_text, meter_id, area, locality,
-               route, debt_cents, months_pending, updated_at, kardex, circuit, customer_ci, contact_phone, tariff,
+               route, debt_cents, months_pending, updated_at, ${kardexColumns("kardex")} AS kardex, circuit, customer_ci, contact_phone, tariff,
                 supply_status, enabling_title, route_order, cadastral_latitude, cadastral_longitude, meter_brand,
-                meter_index, meter_multiplier, claims, payment_plan, suspension_date, reconnection_manual,
-                reconnection_date, reconnection_technician, context
+                meter_index, meter_multiplier, claims, suspension_date, reconnection_manual,
+                reconnection_date, reconnection_technician, jsonb_build_object('area_name', context->'area_name', 'ruta_name', context->'ruta_name') AS context
         FROM debtors WHERE source = $1 AND ($2 = '' OR concat_ws(' ', debtor_id, account_id, supply_id, customer_name, address, reference_text,
-               meter_id, area, locality, route, debt_cents::text, months_pending::text, updated_at::text, kardex::text, circuit,
+               meter_id, area, locality, route, debt_cents::text, months_pending::text, updated_at::text, ${kardexColumns("kardex")}::text, circuit,
                customer_ci, contact_phone, tariff, supply_status, enabling_title, route_order::text, cadastral_latitude::text,
-               cadastral_longitude::text, meter_brand, meter_index, meter_multiplier::text, claims::text, payment_plan::text,
+               cadastral_longitude::text, meter_brand, meter_index, meter_multiplier::text, claims::text,
                suspension_date::text, reconnection_manual::text, reconnection_date::text, reconnection_technician) ILIKE '%' || $2 || '%')
             AND ($3 = '' OR ($3 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(area), '') IS NULL) OR regexp_replace(LOWER(BTRIM(area)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($3)), '\\s+', ' ', 'g'))
            AND ($4 = '' OR ($4 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(locality), '') IS NULL) OR regexp_replace(LOWER(BTRIM(locality)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($4)), '\\s+', ' ', 'g'))
@@ -237,9 +244,9 @@ export class Application {
     );
     const count = await this.pool.query<{ total: string }>(
       `SELECT COUNT(*)::text AS total FROM debtors WHERE source = $1 AND ($2 = '' OR concat_ws(' ', debtor_id, account_id, supply_id, customer_name, address, reference_text,
-         meter_id, area, locality, route, debt_cents::text, months_pending::text, updated_at::text, kardex::text, circuit,
+         meter_id, area, locality, route, debt_cents::text, months_pending::text, updated_at::text, ${kardexColumns("kardex")}::text, circuit,
          customer_ci, contact_phone, tariff, supply_status, enabling_title, route_order::text, cadastral_latitude::text,
-         cadastral_longitude::text, meter_brand, meter_index, meter_multiplier::text, claims::text, payment_plan::text,
+         cadastral_longitude::text, meter_brand, meter_index, meter_multiplier::text, claims::text,
          suspension_date::text, reconnection_manual::text, reconnection_date::text, reconnection_technician) ILIKE '%' || $2 || '%')
        AND ($3 = '' OR ($3 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(area), '') IS NULL) OR regexp_replace(LOWER(BTRIM(area)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($3)), '\\s+', ' ', 'g'))
        AND ($4 = '' OR ($4 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(locality), '') IS NULL) OR regexp_replace(LOWER(BTRIM(locality)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($4)), '\\s+', ' ', 'g'))
@@ -277,7 +284,7 @@ export class Application {
     const result = await withTransaction(this.pool, async (client) => {
       const command = await claimCommand(client, operationId, "CREATE_ORDER", user.userId, requestHash);
       if (!command.claimed) return command.replay;
-      const debtor = await client.query<DebtorRow>("SELECT * FROM debtors WHERE debtor_id = $1 AND source = $2 FOR UPDATE", [debtorId, PROVISIONAL_SOURCE]);
+      const debtor = await client.query<DebtorRow>(`SELECT ${debtorColumns()} FROM debtors WHERE debtor_id = $1 AND source = $2 FOR UPDATE`, [debtorId, PROVISIONAL_SOURCE]);
       if (!debtor.rows[0]) throw new HttpError(404, "DEBTOR_NOT_FOUND", "Debtor was not found.");
       const duplicate = await client.query("SELECT order_id FROM orders WHERE debtor_id = $1 AND purpose = $2 AND status = 'GENERADO' FOR SHARE", [debtorId, purpose]);
       if (duplicate.rows[0]) throw new HttpError(409, "DUPLICATE_ORDER", "An active provisional order already exists for this debtor.");
@@ -313,7 +320,7 @@ export class Application {
     const result = await withTransaction(this.pool, async (client) => {
       const command = await claimCommand(client, batchId, "CREATE_ORDER_BATCH", user.userId, requestHash);
       if (!command.claimed) return command.replay;
-      const debtors = await client.query<DebtorRow>("SELECT * FROM debtors WHERE debtor_id = ANY($1::text[]) AND source = $2 FOR UPDATE", [debtorIds, PROVISIONAL_SOURCE]);
+      const debtors = await client.query<DebtorRow>(`SELECT ${debtorColumns()} FROM debtors WHERE debtor_id = ANY($1::text[]) AND source = $2 FOR UPDATE`, [debtorIds, PROVISIONAL_SOURCE]);
       const debtorById = new Map(debtors.rows.map((debtor) => [debtor.debtor_id, debtor]));
       const created: Record<string, unknown>[] = [];
       const skipped: Array<{ debtor_id: string; reason: "ACTIVE_ORDER_EXISTS" | "DEBTOR_NOT_FOUND" | "SUPPLY_ID_REQUIRED"; message: string }> = [];
@@ -419,9 +426,9 @@ export class Application {
     const deviceId = requiredString(body.device_id, "device_id");
     const orderVersion = requiredInteger(body.order_version, "order_version");
     const result = await withTransaction(this.pool, async (client) => {
-      const existing = await client.query<{ authorization_id: string; expires_at: string; technician_id: string }>("SELECT authorization_id, expires_at, technician_id FROM cut_authorizations WHERE operation_id = $1", [operationId]);
+      const existing = await client.query<{ authorization_id: string; expires_at: string; technician_id: string; action: string }>("SELECT authorization_id, expires_at, technician_id, action FROM cut_authorizations WHERE operation_id = $1", [operationId]);
       if (existing.rows[0]) {
-        if (existing.rows[0].technician_id !== user.userId) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another technician.");
+        if (existing.rows[0].technician_id !== user.userId || existing.rows[0].action !== "CUT") throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another action or technician.");
         throw new HttpError(409, "AUTHORIZATION_OPERATION_REPLAY", "Authorization operation already has a reservation; use saved response.");
       }
       const orderResult = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE OF o, d`, [orderId, PROVISIONAL_SOURCE]);
@@ -431,35 +438,146 @@ export class Application {
       if (order.version !== orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
       if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "Order is not eligible for a cut authorization.");
       if (order.physical_status !== "NONE") throw new HttpError(409, "PHYSICAL_STATUS_NOT_ELIGIBLE", "Physical status must be NONE before a new cut authorization.");
-      const priorPayment = await hasPriorPaymentObservation(client, order.account_id, order.supply_id);
-      const payment = priorPayment ? { status: "PAYMENT_CONFIRMED" as const } : await checkPaymentSafely(this.paymentAuthority, paymentCheckContext(order, user, operationId, deviceId), this.config.paymentAuthorityTimeoutMs);
-      if (payment.status !== "CLEAR") {
-        if (payment.status === "PAYMENT_CONFIRMED" && !priorPayment) await recordPaymentObservation(client, user, order, operationId, deviceId);
-        await insertAudit(client, {
-          actorId: user.userId, actorRole: user.role, action: "AUTHORIZE_CUT", result: "rejected",
-          orderId, operationId, deviceId,
-          reason: payment.status === "PAYMENT_CONFIRMED" ? "A confirmed payment blocks cut authorization pending review." : "Payment authority is unknown; cut authorization requires review.",
-          metadata: { payment_authority: payment.status },
-        });
-        return { blocked: true as const, code: "PAYMENT_REQUIRES_REVIEW", message: "Payment status blocks cut authorization; human review is required." };
+      const authorizationId = cryptoRandomUuid();
+      const token = createOpaqueToken();
+      const expiresAt = new Date(Date.now() + this.config.authorizationTtlSeconds * 1000).toISOString();
+      await client.query(
+        `INSERT INTO cut_authorizations(authorization_id, operation_id, order_id, technician_id, device_id, order_version, token_hash, status, expires_at, source, action, technician_name_snapshot)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'RESERVED', $8, $9, 'CUT', $10)`,
+        [authorizationId, operationId, orderId, user.userId, deviceId, orderVersion, hashToken(token), expiresAt, PROVISIONAL_SOURCE, user.displayName],
+      );
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "AUTHORIZE_CUT", result: "accepted", entityId: authorizationId, orderId, operationId, deviceId });
+      return { authorization_id: authorizationId, token, order_id: orderId, technician_id: user.userId, technician_name_snapshot: user.displayName, device_id: deviceId, operation_id: operationId, version: orderVersion, issued_at: new Date().toISOString(), expires_at: expiresAt, source: PROVISIONAL_SOURCE };
+    });
+    this.logEvent("authorization.cut", { requestId: String(response.getHeader("x-request-id")), result: "reserved" });
+    sendJson(response, 200, result);
+  }
+
+  private async authorizeReconnection(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void> {
+    this.requireRole(user, "TECHNICIAN");
+    const body = await parseJsonBody(request, this.config.maxBodyBytes);
+    const operationId = requiredString(body.operation_id, "operation_id");
+    const orderId = requiredString(body.order_id, "order_id");
+    const deviceId = requiredString(body.device_id, "device_id");
+    const orderVersion = requiredInteger(body.order_version, "order_version");
+    if (!isUuid(orderId) || orderVersion < 1) throw new HttpError(400, "INVALID_REQUEST", "order_id and order_version are invalid.");
+    const result = await withTransaction(this.pool, async (client) => {
+      const orderResult = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE OF o, d`, [orderId, PROVISIONAL_SOURCE]);
+      const order = orderResult.rows[0];
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found.");
+      if (order.assigned_technician_id !== user.userId) throw new HttpError(403, "ORDER_NOT_ASSIGNED", "Order is not assigned to current technician.");
+      if (order.version !== orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
+      if (order.status !== "EJECUTADO" || order.physical_status !== "CONFIRMED") throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "Reconnection requires a confirmed cut on an executed order.");
+      const cuts = await client.query<{ operation_id: string }>("SELECT operation_id FROM sync_operations WHERE order_id = $1 AND action = 'CUT' AND status = 'acknowledged' FOR SHARE", [orderId]);
+      if (cuts.rows.length !== 1) throw new HttpError(409, "CUT_CYCLE_AMBIGUOUS", "The order does not identify exactly one remotely confirmed cut cycle.");
+      await client.query(
+        "UPDATE cut_authorizations SET status = 'EXPIRED' WHERE order_id = $1 AND action = 'RECONNECTION' AND status = 'RESERVED' AND expires_at <= clock_timestamp()",
+        [orderId],
+      );
+      const existing = await client.query<{ technician_id: string; order_id: string; device_id: string; action: string; status: string }>(
+        "SELECT technician_id, order_id, device_id, action, status FROM cut_authorizations WHERE operation_id = $1 FOR UPDATE",
+        [operationId],
+      );
+      if (existing.rows[0]) {
+        const prior = existing.rows[0];
+        if (prior.technician_id !== user.userId || prior.order_id !== orderId || prior.device_id !== deviceId || prior.action !== "RECONNECTION") {
+          throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another context.");
+        }
+        throw new HttpError(409, "ENABLEMENT_OPERATION_REPLAY", "This operation already has a habilitation reservation; verify its status before starting another operation.");
+      }
+      const active = await client.query<{ authorization_id: string; operation_id: string; status: string }>("SELECT authorization_id, operation_id, status FROM cut_authorizations WHERE order_id = $1 AND action = 'RECONNECTION' AND status IN ('RESERVED', 'CONSUMED') FOR UPDATE", [orderId]);
+      if (active.rows[0]?.status === "CONSUMED") throw new HttpError(409, "RECONNECTION_ALREADY_CONSUMED", "A reconnection operation is already consumed for this order.");
+      if (active.rows[0]?.status === "RESERVED") {
+        await client.query("UPDATE cut_authorizations SET status = 'REJECTED' WHERE authorization_id = $1 AND status = 'RESERVED'", [active.rows[0].authorization_id]);
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "RECONNECTION_ENABLEMENT_REPLACED", result: "accepted", entityId: active.rows[0].authorization_id, orderId, operationId: active.rows[0].operation_id, deviceId, reason: "UNCONSUMED_RESERVATION_REPLACED", metadata: { replacement_operation_id: operationId, source: PROVISIONAL_SOURCE } });
       }
       const authorizationId = cryptoRandomUuid();
       const token = createOpaqueToken();
       const expiresAt = new Date(Date.now() + this.config.authorizationTtlSeconds * 1000).toISOString();
       await client.query(
-        `INSERT INTO cut_authorizations(authorization_id, operation_id, order_id, technician_id, device_id, order_version, token_hash, status, expires_at, source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'RESERVED', $8, $9)`,
-        [authorizationId, operationId, orderId, user.userId, deviceId, orderVersion, hashToken(token), expiresAt, PROVISIONAL_SOURCE],
+        `INSERT INTO cut_authorizations(authorization_id, operation_id, order_id, technician_id, device_id, order_version, token_hash, status, expires_at, source, action, technician_name_snapshot)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'RESERVED', $8, $9, 'RECONNECTION', $10)`,
+        [authorizationId, operationId, orderId, user.userId, deviceId, orderVersion, hashToken(token), expiresAt, PROVISIONAL_SOURCE, user.displayName],
       );
-      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "AUTHORIZE_CUT", result: "accepted", entityId: authorizationId, orderId, operationId, deviceId });
-      return { authorization_id: authorizationId, token, order_id: orderId, technician_id: user.userId, device_id: deviceId, operation_id: operationId, version: orderVersion, issued_at: new Date().toISOString(), expires_at: expiresAt, source: PROVISIONAL_SOURCE };
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "AUTHORIZE_RECONNECTION", result: "accepted", entityId: authorizationId, orderId, operationId, deviceId, metadata: { version: orderVersion, technician_name_snapshot: user.displayName, source: PROVISIONAL_SOURCE } });
+      return { enablement_id: authorizationId, token, order_id: orderId, technician_id: user.userId, technician_name_snapshot: user.displayName, device_id: deviceId, operation_id: operationId, version: orderVersion, issued_at: new Date().toISOString(), expires_at: expiresAt, source: PROVISIONAL_SOURCE };
     });
-    if ("blocked" in result) {
-      this.logEvent("authorization.cut", { requestId: String(response.getHeader("x-request-id")), result: "blocked" });
-      sendJson(response, 409, { code: result.code, message: result.message });
-      return;
-    }
-    this.logEvent("authorization.cut", { requestId: String(response.getHeader("x-request-id")), result: "reserved" });
+    this.logEvent("authorization.reconnection", { requestId: String(response.getHeader("x-request-id")), result: "reserved" });
+    sendJson(response, 200, result);
+  }
+
+  private async consumeReconnectionEnablement(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void> {
+    this.requireRole(user, "TECHNICIAN");
+    const body = await parseJsonBody(request, this.config.maxBodyBytes);
+    const enablementId = requiredString(body.enablement_id, "enablement_id");
+    const token = requiredString(body.token, "token");
+    const orderId = requiredString(body.order_id, "order_id");
+    const technicianId = requiredString(body.technician_id, "technician_id");
+    const deviceId = requiredString(body.device_id, "device_id");
+    const operationId = requiredString(body.operation_id, "operation_id");
+    const version = requiredInteger(body.version, "version");
+    if (technicianId !== user.userId) throw new HttpError(403, "TECHNICIAN_SCOPE", "Enablement technician does not match session.");
+    if (!isUuid(orderId) || version < 1) throw new HttpError(400, "INVALID_REQUEST", "order_id and version are invalid.");
+    const result = await withTransaction(this.pool, async (client) => {
+      const orderResult = await client.query<{ assigned_technician_id: string | null; status: string; physical_status: string; version: number }>("SELECT assigned_technician_id, status, physical_status, version FROM orders WHERE order_id = $1 AND source = $2 FOR UPDATE", [orderId, PROVISIONAL_SOURCE]);
+      const order = orderResult.rows[0];
+      if (!order || order.assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
+      const grantResult = await client.query<{ authorization_id: string; operation_id: string; order_id: string; technician_id: string; technician_name_snapshot: string | null; device_id: string; order_version: number; token_hash: string; status: string; expires_at: string; consumed_operation_id: string | null; action: string }>(
+        "SELECT authorization_id, operation_id, order_id, technician_id, technician_name_snapshot, device_id, order_version, token_hash, status, expires_at, consumed_operation_id, action FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE",
+        [enablementId],
+      );
+      const grant = grantResult.rows[0];
+      if (!grant || grant.action !== "RECONNECTION" || grant.operation_id !== operationId || grant.order_id !== orderId || grant.technician_id !== user.userId || grant.device_id !== deviceId || grant.order_version !== version || grant.token_hash !== hashToken(token)) {
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", orderId, operationId, deviceId, reason: "ENABLEMENT_BINDING_CONFLICT", metadata: { version, source: PROVISIONAL_SOURCE } });
+        return { status: "not_enabled" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+      }
+      if (grant.status === "CONSUMED") {
+        if (grant.consumed_operation_id !== operationId) {
+          await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", entityId: enablementId, orderId, operationId, deviceId, reason: "ENABLEMENT_ALREADY_CONSUMED", metadata: { version, source: PROVISIONAL_SOURCE } });
+          return { status: "not_enabled" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+        }
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION_REPLAY", result: "accepted", entityId: enablementId, orderId, operationId, deviceId, metadata: { version, source: PROVISIONAL_SOURCE } });
+        return { status: "consumed" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+      }
+      if (grant.status !== "RESERVED" || Date.parse(grant.expires_at) <= Date.now()) {
+        if (grant.status === "RESERVED") await client.query("UPDATE cut_authorizations SET status = 'EXPIRED' WHERE authorization_id = $1 AND status = 'RESERVED'", [enablementId]);
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", entityId: enablementId, orderId, operationId, deviceId, reason: "ENABLEMENT_EXPIRED_OR_UNAVAILABLE", metadata: { version, source: PROVISIONAL_SOURCE } });
+        return { status: "not_enabled" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+      }
+      if (!order || order.assigned_technician_id !== user.userId || order.status !== "EJECUTADO" || order.physical_status !== "CONFIRMED" || order.version !== version) {
+        await client.query("UPDATE cut_authorizations SET status = 'REJECTED' WHERE authorization_id = $1 AND status = 'RESERVED'", [enablementId]);
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", entityId: enablementId, orderId, operationId, deviceId, reason: "ORDER_STATE_CONFLICT", metadata: { version, source: PROVISIONAL_SOURCE } });
+        return { status: "not_enabled" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+      }
+      const consumed = await client.query("UPDATE cut_authorizations SET status = 'CONSUMED', consumed_at = clock_timestamp(), consumed_operation_id = $2 WHERE authorization_id = $1 AND action = 'RECONNECTION' AND status = 'RESERVED' AND expires_at > clock_timestamp()", [enablementId, operationId]);
+      if (consumed.rowCount !== 1) {
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", entityId: enablementId, orderId, operationId, deviceId, reason: "ENABLEMENT_EXPIRED_OR_UNAVAILABLE", metadata: { version, source: PROVISIONAL_SOURCE } });
+        return { status: "not_enabled" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+      }
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "accepted", entityId: enablementId, orderId, operationId, deviceId, metadata: { version, technician_name_snapshot: grant.technician_name_snapshot, source: PROVISIONAL_SOURCE } });
+      return { status: "consumed" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+    });
+    this.logEvent("authorization.reconnection", { requestId: String(response.getHeader("x-request-id")), result: "consumed" });
+    sendJson(response, 200, result);
+  }
+
+  private async lookupReconnectionEnablement(response: ServerResponse, user: SessionUser, operationId: string | undefined): Promise<void> {
+    this.requireRole(user, "TECHNICIAN");
+    if (!operationId) throw new HttpError(400, "INVALID_REQUEST", "operation_id is required.");
+    const result = await withTransaction(this.pool, async (client) => {
+      const rows = await client.query<{ authorization_id: string; technician_id: string; status: string; expires_at: string }>(
+        "SELECT authorization_id, technician_id, status, expires_at FROM cut_authorizations WHERE operation_id = $1 AND action = 'RECONNECTION' FOR UPDATE",
+        [operationId],
+      );
+      const grant = rows.rows[0];
+      if (!grant || grant.technician_id !== user.userId) return { status: "not_found" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+      let status = grant.status === "CONSUMED" ? "consumed" as const : grant.status === "RESERVED" ? "reserved" as const : grant.status === "EXPIRED" ? "expired" as const : "unknown" as const;
+      if (status === "reserved" && Date.parse(grant.expires_at) <= Date.now()) {
+        await client.query("UPDATE cut_authorizations SET status = 'EXPIRED' WHERE authorization_id = $1 AND status = 'RESERVED'", [grant.authorization_id]);
+        status = "expired";
+      }
+      return { status, operation_id: operationId, source: PROVISIONAL_SOURCE };
+    });
     sendJson(response, 200, result);
   }
 
@@ -497,6 +615,9 @@ export class Application {
     if (bytes.length === 0 || bytes.toString("base64") !== encoded) throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "Evidence bytes are empty or malformed.");
     const computedHash = createHash("sha256").update(bytes).digest("hex");
     if (computedHash !== declaredHash) throw new HttpError(422, "EVIDENCE_HASH_MISMATCH", "Evidence content does not match declared SHA-256 hash.");
+    const orderScope = await this.pool.query<{ assigned_technician_id: string | null }>("SELECT assigned_technician_id FROM orders WHERE order_id = $1 AND source = $2", [orderId, PROVISIONAL_SOURCE]);
+    if (!orderScope.rows[0] || orderScope.rows[0].assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
+    await validateEvidenceImage(bytes, body.mime_type);
     const result = await withTransaction(this.pool, async (client) => {
       const orderResult = await client.query<{ assigned_technician_id: string | null }>("SELECT assigned_technician_id FROM orders WHERE order_id = $1 AND source = $2 FOR UPDATE", [orderId, PROVISIONAL_SOURCE]);
       if (!orderResult.rows[0] || orderResult.rows[0].assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
@@ -544,6 +665,30 @@ export class Application {
        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_VISIT", result: "accepted", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, metadata: safeSyncPayload(payload) });
       return { status: "acknowledged" };
     }
+    if (payload.action === "RECONNECTION") {
+      if (order.status !== "EJECUTADO" || order.physical_status !== "CONFIRMED") return await rejectSync(client, user, payload, "RECONNECTION requires an executed order with a confirmed cut.");
+      if (payload.order_version === undefined || order.version !== payload.order_version) return await rejectSync(client, user, payload, "Order version is stale.");
+      const cuts = await client.query<{ operation_id: string }>("SELECT operation_id FROM sync_operations WHERE order_id = $1 AND action = 'CUT' AND status = 'acknowledged' FOR SHARE", [payload.order_id]);
+      if (cuts.rows.length !== 1) return await rejectSync(client, user, payload, "Order does not identify exactly one confirmed CUT cycle.");
+      if (!payload.authorization_id || payload.authorization_token !== undefined) return await rejectSync(client, user, payload, "RECONNECTION requires its consumed enablement identifier and must not resend the token.");
+      const authorization = await client.query<{ authorization_id: string; operation_id: string; order_id: string; technician_id: string; technician_name_snapshot: string | null; device_id: string; order_version: number; status: string; consumed_operation_id: string | null; action: string }>(
+        "SELECT authorization_id, operation_id, order_id, technician_id, technician_name_snapshot, device_id, order_version, status, consumed_operation_id, action FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE",
+        [payload.authorization_id],
+      );
+      const grant = authorization.rows[0];
+      if (!grant || grant.action !== "RECONNECTION" || grant.status !== "CONSUMED" || grant.consumed_operation_id !== payload.operation_id || grant.operation_id !== payload.operation_id || grant.order_id !== payload.order_id || grant.technician_id !== user.userId || grant.device_id !== payload.device_id || grant.order_version !== payload.order_version || !grant.technician_name_snapshot || grant.technician_name_snapshot !== payload.technician_name_snapshot) {
+        return await rejectSync(client, user, payload, "Consumed reconnection habilitation does not match this operation.");
+      }
+      if (payload.evidence_refs.length > 0) {
+        const evidence = await client.query<{ evidence_id: string }>("SELECT evidence_id FROM evidence_assets WHERE evidence_id = ANY($1::text[]) AND order_id = $2 AND operation_id = $3 AND technician_id = $4 AND device_id = $5 AND status = 'verified'", [payload.evidence_refs, payload.order_id, payload.operation_id, user.userId, payload.device_id]);
+        if (evidence.rows.length !== new Set(payload.evidence_refs).size) return await rejectSync(client, user, payload, "RECONNECTION evidence is missing, unverified, or bound to another operation.");
+      }
+      const updatedOrder = await client.query("UPDATE orders SET status = 'RECONEXIÓN', physical_status = 'CONFIRMED', version = version + 1, updated_at = now() WHERE order_id = $1 AND status = 'EJECUTADO' AND physical_status = 'CONFIRMED' AND version = $2", [payload.order_id, payload.order_version]);
+      if (updatedOrder.rowCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed while recording reconnection.");
+      await client.query("UPDATE sync_operations SET status = 'acknowledged', conflict_reason = NULL, acknowledged_at = now() WHERE operation_id = $1", [payload.operation_id]);
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_RECONNECTION", result: "accepted", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, metadata: safeSyncPayload(payload), transition: { before: order.status, after: "RECONEXIÓN", version: payload.order_version + 1 } });
+      return { status: "acknowledged" };
+    }
     if (order.status !== "GENERADO") return await rejectSync(client, user, payload, "Only GENERADO orders can be cut.");
     if (order.physical_status !== "NONE") return await rejectSync(client, user, payload, "Physical status must be NONE before a cut can be synchronized.");
     if (payload.evidence_refs.length > 0) {
@@ -552,20 +697,11 @@ export class Application {
     }
     if (!payload.authorization_id || !payload.authorization_token || payload.order_version === undefined) return await rejectSync(client, user, payload, "Cut requires authorization, token, and order version.");
     if (order.version !== payload.order_version) return await rejectSync(client, user, payload, "Order version is stale.");
-    const authorization = await client.query<{ authorization_id: string; operation_id: string; token_hash: string; status: string; expires_at: string; order_id: string; technician_id: string; device_id: string; order_version: number }>("SELECT authorization_id, operation_id, token_hash, status, expires_at, order_id, technician_id, device_id, order_version FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE", [payload.authorization_id]);
+    const authorization = await client.query<{ authorization_id: string; operation_id: string; token_hash: string; status: string; order_id: string; technician_id: string; technician_name_snapshot: string | null; device_id: string; order_version: number; action: string }>("SELECT authorization_id, operation_id, token_hash, status, order_id, technician_id, technician_name_snapshot, device_id, order_version, action FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE", [payload.authorization_id]);
     const grant = authorization.rows[0];
-    if (!grant || grant.operation_id !== payload.operation_id || grant.order_id !== payload.order_id || grant.technician_id !== user.userId || grant.device_id !== payload.device_id || grant.order_version !== payload.order_version || grant.status !== "RESERVED" || grant.token_hash !== hashToken(payload.authorization_token)) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
-    if (new Date(grant.expires_at).getTime() <= Date.now()) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
-    const priorPayment = await hasPriorPaymentObservation(client, order.account_id, order.supply_id);
-    const payment = priorPayment ? { status: "PAYMENT_CONFIRMED" as const } : await checkPaymentSafely(this.paymentAuthority, paymentCheckContext(order, user, payload.operation_id, payload.device_id), this.config.paymentAuthorityTimeoutMs);
-    if (payment.status !== "CLEAR") {
-      if (payment.status === "PAYMENT_CONFIRMED" && !priorPayment) await recordPaymentObservation(client, user, order, payload.operation_id, payload.device_id);
-      const message = payment.status === "PAYMENT_CONFIRMED"
-        ? "A confirmed payment blocks CUT synchronization pending review."
-        : "Payment authority is unknown; CUT synchronization requires review.";
-      return await rejectSync(client, user, payload, message);
-    }
-    await client.query("UPDATE cut_authorizations SET status = 'CONSUMED', consumed_at = now(), consumed_operation_id = $2 WHERE authorization_id = $1 AND status = 'RESERVED'", [grant.authorization_id, payload.operation_id]);
+    if (!grant || grant.action !== "CUT" || grant.operation_id !== payload.operation_id || grant.order_id !== payload.order_id || grant.technician_id !== user.userId || grant.device_id !== payload.device_id || grant.order_version !== payload.order_version || grant.status !== "RESERVED" || grant.token_hash !== hashToken(payload.authorization_token) || grant.technician_name_snapshot !== payload.technician_name_snapshot) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
+    const consumedAuthorization = await client.query("UPDATE cut_authorizations SET status = 'CONSUMED', consumed_at = clock_timestamp(), consumed_operation_id = $2 WHERE authorization_id = $1 AND action = 'CUT' AND status = 'RESERVED' AND expires_at > clock_timestamp()", [grant.authorization_id, payload.operation_id]);
+    if (consumedAuthorization.rowCount !== 1) return await rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
     const updatedOrder = await client.query("UPDATE orders SET status = 'EJECUTADO', physical_status = 'CONFIRMED', version = version + 1, updated_at = now() WHERE order_id = $1 AND version = $2", [payload.order_id, payload.order_version]);
     if (updatedOrder.rowCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed while consuming authorization.");
     await client.query("UPDATE sync_operations SET status = 'acknowledged', conflict_reason = NULL, acknowledged_at = now() WHERE operation_id = $1", [payload.operation_id]);
@@ -576,7 +712,7 @@ export class Application {
   private async lookupOperation(response: ServerResponse, user: SessionUser, operationId: string | undefined): Promise<void> {
     if (user.role !== "TECHNICIAN" && user.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "Role is not allowed.");
     if (!operationId) throw new HttpError(400, "INVALID_REQUEST", "operation_id is required.");
-    const result = await this.pool.query<{ operation_id: string; status: string; order_id: string; technician_id: string; device_id: string; action: "CUT" | "VISIT"; payload: Record<string, unknown> }>(
+    const result = await this.pool.query<{ operation_id: string; status: string; order_id: string; technician_id: string; device_id: string; action: "CUT" | "RECONNECTION" | "VISIT"; payload: Record<string, unknown> }>(
       `SELECT operation_id, status, order_id, technician_id, device_id, action, payload
        FROM sync_operations WHERE operation_id = $1 AND ($2::text = 'ADMIN' OR technician_id = $3)`,
       [operationId, user.role, user.userId],
@@ -590,10 +726,15 @@ export class Application {
       const evidenceRefs = payload.evidence_refs;
       const fieldCapture = payload.field_capture;
       const orderVersion = payload.order_version;
+      const effectiveAt = payload.effective_at;
+      const demora = payload.demora;
+      const technicianNameSnapshot = payload.technician_name_snapshot;
       const complete = typeof recordedAt === "string" && Array.isArray(evidenceRefs) && evidenceRefs.every((ref) => typeof ref === "string") &&
-        (row.action === "VISIT" || (Number.isSafeInteger(orderVersion) && typeof fieldCapture === "object" && fieldCapture !== null));
+        (row.action === "VISIT" || (Number.isSafeInteger(orderVersion) && (row.action === "RECONNECTION"
+          ? typeof effectiveAt === "string" && typeof demora === "string" && typeof technicianNameSnapshot === "string"
+          : typeof fieldCapture === "object" && fieldCapture !== null)));
       if (!complete) return sendJson(response, 200, { status: "unknown", operation_id: operationId, error_code: "LEGACY_RECEIPT_INCOMPLETE" });
-      return sendJson(response, 200, { status: "confirmed", operation_id: row.operation_id, order_id: row.order_id, technician_id: row.technician_id, device_id: row.device_id, action: row.action, recorded_at: recordedAt, evidence_refs: evidenceRefs, order_version: orderVersion, field_capture: fieldCapture });
+      return sendJson(response, 200, { status: "confirmed", operation_id: row.operation_id, order_id: row.order_id, technician_id: row.technician_id, technician_name_snapshot: technicianNameSnapshot, device_id: row.device_id, action: row.action, recorded_at: recordedAt, effective_at: effectiveAt, demora, evidence_refs: evidenceRefs, order_version: orderVersion, field_capture: fieldCapture });
     }
     sendJson(response, 200, { status: "unknown", operation_id: operationId, error_code: "CONFLICT_REQUIRES_REVIEW" });
   }
@@ -655,13 +796,58 @@ export class Application {
     if (orderId && !isUuid(orderId)) throw new HttpError(400, "INVALID_REQUEST", "order_id must be a UUID.");
     const page = pageRequest(url);
     const result = await this.pool.query<{ audit_id: string; actor_id: string; actor_role: Role | null; action: string; entity_id: string | null; order_id: string | null; operation_id: string | null; result: string; reason: string | null; device_id: string | null; occurred_at: string; transition: unknown; metadata: unknown }>(
-      `SELECT audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, reason, device_id, occurred_at, transition, metadata
-       FROM audit_events WHERE source = $1 AND ($2::uuid IS NULL OR order_id = $2::uuid) ORDER BY occurred_at ASC, audit_id ASC LIMIT $3 OFFSET $4`,
+      `SELECT audit_id, actor_id, actor_role, action, entity_id, order_id, operation_id, result, CASE WHEN reason ~* '(^|[^[:alpha:]])(payment|pago)([^[:alpha:]]|$)' THEN NULL ELSE reason END AS reason, device_id, occurred_at, transition, metadata - 'payment_authority' - 'payment_plan' - 'paid_at' AS metadata
+       FROM audit_events WHERE source = $1 AND action <> 'PAYMENT_CONFIRMED_OBSERVED' AND ($2::uuid IS NULL OR order_id = $2::uuid) ORDER BY occurred_at ASC, audit_id ASC LIMIT $3 OFFSET $4`,
       [PROVISIONAL_SOURCE, orderId, page.limit, page.offset],
     );
-    const count = await this.pool.query<{ total: string }>("SELECT COUNT(*)::text AS total FROM audit_events WHERE source = $1 AND ($2::uuid IS NULL OR order_id = $2::uuid)", [PROVISIONAL_SOURCE, orderId]);
+    const count = await this.pool.query<{ total: string }>("SELECT COUNT(*)::text AS total FROM audit_events WHERE source = $1 AND action <> 'PAYMENT_CONFIRMED_OBSERVED' AND ($2::uuid IS NULL OR order_id = $2::uuid)", [PROVISIONAL_SOURCE, orderId]);
     sendJson(response, 200, { source: PROVISIONAL_SOURCE, audit: result.rows, ...pageResponse(page, Number(count.rows[0]?.total ?? 0), result.rows.length) });
   }
+}
+
+async function validateEvidenceImage(bytes: Buffer, mimeType: "image/jpeg" | "image/png"): Promise<void> {
+  const isPng = bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE);
+  const isJpeg = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8;
+  if (!isPng && !isJpeg) throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "Evidence bytes must contain a complete JPEG or PNG photo. Retake or re-export the photo.");
+  if ((mimeType === "image/png") !== isPng) throw new HttpError(400, "EVIDENCE_FORMAT_INVALID", "Evidence image format does not match mime_type. Send the actual JPEG or PNG MIME type.");
+  if (isPng) validateStaticPngChunks(bytes);
+  try {
+    const image = sharp(bytes, { failOn: "warning", limitInputPixels: MAX_EVIDENCE_PIXELS, limitInputChannels: 4, sequentialRead: true, unlimited: false });
+    const metadata = await image.metadata();
+    if (metadata.format !== (mimeType === "image/jpeg" ? "jpeg" : "png")) throw new HttpError(400, "EVIDENCE_FORMAT_INVALID", "Evidence decoded format does not match mime_type. Send the actual JPEG or PNG MIME type.");
+    if ((metadata.pages ?? 1) !== 1) throw new HttpError(400, "EVIDENCE_FORMAT_INVALID", "Evidence must be a single still JPEG or PNG photo. Animated or multi-page images are unsupported.");
+    const { width, height } = metadata;
+    if (!width || !height) throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "Evidence image dimensions are invalid. Retake or re-export the photo.");
+    if (width > MAX_EVIDENCE_DIMENSION || height > MAX_EVIDENCE_DIMENSION || width * height > MAX_EVIDENCE_PIXELS) throw evidenceImageTooLarge();
+    // Metadata alone does not validate pixels. Decode the entire image, retaining original bytes for storage.
+    await image.timeout({ seconds: EVIDENCE_DECODE_TIMEOUT_SECONDS }).toColourspace("srgb").removeAlpha().raw({ depth: "uchar" }).toBuffer();
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if (error instanceof Error && error.message.includes("pixel limit")) throw evidenceImageTooLarge();
+    throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "Evidence must be a complete, decodable JPEG or PNG photo within the processing limit. Retake or re-export the photo.");
+  }
+}
+
+function evidenceImageTooLarge(): HttpError {
+  return new HttpError(413, "EVIDENCE_IMAGE_TOO_LARGE", `Evidence must be at most ${MAX_EVIDENCE_DIMENSION} pixels per side and ${MAX_EVIDENCE_PIXELS} total pixels. Resize the photo before retrying.`);
+}
+
+function validateStaticPngChunks(bytes: Buffer): void {
+  // libvips exposes APNG as a still PNG; inspect chunk boundaries to reject animation explicitly.
+  let offset = PNG_SIGNATURE.length;
+  while (offset + 12 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString("ascii", offset + 4, offset + 8);
+    const end = offset + 12 + length;
+    if (end > bytes.length || (offset === PNG_SIGNATURE.length && (type !== "IHDR" || length !== 13))) break;
+    if (type === "acTL" || type === "fcTL" || type === "fdAT") throw new HttpError(400, "EVIDENCE_FORMAT_INVALID", "Animated PNG evidence is unsupported. Export a single still JPEG or PNG photo.");
+    if (type === "IEND") {
+      if (length === 0 && end === bytes.length) return;
+      break;
+    }
+    offset = end;
+  }
+  throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "Evidence PNG chunks are incomplete or malformed. Retake or re-export the photo.");
 }
 
 async function claimCommand(client: PoolClient, operationId: string, operationType: string, actorId: string, requestHash: string): Promise<{ claimed: true } | { claimed: false; replay: unknown }> {
@@ -681,41 +867,30 @@ async function commandReplay(client: PoolClient, operationId: string, operationT
   if (!row) return undefined;
   if (row.operation_type !== operationType || row.actor_id !== actorId || row.request_hash !== requestHash) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Operation identifier is already bound to another command.");
   if (row.response === null || row.response === undefined) throw new HttpError(409, "OPERATION_IN_PROGRESS", "Operation is already in progress.");
-  return row.response;
+  return projectCommandResponse(row.response);
 }
 
-function paymentCheckContext(order: OrderRow, user: SessionUser, operationId: string, deviceId: string): PaymentCheckContext {
-  return {
-    orderId: order.order_id,
-    accountId: order.account_id,
-    supplyId: order.supply_id,
-    actorId: user.userId,
-    actorRole: user.role,
-    deviceId,
-    operationId,
-  };
-}
-
-async function hasPriorPaymentObservation(client: PoolClient, accountId: string, supplyId: string): Promise<boolean> {
-  const result = await client.query("SELECT observation_id FROM payment_observations WHERE account_id = $1 OR supply_id = $2 LIMIT 1", [accountId, supplyId]);
-  return result.rows.length > 0;
-}
-
-async function recordPaymentObservation(client: PoolClient, user: SessionUser, order: OrderRow, operationId: string, deviceId: string): Promise<void> {
-  const observedAt = new Date().toISOString();
-  const inserted = await client.query(
-    `INSERT INTO payment_observations(observation_id, operation_id, order_id, account_id, supply_id, actor_id, actor_role, device_id, source, observed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     ON CONFLICT (operation_id) DO NOTHING`,
-    [cryptoRandomUuid(), operationId, order.order_id, order.account_id, order.supply_id, user.userId, user.role, deviceId, PROVISIONAL_SOURCE, observedAt],
-  );
-  if (inserted.rowCount === 1) {
-    await insertAudit(client, {
-      actorId: user.userId, actorRole: user.role, action: "PAYMENT_CONFIRMED_OBSERVED", result: "accepted",
-      entityId: operationId, orderId: order.order_id, operationId, deviceId,
-      metadata: { payment_authority: "PAYMENT_CONFIRMED", source: PROVISIONAL_SOURCE, observed_at: observedAt },
-    });
+function projectContext(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const fields = ["debtor_id", "account_id", "supply_id", "customer_name", "address", "references", "meter_id",
+    "area", "area_name", "locality", "route", "route_name", "debt_cents", "months_pending", "updated_at", "source",
+    "circuit", "customer_ci", "contact_phone", "tariff", "supply_status", "enabling_title", "route_order",
+    "cadastral_latitude", "cadastral_longitude", "meter_brand", "meter_index", "meter_multiplier", "claims",
+    "suspension_date", "reconnection_manual", "reconnection_date", "reconnection_technician"];
+  const context: Record<string, unknown> = Object.fromEntries(fields.filter((key) => key in value).map((key) => [key, value[key]]));
+  if (Array.isArray(value.kardex)) {
+    const invoiceFields = ["entry_id", "entryId", "period", "amount_cents", "amountCents", "billing_date", "billingDate", "invoice_origin", "invoiceOrigin", "days_late", "daysLate"];
+    context.kardex = value.kardex.map((invoice) => isRecord(invoice)
+      ? Object.fromEntries(invoiceFields.filter((key) => key in invoice).map((key) => [key, invoice[key]]))
+      : invoice);
   }
+  return context;
+}
+
+function projectCommandResponse(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  if (Array.isArray(value.created)) return { ...value, created: value.created.map(projectCommandResponse) };
+  return "context" in value ? { ...value, context: projectContext(value.context) } : value;
 }
 
 async function rejectSync(client: PoolClient, user: SessionUser, payload: SyncPayload, message: string): Promise<{ status: "conflict"; message: string }> {
@@ -744,6 +919,9 @@ function syncReceipt(payload: SyncPayload): Record<string, unknown> {
     order_version: payload.order_version,
     action: payload.action,
     recorded_at: payload.recorded_at,
+    effective_at: payload.effective_at,
+    technician_name_snapshot: payload.technician_name_snapshot,
+    demora: payload.demora,
     evidence_refs: payload.evidence_refs,
     field_capture: payload.field_capture,
   };
@@ -755,7 +933,7 @@ function isUuid(value: string): boolean {
 
 function parseSyncPayload(body: Record<string, unknown>): SyncPayload {
   const action = requiredString(body.action, "action");
-  if (action !== "CUT" && action !== "VISIT") throw new HttpError(400, "INVALID_ACTION", "Only CUT and VISIT are supported.");
+  if (action !== "CUT" && action !== "RECONNECTION" && action !== "VISIT") throw new HttpError(400, "INVALID_ACTION", "Action is not supported.");
   const evidence = body.evidence_refs;
   if (!Array.isArray(evidence) || evidence.some((item) => typeof item !== "string")) throw new HttpError(400, "INVALID_REQUEST", "evidence_refs must be an array of strings.");
   const payload: SyncPayload = {
@@ -763,8 +941,11 @@ function parseSyncPayload(body: Record<string, unknown>): SyncPayload {
     device_id: requiredString(body.device_id, "device_id"), recorded_at: requiredString(body.recorded_at, "recorded_at"), evidence_refs: evidence,
   };
   if (body.technician_id !== undefined) payload.technician_id = requiredString(body.technician_id, "technician_id");
-  if (body.attempted_action !== undefined && body.attempted_action !== "CUT") throw new HttpError(400, "INVALID_REQUEST", "attempted_action must be CUT.");
-  if (body.attempted_action !== undefined) payload.attempted_action = "CUT";
+  if (body.technician_name_snapshot !== undefined) payload.technician_name_snapshot = requiredNonBlankString(body.technician_name_snapshot, "technician_name_snapshot");
+  if (body.effective_at !== undefined) payload.effective_at = requiredString(body.effective_at, "effective_at");
+  if (body.demora !== undefined) payload.demora = requiredNonBlankString(body.demora, "demora");
+  if (body.attempted_action !== undefined && body.attempted_action !== "CUT" && body.attempted_action !== "RECONNECTION") throw new HttpError(400, "INVALID_REQUEST", "attempted_action is invalid.");
+  if (body.attempted_action !== undefined) payload.attempted_action = body.attempted_action;
   if (body.order_version !== undefined) payload.order_version = requiredInteger(body.order_version, "order_version");
   if (body.authorization_id !== undefined) payload.authorization_id = requiredString(body.authorization_id, "authorization_id");
   if (body.authorization_token !== undefined) payload.authorization_token = requiredString(body.authorization_token, "authorization_token");
@@ -778,6 +959,14 @@ function validateSyncPayload(payload: SyncPayload): void {
   if (!isIsoTimestamp(payload.recorded_at)) throw new HttpError(400, "INVALID_TIMESTAMP", "recorded_at must be an ISO timestamp.");
   if (payload.action === "VISIT") {
     if (!payload.reason?.trim()) throw new HttpError(400, "VISIT_REASON_REQUIRED", "VISIT requires a reason.");
+    return;
+  }
+  if (payload.action === "RECONNECTION") {
+    if (!payload.authorization_id || payload.authorization_token !== undefined || payload.order_version === undefined) throw new HttpError(400, "RECONNECTION_ENABLEMENT_REQUIRED", "RECONNECTION requires its consumed enablement id and order version, and must not resend its token.");
+    if (!isIsoTimestamp(payload.effective_at)) throw new HttpError(400, "INVALID_TIMESTAMP", "effective_at must be an ISO timestamp.");
+    if (!payload.technician_name_snapshot?.trim()) throw new HttpError(400, "TECHNICIAN_NAME_REQUIRED", "RECONNECTION requires the technician name snapshot.");
+    if (!payload.demora?.trim() || payload.demora.length > 1000) throw new HttpError(400, "RECONNECTION_DEMORA_INVALID", "demora must contain 1 to 1000 characters.");
+    if (payload.evidence_refs.length === 0 && !hasControlledException(payload.exception_reason, "saltar_control_fotos")) throw new HttpError(400, "EVIDENCE_REQUIRED", "RECONNECTION requires evidence_refs or a controlled photo exception.");
     return;
   }
   if (payload.evidence_refs.length === 0 && !hasControlledException(payload.exception_reason, "saltar_control_fotos")) throw new HttpError(400, "EVIDENCE_REQUIRED", "CUT requires evidence_refs or a controlled photo exception.");
@@ -803,6 +992,11 @@ function isIsoTimestamp(value: unknown): boolean {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) && Number.isFinite(Date.parse(value));
 }
 
+function requiredNonBlankString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new HttpError(400, "INVALID_REQUEST", `${field} is required.`);
+  return value;
+}
+
 function validateCaptureMeter(rawCapture: unknown, rawContext: unknown): void {
   const capture = isRecord(rawCapture) ? rawCapture : undefined;
   const reading = capture && isRecord(capture.reading) ? capture.reading : undefined;
@@ -811,9 +1005,27 @@ function validateCaptureMeter(rawCapture: unknown, rawContext: unknown): void {
   if (expectedMeterId && reading && reading.meterId !== expectedMeterId) throw new HttpError(400, "METER_READING_MISMATCH", "Final meter reading does not match order meter.");
 }
 
+function kardexColumns(column: string): string {
+  return `(SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+    'entry_id', COALESCE(invoice->'entry_id', invoice->'entryId'), 'period', invoice->'period',
+    'amount_cents', COALESCE(invoice->'amount_cents', invoice->'amountCents'),
+    'billing_date', COALESCE(invoice->'billing_date', invoice->'billingDate'),
+    'invoice_origin', COALESCE(invoice->'invoice_origin', invoice->'invoiceOrigin'),
+    'days_late', COALESCE(invoice->'days_late', invoice->'daysLate')
+  )) ORDER BY position), '[]'::jsonb) FROM jsonb_array_elements(${column}) WITH ORDINALITY AS entries(invoice, position))`;
+}
+
+function debtorColumns(): string {
+  return `debtor_id, account_id, supply_id, customer_name, address, reference_text, meter_id, area, locality,
+    route, debt_cents, months_pending, updated_at, ${kardexColumns("kardex")} AS kardex, circuit, customer_ci,
+    contact_phone, tariff, supply_status, enabling_title, route_order, cadastral_latitude, cadastral_longitude,
+    meter_brand, meter_index, meter_multiplier, claims, suspension_date, reconnection_manual, reconnection_date,
+    reconnection_technician, jsonb_build_object('area_name', context->'area_name', 'ruta_name', context->'ruta_name') AS context`;
+}
+
 function orderColumns(alias: string): string {
   return `${alias}.order_id, ${alias}.cuc, ${alias}.debtor_id, d.account_id, d.supply_id, ${alias}.purpose, ${alias}.status, ${alias}.physical_status, ${alias}.version, ${alias}.created_by, ${alias}.assigned_technician_id, assigned_technician.display_name AS assigned_technician_name, ${alias}.created_at,
-    jsonb_build_object('debtor_id', d.debtor_id, 'account_id', d.account_id, 'supply_id', d.supply_id, 'customer_name', d.customer_name, 'address', d.address, 'references', d.reference_text, 'meter_id', d.meter_id, 'area', d.area, 'area_name', NULLIF(BTRIM(d.context->>'area_name'), ''), 'locality', d.locality, 'route', d.route, 'route_name', NULLIF(BTRIM(d.context->>'ruta_name'), ''), 'debt_cents', d.debt_cents, 'months_pending', d.months_pending, 'updated_at', d.updated_at, 'kardex', d.kardex, 'source', d.source, 'circuit', d.circuit, 'customer_ci', d.customer_ci, 'contact_phone', d.contact_phone, 'tariff', d.tariff, 'supply_status', d.supply_status, 'enabling_title', d.enabling_title, 'route_order', d.route_order, 'cadastral_latitude', d.cadastral_latitude, 'cadastral_longitude', d.cadastral_longitude, 'meter_brand', d.meter_brand, 'meter_index', d.meter_index, 'meter_multiplier', d.meter_multiplier, 'claims', d.claims, 'payment_plan', d.payment_plan, 'suspension_date', d.suspension_date, 'reconnection_manual', d.reconnection_manual, 'reconnection_date', d.reconnection_date, 'reconnection_technician', d.reconnection_technician, 'provisional_metadata', d.context) AS context`;
+    jsonb_build_object('debtor_id', d.debtor_id, 'account_id', d.account_id, 'supply_id', d.supply_id, 'customer_name', d.customer_name, 'address', d.address, 'references', d.reference_text, 'meter_id', d.meter_id, 'area', d.area, 'area_name', NULLIF(BTRIM(d.context->>'area_name'), ''), 'locality', d.locality, 'route', d.route, 'route_name', NULLIF(BTRIM(d.context->>'ruta_name'), ''), 'debt_cents', d.debt_cents, 'months_pending', d.months_pending, 'updated_at', d.updated_at, 'kardex', ${kardexColumns("d.kardex")}, 'source', d.source, 'circuit', d.circuit, 'customer_ci', d.customer_ci, 'contact_phone', d.contact_phone, 'tariff', d.tariff, 'supply_status', d.supply_status, 'enabling_title', d.enabling_title, 'route_order', d.route_order, 'cadastral_latitude', d.cadastral_latitude, 'cadastral_longitude', d.cadastral_longitude, 'meter_brand', d.meter_brand, 'meter_index', d.meter_index, 'meter_multiplier', d.meter_multiplier, 'claims', d.claims, 'suspension_date', d.suspension_date, 'reconnection_manual', d.reconnection_manual, 'reconnection_date', d.reconnection_date, 'reconnection_technician', d.reconnection_technician) AS context`;
 }
 
 function orderSelect(where: string, order: string): string {
@@ -821,7 +1033,7 @@ function orderSelect(where: string, order: string): string {
 }
 
 function toDebtor(row: DebtorRow): Record<string, unknown> {
-  return { debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, customer_name: row.customer_name, address: row.address, references: row.reference_text, meter_id: row.meter_id, area: row.area, area_name: contextString(row.context, "area_name"), locality: row.locality, route: row.route, route_name: contextString(row.context, "ruta_name"), debt_cents: row.debt_cents, months_pending: row.months_pending, updated_at: row.updated_at, kardex: row.kardex, source: PROVISIONAL_SOURCE, circuit: row.circuit, customer_ci: row.customer_ci, contact_phone: row.contact_phone, tariff: row.tariff, supply_status: row.supply_status, enabling_title: row.enabling_title, route_order: row.route_order, cadastral_latitude: row.cadastral_latitude, cadastral_longitude: row.cadastral_longitude, meter_brand: row.meter_brand, meter_index: row.meter_index, meter_multiplier: row.meter_multiplier, claims: row.claims, payment_plan: row.payment_plan, suspension_date: row.suspension_date, reconnection_manual: row.reconnection_manual, reconnection_date: row.reconnection_date, reconnection_technician: row.reconnection_technician };
+  return { debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, customer_name: row.customer_name, address: row.address, references: row.reference_text, meter_id: row.meter_id, area: row.area, area_name: contextString(row.context, "area_name"), locality: row.locality, route: row.route, route_name: contextString(row.context, "ruta_name"), debt_cents: row.debt_cents, months_pending: row.months_pending, updated_at: row.updated_at, kardex: row.kardex, source: PROVISIONAL_SOURCE, circuit: row.circuit, customer_ci: row.customer_ci, contact_phone: row.contact_phone, tariff: row.tariff, supply_status: row.supply_status, enabling_title: row.enabling_title, route_order: row.route_order, cadastral_latitude: row.cadastral_latitude, cadastral_longitude: row.cadastral_longitude, meter_brand: row.meter_brand, meter_index: row.meter_index, meter_multiplier: row.meter_multiplier, claims: row.claims, suspension_date: row.suspension_date, reconnection_manual: row.reconnection_manual, reconnection_date: row.reconnection_date, reconnection_technician: row.reconnection_technician };
 }
 
 function contextString(context: unknown, key: string): string | undefined {
@@ -830,7 +1042,7 @@ function contextString(context: unknown, key: string): string | undefined {
 }
 
 function toOrder(row: OrderRow): Record<string, unknown> {
-  return { order_id: row.order_id, cuc: row.cuc, debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, purpose: row.purpose, status: row.status, physical_status: row.physical_status, version: row.version, created_by: row.created_by, assigned_technician_id: row.assigned_technician_id, assigned_technician_name: row.assigned_technician_name, created_at: row.created_at, context: row.context, source: PROVISIONAL_SOURCE };
+  return { order_id: row.order_id, cuc: row.cuc, debtor_id: row.debtor_id, account_id: row.account_id, supply_id: row.supply_id, purpose: row.purpose, status: row.status, physical_status: row.physical_status, version: row.version, created_by: row.created_by, assigned_technician_id: row.assigned_technician_id, assigned_technician_name: row.assigned_technician_name, created_at: row.created_at, context: projectContext(row.context), source: PROVISIONAL_SOURCE };
 }
 
 function digest(value: unknown): string {

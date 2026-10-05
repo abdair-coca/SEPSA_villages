@@ -15,6 +15,8 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
 COPY scripts ./scripts
+COPY sql/002_evidence_assets.sql ./sql/002_evidence_assets.sql
 COPY sql/007_work_package_versions.sql ./sql/007_work_package_versions.sql
+COPY sql/008_reconnection_schema.sql ./sql/008_reconnection_schema.sql
 EXPOSE 8080
-CMD ["sh", "-c", "node scripts/apply-package-version-migration.mjs && node migrations/20260923-load-excel-20260922.mjs && node dist/src/server.js"]
+CMD ["sh", "-c", "node scripts/apply-startup-schema-migrations.mjs && node migrations/20260923-load-excel-20260922.mjs && node dist/src/server.js"]

@@ -4,7 +4,6 @@ export interface Config {
   databaseUrl: string;
   sessionTtlSeconds: number;
   authorizationTtlSeconds: number;
-  paymentAuthorityTimeoutMs: number;
   maxBodyBytes: number;
   corsOrigin: string;
   cookieSecure?: boolean;
@@ -27,7 +26,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: env.DATABASE_URL ?? "",
     sessionTtlSeconds: positiveInteger(env.SESSION_TTL_SECONDS, DEFAULT_SESSION_TTL_SECONDS),
     authorizationTtlSeconds: positiveInteger(env.AUTHORIZATION_TTL_SECONDS, 300),
-    paymentAuthorityTimeoutMs: positiveInteger(env.PAYMENT_AUTHORITY_TIMEOUT_MS, 3000),
     maxBodyBytes: positiveInteger(env.HTTP_MAX_BODY_BYTES, 12_000_000),
     corsOrigin: env.CORS_ORIGIN ?? "http://localhost:5173",
     cookieSecure: env.NODE_ENV === "production" || env.COOKIE_SECURE === "true",

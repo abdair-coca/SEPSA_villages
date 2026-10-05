@@ -1,5 +1,5 @@
 export interface SecurityEvent {
-  event: "auth.login" | "auth.logout" | "http.request.rejected" | "authorization.cut" | "sync.operation" | "evidence.upload";
+  event: "auth.login" | "auth.logout" | "http.request.rejected" | "authorization.cut" | "authorization.reconnection" | "sync.operation" | "evidence.upload";
   requestId: string;
   result: string;
   status?: number;

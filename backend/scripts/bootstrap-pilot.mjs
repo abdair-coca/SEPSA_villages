@@ -7,10 +7,13 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const sqlDirectory = resolve(scriptDirectory, "..", "sql");
 const sqlFiles = [
   "001_init.sql",
+  "002_evidence_assets.sql",
   "002_seed.sql",
   "003_reference_fields.sql",
   "004_e2e_seed.sql",
   "005_definitive_seed.sql",
+  "007_work_package_versions.sql",
+  "008_reconnection_schema.sql",
 ];
 
 const databaseUrl = process.env.DATABASE_URL?.trim();

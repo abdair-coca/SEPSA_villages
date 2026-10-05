@@ -539,6 +539,50 @@
         }
       }
     },
+    "/v1/authorizations/reconnection": {
+      "post": {
+        "tags": ["Field"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "description": "PILOT_PROVISIONAL one-use habilitation for a confirmed cut cycle. This is not an official SEPSA authorization endpoint.",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReconnectionEnablementRequest"}}}},
+        "responses": {
+          "200": {"description": "Reserved one-use habilitation", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReconnectionEnablementResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "401": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"},
+          "404": {"$ref": "#/components/responses/Error"},
+          "409": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/authorizations/reconnection/consume": {
+      "post": {
+        "tags": ["Field"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "description": "Consumes the same bound RECONNECTION habilitation once. Exact replay for the same operation is idempotent.",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReconnectionEnablementConsumeRequest"}}}},
+        "responses": {
+          "200": {"description": "Consumed or rejected habilitation status", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReconnectionEnablementConsumeResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "401": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/authorizations/reconnection/{operation_id}": {
+      "get": {
+        "tags": ["Field"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "description": "Reads the state of the current technician's provisional reconnection habilitation without returning its token.",
+        "parameters": [{"$ref": "#/components/parameters/operation_id"}],
+        "responses": {
+          "200": {"description": "Habilitation state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReconnectionEnablementLookup"}}}},
+          "401": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
     "/v1/evidence/assets": {
       "post": {
         "tags": ["Evidence"],
@@ -1450,6 +1494,7 @@
           "token",
           "order_id",
           "technician_id",
+          "technician_name_snapshot",
           "device_id",
           "operation_id",
           "version",
@@ -1469,6 +1514,10 @@
           },
           "technician_id": {
             "type": "string"
+          },
+          "technician_name_snapshot": {
+            "type": "string",
+            "minLength": 1
           },
           "device_id": {
             "type": "string"
@@ -1490,6 +1539,70 @@
           "source": {
             "$ref": "#/components/schemas/Source"
           }
+        },
+        "additionalProperties": false
+      },
+      "ReconnectionEnablementRequest": {
+        "type": "object",
+        "required": ["operation_id", "order_id", "device_id", "order_version"],
+        "properties": {
+          "operation_id": {"type": "string", "minLength": 1},
+          "order_id": {"type": "string", "format": "uuid"},
+          "device_id": {"type": "string", "minLength": 1},
+          "order_version": {"type": "integer", "minimum": 1}
+        },
+        "additionalProperties": false
+      },
+      "ReconnectionEnablementResponse": {
+        "type": "object",
+        "required": ["enablement_id", "token", "order_id", "technician_id", "technician_name_snapshot", "device_id", "operation_id", "version", "issued_at", "expires_at", "source"],
+        "properties": {
+          "enablement_id": {"type": "string", "format": "uuid"},
+          "token": {"type": "string", "minLength": 1},
+          "order_id": {"type": "string", "format": "uuid"},
+          "technician_id": {"type": "string", "format": "uuid"},
+          "technician_name_snapshot": {"type": "string", "minLength": 1},
+          "device_id": {"type": "string", "minLength": 1},
+          "operation_id": {"type": "string", "minLength": 1},
+          "version": {"type": "integer", "minimum": 1},
+          "issued_at": {"type": "string", "format": "date-time"},
+          "expires_at": {"type": "string", "format": "date-time"},
+          "source": {"$ref": "#/components/schemas/Source"}
+        },
+        "additionalProperties": false
+      },
+      "ReconnectionEnablementConsumeRequest": {
+        "type": "object",
+        "required": ["enablement_id", "token", "order_id", "technician_id", "device_id", "operation_id", "version"],
+        "properties": {
+          "enablement_id": {"type": "string", "format": "uuid"},
+          "token": {"type": "string", "minLength": 1},
+          "order_id": {"type": "string", "format": "uuid"},
+          "technician_id": {"type": "string", "format": "uuid"},
+          "device_id": {"type": "string", "minLength": 1},
+          "operation_id": {"type": "string", "minLength": 1},
+          "version": {"type": "integer", "minimum": 1}
+        },
+        "additionalProperties": false
+      },
+      "ReconnectionEnablementConsumeResponse": {
+        "type": "object",
+        "required": ["status", "operation_id", "source"],
+        "properties": {
+          "status": {"enum": ["consumed", "not_enabled"]},
+          "operation_id": {"type": "string"},
+          "source": {"$ref": "#/components/schemas/Source"}
+        },
+        "additionalProperties": false
+      },
+      "ReconnectionEnablementLookup": {
+        "type": "object",
+        "required": ["status", "operation_id", "source"],
+        "properties": {
+          "status": {"enum": ["reserved", "consumed", "expired", "not_found", "unknown"]},
+          "operation_id": {"type": "string"},
+          "error_code": {"type": "string"},
+          "source": {"$ref": "#/components/schemas/Source"}
         },
         "additionalProperties": false
       },
@@ -1548,6 +1661,7 @@
           "action": {
             "enum": [
               "CUT",
+              "RECONNECTION",
               "VISIT"
             ]
           },
@@ -1558,6 +1672,10 @@
           "technician_id": {
             "type": "string"
           },
+          "technician_name_snapshot": {
+            "type": "string",
+            "minLength": 1
+          },
           "device_id": {
             "type": "string",
             "minLength": 1
@@ -1566,6 +1684,15 @@
             "type": "string",
             "format": "date-time"
           },
+          "effective_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "demora": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
           "evidence_refs": {
             "type": "array",
             "items": {
@@ -1573,7 +1700,7 @@
             }
           },
           "attempted_action": {
-            "const": "CUT"
+            "enum": ["CUT", "RECONNECTION"]
           },
           "order_version": {
             "type": "integer"
@@ -1600,6 +1727,18 @@
           {
             "if": {
               "properties": {
+                "action": {"const": "RECONNECTION"}
+              },
+              "required": ["action"]
+            },
+            "then": {
+              "required": ["order_version", "authorization_id", "effective_at", "technician_name_snapshot", "demora"],
+              "not": {"required": ["authorization_token"]}
+            }
+          },
+          {
+            "if": {
+              "properties": {
                 "action": {
                   "const": "CUT"
                 }
@@ -1613,7 +1752,8 @@
                 "order_version",
                 "authorization_id",
                 "authorization_token",
-                "field_capture"
+                "field_capture",
+                "technician_name_snapshot"
               ]
             }
           },
@@ -1665,6 +1805,9 @@
           "technician_id": {
             "type": "string"
           },
+          "technician_name_snapshot": {
+            "type": "string"
+          },
           "device_id": {
             "type": "string"
           },
@@ -1674,12 +1817,20 @@
           "action": {
             "enum": [
               "CUT",
+              "RECONNECTION",
               "VISIT"
             ]
           },
           "recorded_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "effective_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "demora": {
+            "type": "string"
           },
           "evidence_refs": {
             "type": "array",
@@ -1710,6 +1861,15 @@
                 "order_version",
                 "field_capture"
               ]
+            }
+          },
+          {
+            "if": {
+              "properties": {"action": {"const": "RECONNECTION"}},
+              "required": ["action"]
+            },
+            "then": {
+              "required": ["order_version", "effective_at", "technician_name_snapshot", "demora"]
             }
           }
         ]
@@ -1760,6 +1920,9 @@
           "technician_id": {
             "type": "string"
           },
+          "technician_name_snapshot": {
+            "type": "string"
+          },
           "device_id": {
             "type": "string"
           },
@@ -1769,12 +1932,20 @@
           "action": {
             "enum": [
               "CUT",
+              "RECONNECTION",
               "VISIT"
             ]
           },
           "recorded_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "effective_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "demora": {
+            "type": "string"
           },
           "evidence_refs": {
             "type": "array",
@@ -1827,6 +1998,18 @@
                 "order_version",
                 "field_capture"
               ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {"const": "confirmed"},
+                "action": {"const": "RECONNECTION"}
+              },
+              "required": ["status", "action"]
+            },
+            "then": {
+              "required": ["effective_at", "technician_name_snapshot", "demora", "order_version"]
             }
           }
         ]
@@ -2004,13 +2187,6 @@
         "additionalProperties": false
       }
     }
-  },
-  "x-payment-integration": {
-    "availability": "NOT_IMPLEMENTED",
-    "internalAuthority": "PaymentAuthority with CLEAR, PAYMENT_CONFIRMED, and UNKNOWN decisions; runtime without configured source returns UNKNOWN",
-    "atomicityLimit": "A local PostgreSQL transaction cannot make an external payment ledger check and cut consumption atomic",
-    "pending": "TODO: VALIDAR CON SEPSA",
-    "endpoints": []
   },
   "x-provisional-evidence": "PILOT_PROVISIONAL POST /v1/evidence/assets recomputes SHA-256 and binds immutable image bytes to order, operation, technician and device. CUT sync accepts refs only after verified asset lookup in same transaction as authorization consumption. Controlled photo exception remains auditable. Official storage and retention contract: TODO: VALIDAR CON SEPSA."
 }
