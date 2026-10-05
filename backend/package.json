@@ -15,6 +15,7 @@
     "pilot:migrate:field-test": "node migrations/20260923-load-excel-20260922.mjs",
     "db:migrate:test": "node scripts/migrate-test-db.mjs",
     "e2e:browser": "tsx scripts/connected-browser-smoke.ts",
+    "pilot:migrate:roles": "node migrations/20261002-role-grants.mjs",
     "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {

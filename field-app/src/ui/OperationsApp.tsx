@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { generateOperationId, type AuditEvent, type DebtorRecord, type Session, type TechnicianRecord, type WorkOrder } from "../domain";
 import type { OperationsAuthorityPort } from "../ports";
-import { AppHeader } from "./AppHeader";
+import { AppHeader, type AppHeaderRoleSwitch } from "./AppHeader";
 import { IconAlertTriangle, IconCheck, IconDocument } from "./Icons";
 import { AppModal } from "./Modal";
 import { AppStateCard } from "./UiState";
@@ -13,6 +13,7 @@ interface OperationsAppProps {
   authority: OperationsAuthorityPort;
   session: Session;
   onLogout: () => void;
+  roleSwitch?: AppHeaderRoleSwitch;
 }
 
 interface SearchFilters {
@@ -47,7 +48,7 @@ export function getAdminOrderPage<T>(items: readonly T[], requestedPage: number,
 
 export function formatAdminCoordinates(latitude?: number, longitude?: number): string | undefined { return latitude !== undefined && longitude !== undefined ? `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` : undefined; }
 
-export function OperationsApp({ authority, session, onLogout }: OperationsAppProps) {
+export function OperationsApp({ authority, session, onLogout, roleSwitch }: OperationsAppProps) {
   const [debtors, setDebtors] = useState<DebtorRecord[]>([]);
   const [filterRecords, setFilterRecords] = useState<DebtorRecord[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianRecord[]>([]);
@@ -339,6 +340,7 @@ export function OperationsApp({ authority, session, onLogout }: OperationsAppPro
         user={{ displayName: session.displayName ?? session.username, roleLabel: "Admin", authenticity: session.authenticity }}
         status={{ tone: "environment", label: `Entorno · ${session.authenticity}` }}
         onLogout={onLogout}
+        roleSwitch={roleSwitch ? { ...roleSwitch, disabled: roleSwitch.disabled || busy } : undefined}
       />
 
       {message ? <Notification tone={messageTone} text={message} /> : null}

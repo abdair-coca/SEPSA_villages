@@ -27,7 +27,7 @@ test("PostgreSQL HTTP pages stay bounded and stable; package versions survive re
   let adminServer: Awaited<ReturnType<typeof start>> | undefined;
   try {
     await pool.query("INSERT INTO users(user_id, username, display_name, role, password_hash, source) VALUES ($1, $2, 'Synthetic Admin', 'ADMIN', 'synthetic', 'PILOT_PROVISIONAL'), ($3, $4, 'Synthetic Tech', 'TECHNICIAN', 'synthetic', 'PILOT_PROVISIONAL')", [adminId, `phase5-admin-${adminId}`, technicianId, `phase5-tech-${technicianId}`]);
-    await pool.query("INSERT INTO sessions(session_id, user_id, token_hash, expires_at, source) VALUES ($1, $2, $3, now() + interval '1 hour', 'PILOT_PROVISIONAL'), ($4, $5, $6, now() + interval '1 hour', 'PILOT_PROVISIONAL')", [adminSessionId, adminId, hashToken(adminToken), technicianSessionId, technicianId, hashToken(technicianToken)]);
+    await pool.query("INSERT INTO sessions(session_id, user_id, token_hash, expires_at, source, active_role) VALUES ($1, $2, $3, now() + interval '1 hour', 'PILOT_PROVISIONAL', 'ADMIN'), ($4, $5, $6, now() + interval '1 hour', 'PILOT_PROVISIONAL', 'TECHNICIAN')", [adminSessionId, adminId, hashToken(adminToken), technicianSessionId, technicianId, hashToken(technicianToken)]);
 
     const debtorIds = Array.from({ length: 7 }, (_, index) => `phase5-${adminId}-${index}`);
     for (const [index, debtorId] of debtorIds.entries()) {

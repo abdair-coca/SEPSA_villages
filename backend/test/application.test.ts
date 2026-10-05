@@ -589,7 +589,7 @@ class LoginPool {
   async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
     if (text.includes("SELECT user_id, username, display_name, role, password_hash")) {
       return {
-        rows: [{ user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", password_hash: "scrypt$16384$8$1$DGPitTZ--gEW7HtAcRpHdg$coTqCTgT-b8lAaNmr53P6w2clR4WDBcACmGWjCN6FpR0fT1FQ1oMosbxIkdtkNu3eTtMn_waaRZsR35nyZvFLA", enabled: true } as unknown as T],
+        rows: [{ user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", roles: ["ADMIN"], password_hash: "scrypt$16384$8$1$DGPitTZ--gEW7HtAcRpHdg$coTqCTgT-b8lAaNmr53P6w2clR4WDBcACmGWjCN6FpR0fT1FQ1oMosbxIkdtkNu3eTtMn_waaRZsR35nyZvFLA", enabled: true } as unknown as T],
         rowCount: 1,
       };
     }
@@ -605,10 +605,10 @@ class LoginFlowPool {
   revoked = false;
   async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
     if (text.includes("SELECT user_id, username, display_name, role, password_hash")) {
-      return { rows: [{ user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", password_hash: "scrypt$16384$8$1$DGPitTZ--gEW7HtAcRpHdg$coTqCTgT-b8lAaNmr53P6w2clR4WDBcACmGWjCN6FpR0fT1FQ1oMosbxIkdtkNu3eTtMn_waaRZsR35nyZvFLA", enabled: true } as unknown as T], rowCount: 1 };
+      return { rows: [{ user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", roles: ["ADMIN"], password_hash: "scrypt$16384$8$1$DGPitTZ--gEW7HtAcRpHdg$coTqCTgT-b8lAaNmr53P6w2clR4WDBcACmGWjCN6FpR0fT1FQ1oMosbxIkdtkNu3eTtMn_waaRZsR35nyZvFLA", enabled: true } as unknown as T], rowCount: 1 };
     }
     if (text.includes("FROM sessions s JOIN users u")) {
-      return { rows: this.revoked ? [] : [{ session_id: "session-1", user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } as unknown as T], rowCount: this.revoked ? 0 : 1 };
+      return { rows: this.revoked ? [] : [{ session_id: "session-1", user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN", roles: ["ADMIN"] } as unknown as T], rowCount: this.revoked ? 0 : 1 };
     }
     throw new Error(`Unexpected pool query: ${text}`);
   }

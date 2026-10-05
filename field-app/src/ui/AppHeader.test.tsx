@@ -3,6 +3,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AppHeader } from "./AppHeader";
 
 describe("shared app header", () => {
+  it("shows role change only when supplied and presents pending/error inside profile menu", () => {
+    const props = { role: "admin" as const, title: "Órdenes", description: "Gestión", user: { displayName: "Dual Role Fixture", roleLabel: "Admin" } };
+    expect(renderToStaticMarkup(<AppHeader {...props} />)).not.toContain("Cambiar rol");
+    const markup = renderToStaticMarkup(<AppHeader {...props} roleSwitch={{ label: "Cambiar a Técnico", busy: true, error: "Compruebe la conexión y reintente.", onSelect() {} }} />);
+    expect(markup).toContain('aria-label="Rol activo"');
+    expect(markup).toContain("Cambiando rol…");
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain('disabled=""');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Compruebe la conexión y reintente.");
+    expect(renderToStaticMarkup(<AppHeader {...props} roleSwitch={{ label: "Cambiar a Técnico", onSelect() {} }} />)).toContain("Cambiar a Técnico");
+  });
   it("renders the shared field top bar, status, account menu, context, and actions", () => {
     const markup = renderToStaticMarkup(
       <AppHeader

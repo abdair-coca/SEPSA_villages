@@ -108,6 +108,31 @@
         }
       }
     },
+    "/v1/auth/session": {
+      "get": {
+        "tags": ["Auth"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "summary": "Leer identidad, roles concedidos y rol activo de la sesión",
+        "responses": {
+          "200": {"description": "Sesión autoritativa; el secreto permanece en cookie HttpOnly", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LoginResponse"}}}},
+          "401": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/auth/role": {
+      "post": {
+        "tags": ["Auth"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "summary": "Cambiar el rol activo de esta sesión sin cambiar identidad ni cookie",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RoleSwitchRequest"}}}},
+        "responses": {
+          "200": {"description": "Misma sesión con el rol activo actualizado", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LoginResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "401": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
     "/v1/auth/logout": {
       "post": {
         "tags": [
@@ -950,6 +975,12 @@
         },
         "additionalProperties": false
       },
+      "RoleSwitchRequest": {
+        "type": "object",
+        "required": ["role"],
+        "properties": {"role": {"$ref": "#/components/schemas/Role"}},
+        "additionalProperties": false
+      },
       "LoginResponse": {
         "type": "object",
         "required": [
@@ -975,7 +1006,8 @@
               "user_id",
               "username",
               "display_name",
-              "role"
+              "role",
+              "roles"
             ],
             "properties": {
               "user_id": {
@@ -989,6 +1021,11 @@
               },
               "role": {
                 "$ref": "#/components/schemas/Role"
+              },
+              "roles": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Role"},
+                "minItems": 1
               }
             },
             "additionalProperties": false

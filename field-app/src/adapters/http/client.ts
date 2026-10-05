@@ -29,14 +29,30 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
 
   async authenticate(input: DemoCredentials): Promise<Session> {
     const response = await this.request<PilotLoginResponseDto>("/v1/auth/login", { method: "POST", body: input });
+    return this.acceptSession(response);
+  }
+
+  async currentSession(session: Session): Promise<Session> {
+    const response = await this.request<PilotLoginResponseDto>("/v1/auth/session", { method: "GET", timeoutMs: 15_000 }, this.requireSession(session));
+    return this.acceptSession(response, session);
+  }
+
+  async switchRole(session: Session, role: Session["role"]): Promise<Session> {
+    const response = await this.request<PilotLoginResponseDto>("/v1/auth/role", { method: "POST", body: { role }, timeoutMs: 15_000 }, this.requireSession(session));
+    return this.acceptSession(response, session);
+  }
+
+  private acceptSession(response: PilotLoginResponseDto, previous?: Session): Session {
+    if (previous && (response.session_id !== previous.sessionId || response.user.user_id !== previous.userId)) throw new Error("La identidad de sesión cambió. Ingrese nuevamente.");
     const session: Session = {
       sessionId: response.session_id,
       userId: response.user.user_id,
       username: response.user.username,
       displayName: response.user.display_name,
       role: response.user.role,
+      roles: response.user.roles ?? [response.user.role],
       permissions: permissionsForRole(response.user.role),
-      issuedAt: new Date().toISOString(),
+      issuedAt: previous?.issuedAt ?? new Date().toISOString(),
       authenticity: "PILOT_PROVISIONAL",
       expiresAt: response.expires_at,
     };
@@ -284,13 +300,13 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     return session;
   }
 
-  private async request<T>(path: string, init: { method: "GET" | "POST"; body?: unknown }, session?: Session): Promise<T> {
+  private async request<T>(path: string, init: { method: "GET" | "POST"; body?: unknown; timeoutMs?: number }, session?: Session): Promise<T> {
     if (this.mode === "offline") throw networkUnknown();
     const headers: Record<string, string> = { accept: "application/json" };
     if (init.body !== undefined) headers["content-type"] = "application/json";
     let response: Response;
     try {
-      response = await this.fetchImpl(this.baseUrl + path, { method: init.method, headers, credentials: "include", body: init.body === undefined ? undefined : JSON.stringify(init.body) });
+      response = await this.fetchImpl(this.baseUrl + path, { method: init.method, headers, credentials: "include", signal: init.timeoutMs ? AbortSignal.timeout(init.timeoutMs) : undefined, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
     } catch {
       throw networkUnknown();
     }

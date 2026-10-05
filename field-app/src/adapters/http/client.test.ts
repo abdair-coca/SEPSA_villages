@@ -23,6 +23,53 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     expect(requests.every((request) => !(request.init.headers as Record<string, string>).authorization)).toBe(true);
   });
 
+  it("switches role through the HttpOnly session cookie and preserves identity", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    let role = "ADMIN";
+    const client = new HttpPilotClient({ baseUrl: "http://localhost:8080", fetchImpl: async (input, init = {}) => {
+      requests.push({ url: String(input), init });
+      if (String(input).endsWith("/auth/role")) role = JSON.parse(String(init.body)).role;
+      return json({ session_id: "session-dual", expires_at: "2099-01-01T00:00:00.000Z", user: { user_id: "dual-user-fixture", username: "dual-role-fixture", display_name: "Dual Role Fixture", role, roles: ["ADMIN", "TECHNICIAN"] } });
+    } });
+    const admin = await client.authenticate({ username: "dual-role-fixture", password: "test-password" });
+    const technician = await client.switchRole(admin, "TECHNICIAN");
+    expect(technician).toMatchObject({ sessionId: admin.sessionId, userId: admin.userId, username: admin.username, role: "TECHNICIAN", roles: ["ADMIN", "TECHNICIAN"], issuedAt: admin.issuedAt });
+    expect(admin.sessionToken).toBeUndefined();
+    expect(technician.sessionToken).toBeUndefined();
+    expect(technician.permissions).toContain("DOWNLOAD_ASSIGNED");
+    expect(technician.permissions).not.toContain("CREATE_ORDER");
+    expect(requests[1]?.init.credentials).toBe("include");
+    expect((requests[1]?.init.headers as Record<string, string>).authorization).toBeUndefined();
+    expect(JSON.parse(String(requests[1]?.init.body))).toEqual({ role: "TECHNICIAN" });
+    expect((await client.currentSession(technician)).role).toBe("TECHNICIAN");
+    expect((await client.switchRole(technician, "ADMIN")).permissions).toContain("CREATE_ORDER");
+  });
+
+  it("keeps role unchanged after rejected switch, blocks offline switch, and restores authoritative role", async () => {
+    let requestCount = 0;
+    const client = new HttpPilotClient({ baseUrl: "http://localhost:8080", fetchImpl: async (input) => {
+      requestCount++;
+      if (String(input).endsWith("/auth/role")) return new Response(JSON.stringify({ code: "ROLE_NOT_GRANTED", message: "Rol no concedido" }), { status: 403 });
+      return json({ session_id: "session-single", expires_at: "2099-01-01T00:00:00.000Z", user: { user_id: "single-role-fixture", username: "single-role-fixture", display_name: "Single Role Fixture", role: "ADMIN", roles: ["ADMIN"] } });
+    } });
+    const admin = await client.authenticate({ username: "single-role-fixture", password: "test-password" });
+    expect(admin.roles).toEqual(["ADMIN"]);
+    await expect(client.switchRole(admin, "TECHNICIAN")).rejects.toThrow("Rol no concedido");
+    expect(admin.role).toBe("ADMIN");
+    client.setMode("offline");
+    await expect(client.switchRole(admin, "TECHNICIAN")).rejects.toMatchObject({ name: "NetworkUnknownError" });
+    expect(requestCount).toBe(2);
+    client.setMode("online");
+    client.restoreSession({ ...admin, role: "TECHNICIAN" });
+    expect((await client.currentSession(admin)).role).toBe("ADMIN");
+  });
+
+  it("rejects a role-switch response that changes session identity", async () => {
+    const client = new HttpPilotClient({ baseUrl: "http://localhost:8080", fetchImpl: async (input) => json({ session_id: String(input).endsWith("/auth/role") ? "another-session" : "session-dual", expires_at: "2099-01-01T00:00:00.000Z", user: { user_id: "dual-user-fixture", username: "dual-role-fixture", display_name: "Dual Role Fixture", role: "ADMIN", roles: ["ADMIN", "TECHNICIAN"] } }) });
+    const admin = await client.authenticate({ username: "dual-role-fixture", password: "test-password" });
+    await expect(client.switchRole(admin, "TECHNICIAN")).rejects.toThrow("La identidad de sesión cambió");
+  });
+
   it("loads enabled technicians from the authoritative API", async () => {
     const requests: string[] = [];
     const client = new HttpPilotClient({

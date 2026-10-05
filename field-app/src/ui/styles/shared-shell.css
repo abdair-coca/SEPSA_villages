@@ -208,6 +208,14 @@
   text-transform: uppercase;
 }
 
+.app-header__role-error {
+  margin: 0;
+  padding: 0 10px;
+  color: var(--header-ink);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .app-header__menu-action {
   display: flex;
   min-width: 0;

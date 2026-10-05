@@ -28,6 +28,12 @@ const session: Session = {
 };
 
 describe("session persistence", () => {
+  it("keeps granted and active roles across reload without persisting bearer token", () => {
+    const storage = createStorage();
+    persistSession({ ...session, role: "TECHNICIAN", roles: ["ADMIN", "TECHNICIAN"], permissions: ["DOWNLOAD_ASSIGNED"] }, storage);
+    expect(readStoredSession(storage)).toMatchObject({ sessionId: session.sessionId, userId: session.userId, role: "TECHNICIAN", roles: ["ADMIN", "TECHNICIAN"], permissions: ["DOWNLOAD_ASSIGNED"] });
+    expect(storage.getItem("sepsa.authenticated-session")).not.toContain("must-not-persist");
+  });
   it("persists session identity without session token", () => {
     const storage = createStorage();
     persistSession(session, storage);

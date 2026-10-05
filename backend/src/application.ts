@@ -9,9 +9,9 @@ import { ConsoleSecurityLogger, type SecurityEvent, type SecurityLogger } from "
 import type { Role, SessionUser, SyncPayload } from "./types.js";
 import type { Config } from "./config.js";
 
-interface UserRow { user_id: string; username: string; display_name: string; role: Role; password_hash: string; enabled: boolean; }
+interface UserRow { user_id: string; username: string; display_name: string; role: Role; roles: Role[]; password_hash: string; enabled: boolean; }
 interface TechnicianRow { user_id: string; username: string; display_name: string; role: "TECHNICIAN"; enabled: boolean; }
-interface SessionRow { session_id: string; user_id: string; username: string; display_name: string; role: Role; }
+interface SessionRow { session_id: string; user_id: string; username: string; display_name: string; role: Role; roles: Role[]; expires_at: string; }
 interface DebtorRow {
   debtor_id: string; account_id: string; supply_id: string; customer_name: string; address: string;
   reference_text: string; meter_id: string; area: string; locality: string; route: string; debt_cents: number;
@@ -117,6 +117,8 @@ export class Application {
     if (request.method === "POST" && path === "/v1/auth/logout") return await this.logout(request, response);
 
     const user = await this.requireSession(request);
+    if (request.method === "GET" && path === "/v1/auth/session") return sendJson(response, 200, sessionBody(user));
+    if (request.method === "POST" && path === "/v1/auth/role") return await this.switchRole(request, response, user);
     if (request.method === "GET" && path === "/v1/technicians") return await this.listTechnicians(response, user);
     if (request.method === "GET" && path === "/v1/debtors") return await this.listDebtors(response, user, url);
     if (request.method === "GET" && path === "/v1/orders") return await this.listOrders(response, user);
@@ -155,11 +157,13 @@ export class Application {
     const password = requiredString(body.password, "password");
     this.enforceLoginRateLimit(request, username);
     const result = await this.pool.query<UserRow>(
-      "SELECT user_id, username, display_name, role, password_hash, enabled FROM users WHERE username = $1 AND source = $2",
+      `SELECT user_id, username, display_name, role, password_hash, enabled,
+              ARRAY(SELECT role FROM user_role_grants g WHERE g.user_id = users.user_id ORDER BY role) AS roles
+       FROM users WHERE username = $1 AND source = $2`,
       [username, PROVISIONAL_SOURCE],
     );
     const user = result.rows[0];
-    if (!user || !user.enabled || !(await verifyPassword(password, user.password_hash))) {
+    if (!user || !user.enabled || !user.roles.includes(user.role) || !(await verifyPassword(password, user.password_hash))) {
       this.logEvent("auth.login", { requestId: String(response.getHeader("x-request-id")), result: "rejected" });
       throw new HttpError(401, "INVALID_CREDENTIALS", "Username or password is invalid.");
     }
@@ -168,8 +172,8 @@ export class Application {
     const sessionId = cryptoRandomUuid();
     await withTransaction(this.pool, async (client) => {
       await client.query(
-        "INSERT INTO sessions(session_id, user_id, token_hash, expires_at, source) VALUES ($1, $2, $3, $4, $5)",
-        [sessionId, user.user_id, hashToken(token), expiresAt, PROVISIONAL_SOURCE],
+        "INSERT INTO sessions(session_id, user_id, token_hash, expires_at, source, active_role) VALUES ($1, $2, $3, $4, $5, $6)",
+        [sessionId, user.user_id, hashToken(token), expiresAt, PROVISIONAL_SOURCE, user.role],
       );
       await insertAudit(client, { actorId: user.user_id, actorRole: user.role, action: "LOGIN", result: "accepted", entityId: sessionId });
     });
@@ -178,7 +182,7 @@ export class Application {
     sendJson(response, 200, {
       session_id: sessionId,
       expires_at: expiresAt,
-      user: { user_id: user.user_id, username: user.username, display_name: user.display_name, role: user.role },
+      user: { user_id: user.user_id, username: user.username, display_name: user.display_name, role: user.role, roles: user.roles },
       source: PROVISIONAL_SOURCE,
     });
   }
@@ -198,14 +202,41 @@ export class Application {
     const token = parseBearerToken(request.headers.authorization) ?? parseCookie(request.headers.cookie, "sepsa_session");
     if (!token) throw new HttpError(401, "UNAUTHENTICATED", "Valid session is required.");
     const result = await this.pool.query<SessionRow>(
-      `SELECT s.session_id, u.user_id, u.username, u.display_name, u.role
+      `SELECT s.session_id, u.user_id, u.username, u.display_name, s.active_role AS role, s.expires_at,
+              ARRAY(SELECT role FROM user_role_grants g WHERE g.user_id = u.user_id ORDER BY role) AS roles
        FROM sessions s JOIN users u ON u.user_id = s.user_id
+       JOIN user_role_grants active_grant ON active_grant.user_id = u.user_id AND active_grant.role = s.active_role
        WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now() AND u.enabled = true AND u.source = $2`,
       [hashToken(token), PROVISIONAL_SOURCE],
     );
     const row = result.rows[0];
     if (!row) throw new HttpError(401, "UNAUTHENTICATED", "Session is invalid, expired, or revoked.");
-    return { sessionId: row.session_id, userId: row.user_id, username: row.username, displayName: row.display_name, role: row.role };
+    return { sessionId: row.session_id, userId: row.user_id, username: row.username, displayName: row.display_name, role: row.role, roles: row.roles, expiresAt: row.expires_at };
+  }
+
+  private async switchRole(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void> {
+    const body = await parseJsonBody(request, this.config.maxBodyBytes);
+    const role = requiredString(body.role, "role");
+    if (role !== "ADMIN" && role !== "TECHNICIAN") throw new HttpError(400, "INVALID_ROLE", "Seleccione Administrador o Técnico.");
+    const next = await withTransaction(this.pool, async (client) => {
+      const previous = await client.query<{ active_role: Role }>("SELECT active_role FROM sessions WHERE session_id = $1 FOR UPDATE", [user.sessionId]);
+      const previousRole = previous.rows[0]?.active_role;
+      if (!previousRole) throw new HttpError(401, "UNAUTHENTICATED", "Session is invalid, expired, or revoked.");
+      const result = await client.query<{ active_role: Role; expires_at: string }>(
+        `UPDATE sessions s SET active_role = $2 FROM users u
+         WHERE s.session_id = $1 AND u.user_id = s.user_id AND u.enabled = true
+           AND s.revoked_at IS NULL AND s.expires_at > now() AND u.source = $3
+           AND EXISTS (SELECT 1 FROM user_role_grants g WHERE g.user_id = u.user_id AND g.role = 'ADMIN')
+           AND EXISTS (SELECT 1 FROM user_role_grants g WHERE g.user_id = u.user_id AND g.role = 'TECHNICIAN')
+         RETURNING s.active_role, s.expires_at`,
+        [user.sessionId, role, PROVISIONAL_SOURCE],
+      );
+      const row = result.rows[0];
+      if (!row) throw new HttpError(403, "ROLE_NOT_GRANTED", "Esta cuenta no tiene ambos roles habilitados. Solicite los permisos al administrador.");
+      await insertAudit(client, { actorId: user.userId, actorRole: role, action: "SWITCH_ROLE", result: "accepted", entityId: user.sessionId, metadata: { previous_role: previousRole, active_role: role } });
+      return { ...user, role: row.active_role, expiresAt: row.expires_at, roles: ["ADMIN", "TECHNICIAN"] as Role[] };
+    });
+    sendJson(response, 200, sessionBody(next));
   }
 
   private requireRole(user: SessionUser, role: Role): void {
@@ -261,7 +292,7 @@ export class Application {
   private async listTechnicians(response: ServerResponse, user: SessionUser): Promise<void> {
     this.requireRole(user, "ADMIN");
     const result = await this.pool.query<TechnicianRow>(
-      "SELECT user_id, username, display_name, role, enabled FROM users WHERE source = $1 AND role = 'TECHNICIAN' AND enabled = true ORDER BY display_name ASC, username ASC",
+      "SELECT user_id, username, display_name, 'TECHNICIAN' AS role, enabled FROM users WHERE source = $1 AND EXISTS (SELECT 1 FROM user_role_grants g WHERE g.user_id = users.user_id AND g.role = 'TECHNICIAN') AND enabled = true ORDER BY display_name ASC, username ASC",
       [PROVISIONAL_SOURCE],
     );
     sendJson(response, 200, { source: PROVISIONAL_SOURCE, technicians: result.rows.map((technician) => ({ user_id: technician.user_id, username: technician.username, display_name: technician.display_name, role: technician.role, enabled: technician.enabled, source: PROVISIONAL_SOURCE })) });
@@ -362,7 +393,7 @@ export class Application {
     const result = await withTransaction(this.pool, async (client) => {
       const command = await claimCommand(client, operationId, "ASSIGN_ORDER", user.userId, requestHash);
       if (!command.claimed) return command.replay;
-      const technician = await client.query("SELECT user_id FROM users WHERE user_id = $1 AND role = 'TECHNICIAN' AND enabled = true AND source = $2", [technicianId, PROVISIONAL_SOURCE]);
+      const technician = await client.query("SELECT user_id FROM users WHERE user_id = $1 AND EXISTS (SELECT 1 FROM user_role_grants g WHERE g.user_id = users.user_id AND g.role = 'TECHNICIAN') AND enabled = true AND source = $2", [technicianId, PROVISIONAL_SOURCE]);
       if (!technician.rows[0]) throw new HttpError(404, "TECHNICIAN_NOT_FOUND", "Technician was not found.");
       const current = await client.query<OrderRow>(`${orderSelect("o.order_id = $1 AND o.source = $2", "o.created_at DESC")} FOR UPDATE OF o, d`, [orderId, PROVISIONAL_SOURCE]);
       const order = current.rows[0];
@@ -1029,7 +1060,12 @@ function orderColumns(alias: string): string {
 }
 
 function orderSelect(where: string, order: string): string {
-  return `SELECT ${orderColumns("o")} FROM orders o JOIN debtors d ON d.debtor_id = o.debtor_id LEFT JOIN users assigned_technician ON assigned_technician.user_id = o.assigned_technician_id AND assigned_technician.role = 'TECHNICIAN' WHERE ${where} ORDER BY ${order}`;
+  return `SELECT ${orderColumns("o")} FROM orders o JOIN debtors d ON d.debtor_id = o.debtor_id LEFT JOIN users assigned_technician ON assigned_technician.user_id = o.assigned_technician_id AND EXISTS (SELECT 1 FROM user_role_grants g WHERE g.user_id = assigned_technician.user_id AND g.role = 'TECHNICIAN') WHERE ${where} ORDER BY ${order}`;
+}
+
+function sessionBody(user: SessionUser): Record<string, unknown> {
+  return { session_id: user.sessionId, expires_at: user.expiresAt, source: PROVISIONAL_SOURCE,
+    user: { user_id: user.userId, username: user.username, display_name: user.displayName, role: user.role, roles: user.roles } };
 }
 
 function toDebtor(row: DebtorRow): Record<string, unknown> {

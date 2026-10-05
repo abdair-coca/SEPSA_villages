@@ -1,6 +1,6 @@
 import type { BatchOrderSkip } from "../../domain";
 
-export interface PilotLoginResponseDto { session_id: string; expires_at: string; user: { user_id: string; username: string; display_name: string; role: "ADMIN" | "TECHNICIAN" }; }
+export interface PilotLoginResponseDto { session_id: string; expires_at: string; user: { user_id: string; username: string; display_name: string; role: "ADMIN" | "TECHNICIAN"; roles?: Array<"ADMIN" | "TECHNICIAN"> }; }
 export interface PilotOrderResponseDto {
   order_id: string; cuc?: string; debtor_id: string; account_id?: string; supply_id?: string; purpose?: "CUT";
   status: "GENERADO" | "EJECUTADO" | "RECONEXIÓN" | "ANULADO";

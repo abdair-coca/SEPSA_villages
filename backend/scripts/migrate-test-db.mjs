@@ -12,6 +12,7 @@ const migrations = [
   "sql/001_init.sql",
   "sql/002_evidence_assets.sql",
   "sql/003_reference_fields.sql",
+  "sql/007_role_grants.sql",
   "sql/007_work_package_versions.sql",
   "sql/008_reconnection_schema.sql",
 ];

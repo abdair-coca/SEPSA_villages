@@ -5,9 +5,10 @@ export interface LoginRequestDto { username: string; password: string; }
 export interface LoginResponseDto {
   session_id: string;
   expires_at: string;
-  user: { user_id: string; username: string; display_name: string; role: PilotRole };
+  user: { user_id: string; username: string; display_name: string; role: PilotRole; roles: PilotRole[] };
   source: PilotSource;
 }
+export interface RoleSwitchRequestDto { role: PilotRole; }
 export interface CreateOrderRequestDto { operation_id: string; debtor_id: string; purpose: "CUT"; }
 export interface AssignOrderRequestDto { operation_id: string; technician_id: string; expected_version: number; }
 export interface PilotOrderDto {

@@ -13,6 +13,7 @@ const sqlFiles = [
   "004_e2e_seed.sql",
   "005_definitive_seed.sql",
   "007_work_package_versions.sql",
+  "007_role_grants.sql",
   "008_reconnection_schema.sql",
 ];
 

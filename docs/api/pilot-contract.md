@@ -12,7 +12,7 @@ El OpenAPI describe lo que `backend/src/application.ts` expone hoy. Es `PROVISIO
 
 | Área | Estado en el piloto |
 |---|---|
-| Autenticación | Login devuelve identidad, sesión y expiración; secreto de sesión solo viaja en cookie `HttpOnly`, nunca JSON/localStorage. Cookie usa `SameSite=Lax`, `Path=/`, `Secure` con `COOKIE_SECURE=true` o `NODE_ENV=production`. Logout revoca la sesión y borra cookie (`204`). |
+| Autenticación | Login devuelve identidad, grants de rol, sesión y expiración; el secreto de sesión solo viaja en cookie `HttpOnly`, nunca JSON/localStorage. `GET /v1/auth/session` recupera el rol activo y `POST /v1/auth/role` lo cambia solo entre roles otorgados, conservando identidad y cookie. Cookie usa `SameSite=Lax`, `Path=/`, `Secure` con `COOKIE_SECURE=true` o `NODE_ENV=production`. Logout revoca la sesión y borra cookie (`204`). |
 | Órdenes | El propósito sigue siendo `CUT`; el estado operativo puede avanzar a `RECONEXIÓN` al sincronizar la reposición. Creación responde `201`. Asignación requiere `expected_version`; conflicto responde `409`. |
 | Paquete técnico | Se liga al técnico de sesión y `device_id`. `authenticity`, `integrity`, checksum y versión son valores del piloto; no implican firma oficial. |
 | Autorización | `POST /v1/authorizations/cut` reserva autorización. El token queda ligado a operación, orden, técnico, dispositivo y versión. El backend la consume dentro de la transacción de sync; no hay endpoint de consumo separado. |

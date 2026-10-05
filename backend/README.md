@@ -23,6 +23,7 @@ También puedes usar `docker compose up --build`; publica PostgreSQL en `15432` 
 
 - Configura `CORS_ORIGIN` con el origen exacto; no uses `*` fuera de desarrollo local.
 - Las sesiones se validan en backend. No guardes contraseñas en texto plano ni credenciales de prueba fuera del entorno local.
+- El navegador usa la cookie de sesión `HttpOnly`; el login no devuelve el token en JSON. El cambio de rol es por sesión y requiere grants explícitos para ambos roles.
 - Las operaciones y autorizaciones usan identificadores/idempotencia; la auditoría conserva actor y resultado.
 - La habilitación conectada de RECONNECTION es provisional y valida técnico asignado, orden, dispositivo, `operationId` y versión; no representa una decisión oficial de SEPSA.
 - CUT, VISIT y RECONNECTION usan `/v1/sync/operations`; la reposición guarda fecha efectiva, snapshot del técnico y `DEMORA` en el payload de operación existente. No agrega tabla ni `cycleId`.

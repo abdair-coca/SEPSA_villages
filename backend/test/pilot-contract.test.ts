@@ -11,6 +11,8 @@ const fixtures = JSON.parse(await readFile(new URL("./fixtures/pilot-contract.js
 const config: Config = { host: "127.0.0.1", port: 0, databaseUrl: "", sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, maxBodyBytes: 1024 * 1024, corsOrigin: "http://localhost:5173" };
 
 test("synthetic fixtures conform to canonical request and response schemas", () => {
+  assertSchema("LoginResponse", { session_id: "synthetic-session", expires_at: "2026-10-01T00:00:00.000Z", source: "PILOT_PROVISIONAL", user: { user_id: "synthetic-tech", username: "synthetic-tech", display_name: "Técnico Sintético", role: "TECHNICIAN", roles: ["TECHNICIAN"] } });
+  assertSchema("RoleSwitchRequest", { role: "TECHNICIAN" });
   assertSchema("CreateOrderRequest", fixtures.orderCreateRequest);
   assertSchema("Order", fixtures.order);
   assertSchema("AssignOrderRequest", fixtures.assignmentRequest);
