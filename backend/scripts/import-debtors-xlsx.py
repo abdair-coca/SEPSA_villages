@@ -170,7 +170,6 @@ def map_row(headers: list[str], values: list[str], excel_row: int, dataset: str 
         "meter_index": meter_id.strip(),
         "meter_multiplier": 1,
         "claims": None,
-        "payment_plan": None,
         "suspension_date": None,
         "reconnection_manual": None,
         "reconnection_date": None,
@@ -199,7 +198,7 @@ def make_sql(rows: list[dict[str, object]], replace_pilot: bool = False, assign_
         "area", "locality", "route", "debt_cents", "months_pending", "kardex", "context", "updated_at",
         "source", "circuit", "customer_ci", "contact_phone", "tariff", "supply_status", "enabling_title",
         "route_order", "cadastral_latitude", "cadastral_longitude", "meter_brand", "meter_index",
-        "meter_multiplier", "claims", "payment_plan", "suspension_date", "reconnection_manual",
+        "meter_multiplier", "claims", "suspension_date", "reconnection_manual",
         "reconnection_date", "reconnection_technician",
     ]
     values = []
@@ -215,7 +214,7 @@ def make_sql(rows: list[dict[str, object]], replace_pilot: bool = False, assign_
             sql_literal(row["enabling_title"]), sql_literal(row["route_order"]),
             sql_literal(row["cadastral_latitude"]), sql_literal(row["cadastral_longitude"]),
             sql_literal(row["meter_brand"]), sql_literal(row["meter_index"]), sql_literal(row["meter_multiplier"]),
-            sql_literal(row["claims"]), sql_literal(row["payment_plan"]), sql_literal(row["suspension_date"]),
+            sql_literal(row["claims"]), sql_literal(row["suspension_date"]),
             sql_literal(row["reconnection_manual"]), sql_literal(row["reconnection_date"]),
             sql_literal(row["reconnection_technician"]),
         ]) + ")")

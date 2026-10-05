@@ -27,7 +27,6 @@ let server: ReturnType<typeof createServer> | undefined;
 let browser: ReturnType<typeof spawn> | undefined;
 let vite: ReturnType<typeof spawn> | undefined;
 let cdp: CdpClient | undefined;
-let paymentChecks = 0;
 
 try {
   const adminId = randomUUID();
@@ -41,8 +40,7 @@ try {
   await pool.query("INSERT INTO debtors(debtor_id, account_id, supply_id, customer_name, address, reference_text, meter_id, area, locality, route, debt_cents, months_pending, supply_status, updated_at, source) VALUES ($1, $2, $3, 'Fase cinco cliente sintético', 'Dirección sintética', '', 'Medidor sintético', 'A', 'Localidad sintética', '1', 9999999, 3, 'A', now(), 'PILOT_PROVISIONAL')", [debtorId, `${debtorId}-account`, `${debtorId}-supply`]);
 
   const config = loadConfig({ ...process.env, HOST: "127.0.0.1", PORT: "0", CORS_ORIGIN: frontendUrl });
-  const paymentTestAdapter = { async checkPayment() { paymentChecks += 1; return { status: paymentChecks === 1 ? "CLEAR" as const : "PAYMENT_CONFIRMED" as const }; } };
-  const application = new Application(pool, config, paymentTestAdapter);
+  const application = new Application(pool, config);
   server = createServer((request, response) => { void application.handle(request, response); });
   await listen(server);
   const apiAddress = server.address();
@@ -142,24 +140,21 @@ try {
     return { cameraFrameBytes: bytes.length, uploadStatus: upload.status, uploadBody, authorizationStatus: authorization.status, syncStatus: sync.status, syncBody: await sync.json(), syntheticGps: position, operationId, evidenceId };
   })()`);
   assert.equal(browserCapture.uploadStatus, 200, "Browser camera frame must upload as evidence");
-  assert.equal(browserCapture.authorizationStatus, 200, "Test payment adapter must authorize only simulated reservation");
-  assert.equal(browserCapture.syncStatus, 409, "Synthetic confirmed payment must create review conflict");
-  assert.equal(browserCapture.syncBody.code, "CONFLICT");
+  assert.equal(browserCapture.authorizationStatus, 200, "Assigned order must receive a cut reservation");
+  assert.equal(browserCapture.syncStatus, 200, "Authorized CUT must synchronize with verified evidence");
+  assert.equal(browserCapture.syncBody.status, "acknowledged");
   const browserAsset = await pool.query("SELECT status, content_hash FROM evidence_assets WHERE evidence_id = $1", [browserCapture.evidenceId]);
-  const browserConflict = await pool.query("SELECT status FROM sync_operations WHERE operation_id = $1", [browserCapture.operationId]);
-  const browserPayment = await pool.query("SELECT operation_id FROM payment_observations WHERE operation_id = $1", [browserCapture.operationId]);
+  const browserOperation = await pool.query("SELECT status FROM sync_operations WHERE operation_id = $1", [browserCapture.operationId]);
   const browserAudit = await pool.query("SELECT action FROM audit_events WHERE operation_id = $1", [browserCapture.operationId]);
   assert.equal(browserAsset.rows[0]?.status, "verified");
-  assert.equal(browserConflict.rows[0]?.status, "conflict");
-  assert.equal(browserPayment.rows.length, 1);
-  assert.ok(browserAudit.rows.some((row) => row.action === "SYNC_OPERATION"));
-  assert.ok(browserAudit.rows.some((row) => row.action === "PAYMENT_CONFIRMED_OBSERVED"));
+  assert.equal(browserOperation.rows[0]?.status, "acknowledged");
+  assert.ok(browserAudit.rows.some((row) => row.action === "SYNC_CUT"));
 
   const persisted = await pool.query<{ status: string }>("SELECT status FROM sync_operations WHERE order_id = $1 AND action = 'VISIT' ORDER BY created_at DESC LIMIT 1", [order.rows[0]?.order_id]);
   assert.equal(persisted.rows[0]?.status, "acknowledged", "Recovered offline visit must sync into PostgreSQL");
   const audit = await pool.query("SELECT audit_id FROM audit_events WHERE order_id = $1 AND action = 'SYNC_VISIT' AND result = 'accepted'", [order.rows[0]?.order_id]);
   assert.ok(audit.rows.length > 0, "PostgreSQL must retain accepted sync audit");
-  console.log(JSON.stringify({ result: "passed", browser: "headless Chrome/Chromium", checks: ["admin login", "order creation and assignment", "technician login", "offline visit", "reload recovery", "sync and PostgreSQL audit", "synthetic camera evidence upload", "synthetic GPS", "payment conflict and PostgreSQL evidence/audit"], cameraBytes: browserCapture.cameraFrameBytes, gps: browserCapture.syntheticGps }));
+  console.log(JSON.stringify({ result: "passed", browser: "headless Chrome/Chromium", checks: ["admin login", "order creation and assignment", "technician login", "offline visit", "reload recovery", "sync and PostgreSQL audit", "synthetic camera evidence upload", "synthetic GPS", "CUT confirmation and PostgreSQL evidence/audit"], cameraBytes: browserCapture.cameraFrameBytes, gps: browserCapture.syntheticGps }));
 } finally {
   cdp?.close();
   if (browser?.pid) stopProcess(browser.pid);

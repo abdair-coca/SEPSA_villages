@@ -104,7 +104,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 .detail-section-heading { display: flex; justify-content: space-between; gap: var(--space-16); margin-bottom: var(--space-12); }
 .detail-section-heading strong { color: #814619; font-size: 14px; line-height: 20px; }
 .debt-table { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-6); }
-.debt-row { display: grid; grid-template-columns: 1fr 1.4fr 1.2fr 1fr 1fr .8fr; min-width: 720px; border-top: 1px solid var(--line); }
+.debt-row { display: grid; grid-template-columns: 1fr 1.4fr 1.2fr 1fr .8fr; min-width: 720px; border-top: 1px solid var(--line); }
 .debt-row:first-child { border-top: 0; }
 .debt-row span { padding: var(--space-8) var(--space-12); color: #66716a; font-size: 12px; line-height: 16px; }
 .debt-row--header { background: #f5f0e5; }
@@ -2429,12 +2429,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
   font-size: 14px;
 }
 
-.cancellation-timestamp {
-  margin-top: 4px;
-  font-size: 11px;
-  font-style: italic;
-}
-
 /* Admin order control redesign */
 .operations-app { background: var(--warm-bg); }
 .operations-header, .admin-summary, .process-strip, .operations-grid, .orders-index, .order-detail-empty, .admin-order-detail, .operations-app > .message { width: min(1280px, calc(100% - 48px)); margin-inline: auto; }
@@ -2545,8 +2539,6 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 .debt-highlight div { display: grid; gap: var(--space-4); }
 .debt-highlight strong { color: #814619; font-size: 30px; line-height: 36px; letter-spacing: -.04em; }
 .debt-highlight div > span:last-child { color: #8a6d45; font-size: 13px; line-height: 18px; }
-.payment-note { padding: var(--space-8) var(--space-12); border-radius: var(--radius-6); color: #8a6d45; background: #f9edcb; font-size: 12px; line-height: 16px; font-weight: 700; }
-.payment-note--active { color: #286544; background: #e3f2e8; }
 .existing-order-alert { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); margin-top: var(--space-24); padding: var(--space-16); border: 1px solid #e5c992; border-radius: var(--radius-8); background: #fff8e8; }
 .existing-order-alert > div { display: grid; gap: var(--space-4); min-width: 0; }
 .existing-order-alert strong { color: #704117; font-size: 14px; line-height: 20px; }
@@ -2581,7 +2573,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 .detail-section-heading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 16px; }
 .detail-section-heading strong { color: #814619; font-size: 16px; line-height: 24px; }
 .debt-table { border-color: var(--line); border-radius: var(--radius-6); }
-.debt-row { grid-template-columns: 1fr 1.2fr 1fr 1fr .8fr 1fr; }
+.debt-row { grid-template-columns: 1fr 1.2fr 1fr 1fr 1fr; }
 .debt-row span { padding: var(--space-12); font-size: 12px; line-height: 16px; }
 .debt-row--header { background: #f5f0e5; }
 .technical-cell { color: #8b928d !important; font-size: 11px !important; }
@@ -5000,7 +4992,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .operations-app .admin-order-detail .debt-row {
-  grid-template-columns: 1fr 1.45fr 1.1fr 1fr 1fr .8fr;
+  grid-template-columns: 1fr 1.45fr 1.1fr 1fr .8fr;
   min-height: 44px;
   border-top-color: var(--sepsa-border);
 }
@@ -5026,7 +5018,7 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 }
 
 .operations-app .admin-order-detail .debt-row span:nth-child(4),
-.operations-app .admin-order-detail .debt-row span:nth-child(6) {
+.operations-app .admin-order-detail .debt-row span:nth-child(5) {
   justify-content: flex-end;
   text-align: right;
 }
@@ -5455,36 +5447,14 @@ h3 { margin: var(--space-4) 0 0; font-size: 20px; line-height: 28px; }
 
 .field-app .kardex-table th:nth-child(2),
 .field-app .kardex-table td:nth-child(2),
-.field-app .kardex-table th:nth-child(4),
-.field-app .kardex-table td:nth-child(4) {
+.field-app .kardex-table th:nth-child(3),
+.field-app .kardex-table td:nth-child(3) {
   text-align: right;
 }
 
 .field-app .kardex-table td:nth-child(2),
-.field-app .kardex-table td:nth-child(4) {
+.field-app .kardex-table td:nth-child(3) {
   font-variant-numeric: tabular-nums;
-}
-
-.field-app .kardex-status {
-  display: inline-flex;
-  min-height: 24px;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.field-app .kardex-status--pending {
-  color: #D99A16;
-  background: #FFF7DB;
-}
-
-.field-app .kardex-status--paid {
-  color: #1F9D61;
-  background: #EAF8F1;
 }
 
 .field-app .kardex-empty {
