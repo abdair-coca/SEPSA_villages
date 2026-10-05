@@ -13,7 +13,7 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required. Start isolated PostgreSQL, run `npm run db:migrate:test`, then `npm test`.");
 }
 
-const config: Config = { host: "127.0.0.1", port: 0, databaseUrl, sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, paymentAuthorityTimeoutMs: 3000, maxBodyBytes: 1024 * 1024, corsOrigin: "http://localhost:5173" };
+const config: Config = { host: "127.0.0.1", port: 0, databaseUrl, sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, maxBodyBytes: 1024 * 1024, corsOrigin: "http://localhost:5173" };
 const pool = new Pool({ connectionString: databaseUrl, max: 4 });
 
 test("PostgreSQL HTTP pages stay bounded and stable; package versions survive restart and clock history", async () => {
@@ -43,9 +43,7 @@ test("PostgreSQL HTTP pages stay bounded and stable; package versions survive re
       await pool.query("INSERT INTO audit_events(audit_id, actor_id, actor_role, action, order_id, result, occurred_at, metadata, source) VALUES ($1, $2, 'ADMIN', 'PHASE5_SYNTHETIC', $3, 'accepted', $4, '{}'::jsonb, 'PILOT_PROVISIONAL')", [auditId, adminId, auditOrderId, timestamp]);
     }
 
-    let paymentChecks = 0;
-    const paymentTestAdapter = { async checkPayment() { paymentChecks += 1; return { status: paymentChecks === 1 ? "CLEAR" as const : "PAYMENT_CONFIRMED" as const }; } };
-    let app = new Application(pool, config, paymentTestAdapter);
+    let app = new Application(pool, config);
     adminServer = await start(app, adminToken);
     {
       const admin = adminServer;
@@ -83,7 +81,7 @@ test("PostgreSQL HTTP pages stay bounded and stable; package versions survive re
       assert.ok(packageTwo.package.version > packageOne.package.version);
     } finally { await technician.close(); }
 
-    app = new Application(pool, config, paymentTestAdapter);
+    app = new Application(pool, config);
     technician = await start(app, technicianToken);
     try {
       const afterRestart = await getJson(technician.url, "/v1/technician/orders?device_id=phase5-device", technicianToken);
@@ -97,27 +95,71 @@ test("PostgreSQL HTTP pages stay bounded and stable; package versions survive re
       assert.ok(assignedPackage.package.orders.some((order: any) => order.order_id === created.order_id));
 
       const operationId = `phase5-cut-${randomUUID()}`;
-      const bytes = Buffer.from("synthetic image evidence bytes");
+      const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC", "base64");
       const contentHash = createHash("sha256").update(bytes).digest("hex");
       const evidenceId = `phase5-evidence-${randomUUID()}`;
-      await postJson(technician.url, "/v1/evidence/assets", technicianToken, { evidence_id: evidenceId, order_id: created.order_id, operation_id: operationId, device_id: "phase5-device", mime_type: "image/jpeg", content_hash: contentHash, content_base64: bytes.toString("base64") });
+      await postJson(technician.url, "/v1/evidence/assets", technicianToken, { evidence_id: evidenceId, order_id: created.order_id, operation_id: operationId, device_id: "phase5-device", mime_type: "image/png", content_hash: contentHash, content_base64: bytes.toString("base64") });
       const authorization = await postJson(technician.url, "/v1/authorizations/cut", technicianToken, { operation_id: operationId, order_id: created.order_id, device_id: "phase5-device", order_version: assigned.version });
-      const conflict = await postJson(technician.url, "/v1/sync/operations", technicianToken, {
+      const acknowledged = await postJson(technician.url, "/v1/sync/operations", technicianToken, {
         operation_id: operationId, action: "CUT", order_id: created.order_id, technician_id: technicianId, device_id: "phase5-device",
+        technician_name_snapshot: authorization.technician_name_snapshot,
         recorded_at: timestamp, evidence_refs: [evidenceId], order_version: assigned.version, authorization_id: authorization.authorization_id,
         authorization_token: authorization.token,
         field_capture: { reading: { value: 123.45, unit: "kWh", meterId: "Synthetic meter", recordedAt: timestamp, status: "CAPTURED" }, location: { latitude: -17.39, longitude: -66.16, accuracyMeters: 8, recordedAt: timestamp, status: "CAPTURED" }, cutType: "RED", nearbyMeters: false },
-      }, 409);
-      assert.equal(conflict.code, "CONFLICT");
+      });
+      assert.equal(acknowledged.status, "acknowledged");
       const storedAsset = await pool.query("SELECT status, content_hash FROM evidence_assets WHERE evidence_id = $1", [evidenceId]);
-      const storedConflict = await pool.query("SELECT status FROM sync_operations WHERE operation_id = $1", [operationId]);
-      const storedPayment = await pool.query("SELECT operation_id FROM payment_observations WHERE operation_id = $1", [operationId]);
+      const storedOperation = await pool.query("SELECT status FROM sync_operations WHERE operation_id = $1", [operationId]);
       const storedAudit = await pool.query("SELECT action FROM audit_events WHERE operation_id = $1 ORDER BY occurred_at", [operationId]);
       assert.deepEqual(storedAsset.rows[0], { status: "verified", content_hash: contentHash });
-      assert.equal(storedConflict.rows[0]?.status, "conflict");
-      assert.equal(storedPayment.rows.length, 1);
-      assert.ok(storedAudit.rows.some((row) => row.action === "SYNC_OPERATION"));
-      assert.ok(storedAudit.rows.some((row) => row.action === "PAYMENT_CONFIRMED_OBSERVED"));
+      assert.equal(storedOperation.rows[0]?.status, "acknowledged");
+      assert.ok(storedAudit.rows.some((row) => row.action === "SYNC_CUT"));
+
+      const reconnectOperationId = `phase5-reconnection-${randomUUID()}`;
+      const reconnectOrder = await pool.query<{ version: number }>("SELECT version FROM orders WHERE order_id = $1", [created.order_id]);
+      const reconnectVersion = Number(reconnectOrder.rows[0]?.version);
+      const enablement = await postJson(technician.url, "/v1/authorizations/reconnection", technicianToken, {
+        operation_id: reconnectOperationId,
+        order_id: created.order_id,
+        device_id: "phase5-device",
+        order_version: reconnectVersion,
+      });
+      const consumed = await postJson(technician.url, "/v1/authorizations/reconnection/consume", technicianToken, {
+        enablement_id: enablement.enablement_id,
+        token: enablement.token,
+        order_id: created.order_id,
+        technician_id: technicianId,
+        device_id: "phase5-device",
+        operation_id: reconnectOperationId,
+        version: reconnectVersion,
+      });
+      assert.equal(consumed.status, "consumed");
+      const reconnectionPayload = {
+        operation_id: reconnectOperationId,
+        action: "RECONNECTION",
+        order_id: created.order_id,
+        technician_id: technicianId,
+        technician_name_snapshot: enablement.technician_name_snapshot,
+        device_id: "phase5-device",
+        recorded_at: timestamp,
+        effective_at: timestamp,
+        demora: "Sin demora",
+        evidence_refs: [],
+        order_version: reconnectVersion,
+        authorization_id: enablement.enablement_id,
+        exception_reason: "saltar_control_fotos: prueba sin foto",
+      };
+      const reconnectionAck = await postJson(technician.url, "/v1/sync/operations", technicianToken, reconnectionPayload);
+      assert.equal(reconnectionAck.action, "RECONNECTION");
+      const replay = await postJson(technician.url, "/v1/sync/operations", technicianToken, reconnectionPayload);
+      assert.equal(replay.operation_id, reconnectOperationId);
+      const storedReconnection = await pool.query<{ status: string; payload: Record<string, unknown> }>("SELECT status, payload FROM sync_operations WHERE operation_id = $1", [reconnectOperationId]);
+      const reconnectedOrder = await pool.query<{ status: string; physical_status: string; version: number }>("SELECT status, physical_status, version FROM orders WHERE order_id = $1", [created.order_id]);
+      const reconnectionAudit = await pool.query<{ action: string }>("SELECT action FROM audit_events WHERE operation_id = $1 ORDER BY occurred_at", [reconnectOperationId]);
+      assert.equal(storedReconnection.rows[0]?.status, "acknowledged");
+      assert.deepEqual(storedReconnection.rows[0]?.payload, reconnectionPayload);
+      assert.deepEqual(reconnectedOrder.rows[0], { status: "RECONEXIÓN", physical_status: "CONFIRMED", version: reconnectVersion + 1 });
+      assert.equal(reconnectionAudit.rows.filter((row) => row.action === "SYNC_RECONNECTION").length, 1);
     } finally { await technician.close(); }
   } finally {
     await adminServer?.close();

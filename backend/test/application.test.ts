@@ -5,7 +5,6 @@ import test from "node:test";
 import type { Pool } from "pg";
 import { Application } from "../src/application.js";
 import { hashToken } from "../src/auth.js";
-import type { PaymentCheckContext } from "../src/payment-authority.js";
 import type { SecurityEvent } from "../src/security-logger.js";
 import { assertSchema } from "./contract-schema.js";
 
@@ -15,12 +14,9 @@ const config = {
   databaseUrl: "postgres://test",
   sessionTtlSeconds: 3600,
   authorizationTtlSeconds: 300,
-  paymentAuthorityTimeoutMs: 3000,
   maxBodyBytes: 1024,
   corsOrigin: "http://localhost:5173",
 };
-
-const clearPaymentAuthority = { async checkPayment() { return { status: "CLEAR" as const }; } };
 
 test("admin technician catalog exposes active technician identities without credentials", async () => {
   const pool = new CatalogPool("ADMIN");
@@ -212,7 +208,7 @@ test("login rate limit groups normalized username by socket without echoing user
 test("security logger receives only allowlisted event fields", async () => {
   const events: SecurityEvent[] = [];
   const pool = { async query<T extends Record<string, unknown>>() { return { rows: [] as T[], rowCount: 0 }; } } as unknown as Pool;
-  const application = new Application(pool, config, undefined, { log(event) { events.push(event); } });
+  const application = new Application(pool, config, { log(event) { events.push(event); } });
   const server = createServer((request, response) => { void application.handle(request, response); });
   await listen(server);
   try {
@@ -255,7 +251,7 @@ test("admin assignment locks only order and debtor rows with nullable technician
 test("acknowledges a cut only after pilot evidence verification", async () => {
   const pool = new SyncPool();
   const server = createServer((request, response) => {
-    void new Application(pool as unknown as Pool, config, clearPaymentAuthority).handle(request, response);
+    void new Application(pool as unknown as Pool, config).handle(request, response);
   });
   await listen(server);
   try {
@@ -271,7 +267,7 @@ test("acknowledges a cut only after pilot evidence verification", async () => {
     assertSchema("SyncResponse", body);
     assert.deepEqual(body, {
       status: "acknowledged", operation_id: "cut-local-evidence-1", source: "PILOT_PROVISIONAL", order_id: "order-1",
-      technician_id: "technician-1", device_id: "device-1", order_version: 1, action: "CUT",
+      technician_id: "technician-1", technician_name_snapshot: "Technician One", device_id: "device-1", order_version: 1, action: "CUT",
       recorded_at: "2026-09-22T14:00:00.000Z", evidence_refs: ["evidence-local-1"], field_capture: (localEvidencePayload() as { field_capture: unknown }).field_capture,
     });
     assert.equal(pool.client.authorizationConsumed, true);
@@ -285,146 +281,6 @@ test("acknowledges a cut only after pilot evidence verification", async () => {
   } finally {
     await close(server);
   }
-});
-
-test("a payment confirmed after reservation blocks CUT sync and records one durable observation", async () => {
-  const pool = new PaymentPool();
-  const decisions = ["CLEAR", "PAYMENT_CONFIRMED"] as const;
-  const contexts: PaymentCheckContext[] = [];
-  const paymentAuthority = {
-    async checkPayment(context: PaymentCheckContext) {
-      assert.equal(pool.client.inTransaction, true);
-      contexts.push(context);
-      return { status: decisions[contexts.length - 1] ?? "UNKNOWN" } as const;
-    },
-  };
-  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config, paymentAuthority).handle(request, response); });
-  await listen(server);
-  try {
-    const address = server.address();
-    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
-    const headers = { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" };
-    const authorizationResponse = await fetch(`http://127.0.0.1:${address.port}/v1/authorizations/cut`, {
-      method: "POST", headers,
-      body: JSON.stringify({ operation_id: "cut-payment-race-1", order_id: "order-1", device_id: "device-1", order_version: 1 }),
-    });
-    assert.equal(authorizationResponse.status, 200);
-    const authorization = await authorizationResponse.json() as { authorization_id: string; token: string };
-    const syncResponse = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, {
-      method: "POST", headers,
-      body: JSON.stringify({ ...localEvidencePayload(), operation_id: "cut-payment-race-1", evidence_refs: [], exception_reason: "saltar_control_fotos: synthetic test", authorization_id: authorization.authorization_id, authorization_token: authorization.token }),
-    });
-    assert.equal(syncResponse.status, 409);
-    assert.equal((await syncResponse.json() as { code: string }).code, "CONFLICT");
-    assert.equal(pool.client.authorizationConsumed, false);
-    assert.equal(pool.client.orderExecuted, false);
-    assert.equal(pool.client.syncAcknowledged, false);
-    assert.equal(pool.client.syncConflicted, true);
-    assert.equal(pool.client.paymentObservations.length, 1);
-    assert.deepEqual(contexts.map(({ orderId, accountId, supplyId, actorId, operationId }) => ({ orderId, accountId, supplyId, actorId, operationId })), [
-      { orderId: "order-1", accountId: "account-1", supplyId: "supply-1", actorId: "technician-1", operationId: "cut-payment-race-1" },
-      { orderId: "order-1", accountId: "account-1", supplyId: "supply-1", actorId: "technician-1", operationId: "cut-payment-race-1" },
-    ]);
-    assert.equal(pool.client.paymentObservations[0]?.actor_id, "technician-1");
-    assert.equal(pool.client.paymentObservations[0]?.operation_id, "cut-payment-race-1");
-    assert.equal(pool.client.paymentObservations[0]?.order_id, "order-1");
-    assert.equal(pool.client.paymentObservations[0]?.account_id, "account-1");
-    assert.equal(pool.client.paymentObservations[0]?.supply_id, "supply-1");
-    assert.equal(pool.client.paymentObservations[0]?.device_id, "device-1");
-    assert.equal(pool.client.paymentObservations[0]?.source, "PILOT_PROVISIONAL");
-    assert.equal(typeof pool.client.paymentObservations[0]?.observed_at, "string");
-    assert.equal(pool.client.auditActions.includes("PAYMENT_CONFIRMED_OBSERVED"), true);
-    assert.doesNotMatch(JSON.stringify(pool.client.paymentAuditMetadata), /opaque-token|session-token/i);
-    const laterAuthorization = await fetch(`http://127.0.0.1:${address.port}/v1/authorizations/cut`, { method: "POST", headers, body: JSON.stringify({ operation_id: "cut-payment-race-2", order_id: "order-1", device_id: "device-1", order_version: 1 }) });
-    assert.equal(laterAuthorization.status, 409);
-    assert.equal((await laterAuthorization.json() as { code: string }).code, "PAYMENT_REQUIRES_REVIEW");
-    assert.equal(contexts.length, 2);
-    assert.equal(pool.client.authorizationReservations, 1);
-    const replay = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, { method: "POST", headers, body: JSON.stringify({ ...localEvidencePayload(), operation_id: "cut-payment-race-1", evidence_refs: [], exception_reason: "saltar_control_fotos: synthetic test", authorization_id: authorization.authorization_id, authorization_token: authorization.token }) });
-    assert.equal(replay.status, 409);
-    assert.equal(pool.client.paymentObservations.length, 1);
-    assert.equal(pool.client.auditActions.filter((action) => action === "PAYMENT_CONFIRMED_OBSERVED").length, 1);
-    assert.equal(contexts.length, 2);
-  } finally { await close(server); }
-});
-
-test("an unavailable payment authority leaves sync in review and does not expose adapter errors", async () => {
-  const pool = new PaymentPool();
-  let checks = 0;
-  const paymentAuthority = {
-    async checkPayment() {
-      checks += 1;
-      if (checks === 1) return { status: "CLEAR" as const };
-      throw new Error("synthetic upstream token must not leak");
-    },
-  };
-  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config, paymentAuthority).handle(request, response); });
-  await listen(server);
-  try {
-    const address = server.address();
-    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
-    const headers = { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" };
-    const authorizationResponse = await fetch(`http://127.0.0.1:${address.port}/v1/authorizations/cut`, { method: "POST", headers, body: JSON.stringify({ operation_id: "cut-unknown-payment-1", order_id: "order-1", device_id: "device-1", order_version: 1 }) });
-    assert.equal(authorizationResponse.status, 200);
-    const authorization = await authorizationResponse.json() as { authorization_id: string; token: string };
-    const syncResponse = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, { method: "POST", headers, body: JSON.stringify({ ...localEvidencePayload(), operation_id: "cut-unknown-payment-1", evidence_refs: [], exception_reason: "saltar_control_fotos: synthetic test", authorization_id: authorization.authorization_id, authorization_token: authorization.token }) });
-    assert.equal(syncResponse.status, 409);
-    const responseBody = await syncResponse.json() as { code: string; message: string };
-    assert.equal(responseBody.code, "CONFLICT");
-    assert.match(responseBody.message, /requires review/i);
-    assert.doesNotMatch(responseBody.message, /upstream token/i);
-    assert.equal(pool.client.authorizationConsumed, false);
-    assert.equal(pool.client.orderExecuted, false);
-    assert.equal(pool.client.syncAcknowledged, false);
-    assert.equal(pool.client.syncConflicted, true);
-    assert.equal(pool.client.paymentObservations.length, 0);
-  } finally { await close(server); }
-});
-
-test("a payment authority that never responds times out and leaves sync in review", async () => {
-  const pool = new PaymentPool();
-  let checks = 0;
-  const paymentAuthority = {
-    async checkPayment() {
-      checks += 1;
-      if (checks === 1) return { status: "CLEAR" as const };
-      return await new Promise<{ status: "UNKNOWN" }>(() => {});
-    },
-  };
-  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, { ...config, paymentAuthorityTimeoutMs: 10 }, paymentAuthority).handle(request, response); });
-  await listen(server);
-  try {
-    const address = server.address();
-    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
-    const headers = { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" };
-    const authorizationResponse = await fetch(`http://127.0.0.1:${address.port}/v1/authorizations/cut`, { method: "POST", headers, body: JSON.stringify({ operation_id: "cut-timeout-payment-1", order_id: "order-1", device_id: "device-1", order_version: 1 }) });
-    assert.equal(authorizationResponse.status, 200);
-    const authorization = await authorizationResponse.json() as { authorization_id: string; token: string };
-    const syncResponse = await fetch(`http://127.0.0.1:${address.port}/v1/sync/operations`, { method: "POST", headers, body: JSON.stringify({ ...localEvidencePayload(), operation_id: "cut-timeout-payment-1", evidence_refs: [], exception_reason: "saltar_control_fotos: synthetic test", authorization_id: authorization.authorization_id, authorization_token: authorization.token }) });
-    assert.equal(syncResponse.status, 409);
-    assert.equal((await syncResponse.json() as { code: string }).code, "CONFLICT");
-    assert.equal(pool.client.authorizationConsumed, false);
-    assert.equal(pool.client.orderExecuted, false);
-    assert.equal(pool.client.syncConflicted, true);
-  } finally { await close(server); }
-});
-
-test("runtime without a payment adapter defaults to UNKNOWN and reserves no authorization", async () => {
-  const pool = new PaymentPool();
-  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config).handle(request, response); });
-  await listen(server);
-  try {
-    const address = server.address();
-    if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
-    const response = await fetch(`http://127.0.0.1:${address.port}/v1/authorizations/cut`, {
-      method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" },
-      body: JSON.stringify({ operation_id: "cut-default-unknown-1", order_id: "order-1", device_id: "device-1", order_version: 1 }),
-    });
-    assert.equal(response.status, 409);
-    assert.equal((await response.json() as { code: string }).code, "PAYMENT_REQUIRES_REVIEW");
-    assert.equal(pool.client.authorizationReserved, false);
-    assert.equal(pool.client.authorizationConsumed, false);
-  } finally { await close(server); }
 });
 
 test("rejects CUT before authorization consumption when evidence upload is absent", async () => {
@@ -444,7 +300,7 @@ test("rejects CUT before authorization consumption when evidence upload is absen
 
 test("keeps controlled photo exception and reason in accepted audit payload", async () => {
   const pool = new SyncPool();
-  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config, clearPaymentAuthority).handle(request, response); });
+  const server = createServer((request, response) => { void new Application(pool as unknown as Pool, config).handle(request, response); });
   await listen(server);
   try {
     const address = server.address();
@@ -464,8 +320,8 @@ test("verifies evidence bytes server-side and makes upload retry idempotent", as
   try {
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("Test server address is unavailable.");
-    const bytes = Buffer.from("synthetic jpeg evidence");
-    const payload = { evidence_id: "evidence-upload-1", order_id: "order-1", operation_id: "cut-local-evidence-1", device_id: "device-1", mime_type: "image/jpeg", content_hash: createHash("sha256").update(bytes).digest("hex"), content_base64: bytes.toString("base64") };
+    const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC", "base64");
+    const payload = { evidence_id: "evidence-upload-1", order_id: "order-1", operation_id: "cut-local-evidence-1", device_id: "device-1", mime_type: "image/png", content_hash: createHash("sha256").update(bytes).digest("hex"), content_base64: bytes.toString("base64") };
     const send = () => fetch(`http://127.0.0.1:${address.port}/v1/evidence/assets`, { method: "POST", headers: { authorization: "Bearer PILOT_PROVISIONAL_TOKEN_123456", "content-type": "application/json" }, body: JSON.stringify(payload) });
     assert.equal((await send()).status, 200);
     assert.equal((await send()).status, 200);
@@ -830,69 +686,6 @@ class AssignmentClient {
   release(): void {}
 }
 
-class PaymentPool {
-  readonly client = new PaymentClient();
-
-  async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
-    if (text.includes("FROM sessions")) return { rows: [{ session_id: "session-1", user_id: "technician-1", username: "tech.one", display_name: "Technician One", role: "TECHNICIAN" } as unknown as T], rowCount: 1 };
-    throw new Error(`Unexpected payment pool query: ${text}`);
-  }
-
-  async connect(): Promise<PaymentClient> { return this.client; }
-}
-
-class PaymentClient {
-  inTransaction = false;
-  authorizationId = "authorization-1";
-  authorizationTokenHash = hashToken("opaque-token");
-  authorizationOperationId = "cut-payment-race-1";
-  authorizationConsumed = false;
-  authorizationReserved = false;
-  authorizationReservations = 0;
-  orderExecuted = false;
-  syncAcknowledged = false;
-  syncConflicted = false;
-  paymentObservations: Array<Record<string, unknown>> = [];
-  auditActions: string[] = [];
-  auditMetadata: unknown;
-  paymentAuditMetadata: unknown;
-  syncOperation?: Record<string, unknown>;
-
-  async query<T extends Record<string, unknown>>(text: string, values: unknown[] = []): Promise<{ rows: T[]; rowCount: number }> {
-    if (text === "BEGIN") { this.inTransaction = true; return { rows: [], rowCount: 0 }; }
-    if (text === "COMMIT" || text === "ROLLBACK") { this.inTransaction = false; return { rows: [], rowCount: 0 }; }
-    if (text.includes("SELECT authorization_id, expires_at, technician_id FROM cut_authorizations")) return { rows: [], rowCount: 0 };
-    if (text.includes("SELECT authorization_id, operation_id, token_hash, status")) return { rows: [{ authorization_id: this.authorizationId, operation_id: this.authorizationOperationId, token_hash: this.authorizationTokenHash, status: "RESERVED", expires_at: "2099-09-22T14:05:00.000Z", order_id: "order-1", technician_id: "technician-1", device_id: "device-1", order_version: 1 } as unknown as T], rowCount: 1 };
-    if (text.includes("FROM payment_observations")) {
-      const found = this.paymentObservations.some((event) => event.account_id === values[0] || event.supply_id === values[1]);
-      return { rows: found ? [{ observation_id: "observation-1" } as unknown as T] : [], rowCount: found ? 1 : 0 };
-    }
-    if (text.includes("FROM sync_operations WHERE operation_id = $1 FOR UPDATE")) return { rows: this.syncOperation ? [this.syncOperation as T] : [], rowCount: this.syncOperation ? 1 : 0 };
-    if (text.startsWith("INSERT INTO sync_operations")) {
-      this.syncOperation = { operation_id: values[0], technician_id: values[1], device_id: values[2], status: "pending", payload_hash: values[6], conflict_reason: null };
-      return { rows: [], rowCount: 1 };
-    }
-    if (text.includes("FOR UPDATE OF o, d")) return { rows: [paymentOrder() as unknown as T], rowCount: 1 };
-    if (text.startsWith("INSERT INTO cut_authorizations")) { this.authorizationId = String(values[0]); this.authorizationOperationId = String(values[1]); this.authorizationTokenHash = String(values[6]); this.authorizationReserved = true; this.authorizationReservations += 1; return { rows: [], rowCount: 1 }; }
-    if (text.startsWith("INSERT INTO payment_observations")) {
-      this.paymentObservations.push({ operation_id: values[1], order_id: values[2], account_id: values[3], supply_id: values[4], actor_id: values[5], actor_role: values[6], device_id: values[7], source: values[8], observed_at: values[9] });
-      return { rows: [], rowCount: 1 };
-    }
-    if (text.startsWith("UPDATE cut_authorizations SET")) { this.authorizationConsumed = true; return { rows: [], rowCount: 1 }; }
-    if (text.startsWith("UPDATE orders SET")) { this.orderExecuted = true; return { rows: [], rowCount: 1 }; }
-    if (text.startsWith("UPDATE sync_operations SET status = 'conflict'")) { this.syncConflicted = true; if (this.syncOperation) this.syncOperation.status = "conflict"; return { rows: [], rowCount: 1 }; }
-    if (text.startsWith("UPDATE sync_operations SET status = 'acknowledged'")) { this.syncAcknowledged = true; if (this.syncOperation) this.syncOperation.status = "acknowledged"; return { rows: [], rowCount: 1 }; }
-    if (text.startsWith("INSERT INTO audit_events")) { this.auditActions.push(String(values[3])); this.auditMetadata = values[11]; if (values[3] === "PAYMENT_CONFIRMED_OBSERVED") this.paymentAuditMetadata = values[11]; return { rows: [], rowCount: 1 }; }
-    throw new Error(`Unexpected payment client query: ${text}`);
-  }
-
-  release(): void {}
-}
-
-function paymentOrder(): Record<string, unknown> {
-  return { ...syncOrder(), account_id: "account-1", supply_id: "supply-1" };
-}
-
 class SyncPool {
   readonly client: SyncClient;
 
@@ -931,10 +724,9 @@ class SyncClient {
     if (text.includes("INSERT INTO sync_operations")) return { rows: [], rowCount: 1 };
     if (text.includes("FOR UPDATE OF o, d")) return { rows: [syncOrder() as unknown as T], rowCount: 1 };
     if (text.includes("FROM evidence_assets")) return { rows: (this.evidenceVerified ? (values[0] as string[]) : []).map((evidence_id) => ({ evidence_id } as unknown as T)), rowCount: this.evidenceVerified ? (values[0] as string[]).length : 0 };
-    if (text.includes("FROM payment_observations")) return { rows: [], rowCount: 0 };
     if (text.includes("FROM cut_authorizations")) {
       return {
-        rows: [{ authorization_id: "authorization-1", operation_id: "cut-local-evidence-1", token_hash: hashToken("opaque-token"), status: "RESERVED", expires_at: this.authorizationExpiresAt, order_id: "order-1", technician_id: "technician-1", device_id: "device-1", order_version: 1, ...this.authorizationOverrides } as unknown as T],
+        rows: [{ authorization_id: "authorization-1", operation_id: "cut-local-evidence-1", token_hash: hashToken("opaque-token"), status: "RESERVED", expires_at: this.authorizationExpiresAt, order_id: "order-1", technician_id: "technician-1", technician_name_snapshot: "Technician One", device_id: "device-1", order_version: 1, action: "CUT", ...this.authorizationOverrides } as unknown as T],
         rowCount: 1,
       };
     }
@@ -945,6 +737,7 @@ class SyncClient {
       return { rows: eligible ? [{ eligible: true } as unknown as T] : [], rowCount: eligible ? 1 : 0 };
     }
     if (text.startsWith("UPDATE cut_authorizations SET")) {
+      if (text.includes("expires_at > clock_timestamp()") && Date.parse(this.authorizationExpiresAt) <= Date.now()) return { rows: [], rowCount: 0 };
       this.authorizationConsumed = true;
       return { rows: [], rowCount: 1 };
     }
@@ -973,6 +766,7 @@ class EvidencePool {
   readonly client = new EvidenceClient();
   async query<T extends Record<string, unknown>>(text: string): Promise<{ rows: T[]; rowCount: number }> {
     if (text.includes("FROM sessions")) return { rows: [{ session_id: "session-1", user_id: "technician-1", username: "tech.one", display_name: "Tech", role: "TECHNICIAN" } as unknown as T], rowCount: 1 };
+    if (text.includes("FROM orders")) return { rows: [{ assigned_technician_id: "technician-1" } as unknown as T], rowCount: 1 };
     throw new Error(`Unexpected evidence pool query: ${text}`);
   }
   async connect(): Promise<EvidenceClient> { return this.client; }
@@ -1105,6 +899,7 @@ function localEvidencePayload(): Record<string, unknown> {
     recorded_at: "2026-09-22T14:00:00.000Z",
     evidence_refs: ["evidence-local-1"],
     technician_id: "technician-1",
+    technician_name_snapshot: "Technician One",
     order_version: 1,
     authorization_id: "authorization-1",
     authorization_token: "opaque-token",

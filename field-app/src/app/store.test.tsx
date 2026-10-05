@@ -15,7 +15,7 @@ afterEach(async () => {
   for (const databaseName of databaseNames.splice(0)) await deleteFieldDatabase(databaseName);
 });
 
-function setup(name: string, configureDemoGrants = false): { store: AppStore; repository: IndexedDbLocalRepository; connectivity: MockConnectivity; transport: MockSyncTransport; authorization: MockAuthorizationAdapter } {
+function setup(name: string, configureDemoGrants = false, technicianName = DEMO_TECHNICIAN_ID): { store: AppStore; repository: IndexedDbLocalRepository; connectivity: MockConnectivity; transport: MockSyncTransport; authorization: MockAuthorizationAdapter } {
   databaseNames.push(name);
   const repository = new IndexedDbLocalRepository({ dbName: name, technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID });
   repositories.push(repository);
@@ -24,9 +24,9 @@ function setup(name: string, configureDemoGrants = false): { store: AppStore; re
   const enablement = new MockEnablementAdapter({ mode: "online" });
   const transport = new MockSyncTransport({ mode: "online" });
   const prepareExternalValidation = configureDemoGrants
-    ? (action: "CUT" | "RECONNECTION", order: Parameters<typeof prepareDemoExternalValidation>[1], operationId: string, now: string) => prepareDemoExternalValidation(action, order, operationId, now, { authorization, enablement })
+    ? (action: "CUT" | "RECONNECTION", order: Parameters<typeof prepareDemoExternalValidation>[1], operationId: string, now: string) => prepareDemoExternalValidation(action, order, operationId, now, { authorization, enablement }, DEMO_TECHNICIAN_ID, DEMO_DEVICE_ID, technicianName)
     : undefined;
-  const store = createAppStore({ repository, authorization, enablement, connectivity, transport, seedPackage: createDemoPackage("2026-09-12T10:00:00.000Z"), prepareExternalValidation });
+  const store = createAppStore({ repository, authorization, enablement, connectivity, transport, seedPackage: createDemoPackage("2026-09-12T10:00:00.000Z"), technicianName, prepareExternalValidation });
   return { store, repository, connectivity, transport, authorization };
 }
 
@@ -49,6 +49,18 @@ describe("field app store", () => {
     expect(store.getSnapshot().orders.map((order) => order.orderId)).toContain("ORD-24017");
     store.setQuery("24019");
     expect(selectVisibleOrders(store.getSnapshot()).map((order) => order.orderId)).toEqual(["ORD-24019"]);
+  });
+
+  it("returns a confirmed reconciliation result only after local persistence and sync ACK", async () => {
+    const { store, repository } = setup("store-reconnection-confirmation", true, "Camila Flores");
+    await store.init();
+
+    const result = await store.executeReconnection("ORD-24019", { exceptionReason: "saltar_control_fotos: prueba sin foto", demora: "Sin demora" });
+
+    expect(result).toMatchObject({ requestedAction: "RECONNECTION", recordedAction: "RECONNECTION", outcome: "confirmed", localSaved: true, syncStatus: "synced", physicalStatus: "CONFIRMED" });
+    expect(result.operationId).toBeTruthy();
+    await expect(repository.getRecord(result.operationId!)).resolves.toMatchObject({ kind: "RECONNECTION", orderId: "ORD-24019", effectiveAt: expect.any(String), technicianId: DEMO_TECHNICIAN_ID, technicianNameSnapshot: "Camila Flores", demora: "Sin demora", syncStatus: "synced" });
+    await expect(repository.getOrder("ORD-24019")).resolves.toMatchObject({ status: "RECONEXIÓN", physicalStatus: "CONFIRMED", version: 5, authoritativeVersion: 4 });
   });
 
   it("restores partial cut fields after closing and reopening the local repository", async () => {

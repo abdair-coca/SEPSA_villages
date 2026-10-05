@@ -193,6 +193,7 @@ function grant(operationId = "operation-00000000-0000-4000-8000-000000000001", v
     token: "opaque-token",
     orderId: "order-1",
     technicianId: "tech-1",
+    technicianNameSnapshot: "Técnico Cortó",
     deviceId: "device-1",
     operationId,
     version,
@@ -216,6 +217,7 @@ function input(repository: MemoryRepository, authorization: StubAuthorization, o
     order,
     operationId,
     technicianId: "tech-1",
+    technicianNameSnapshot: "Técnico Cortó",
     deviceId: "device-1",
     now: "2026-09-11T10:01:00.000Z",
     evidence: {
@@ -323,6 +325,7 @@ describe("cut process integration boundaries", () => {
       throw new Error("Expected first execution and stale second attempt to be recorded");
     }
     expect(first.operation.physicalStatus).toBe("CONFIRMED");
+    expect(first.operation.technicianNameSnapshot).toBe("Técnico Cortó");
     expect(second.visit.reason).toBe("ORDER_CLAIM_CONFLICT");
     expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
     expect(repository.updates).toHaveLength(1);
@@ -347,6 +350,22 @@ describe("cut process integration boundaries", () => {
     expect(result.outcome).toBe("pending_sync");
     expect(authorization.consumeCalls).toHaveLength(0);
     expect(result).toMatchObject({ operation: { status: "INTENT_PERSISTED", physicalStatus: "CLAIMED", authorizationToken: "opaque-token", authorizationVersion: 1 } });
+  });
+
+  it("requests CUT authorization with the authoritative version while local claims keep their CAS revision", async () => {
+    const repository = new MemoryRepository();
+    const authorization = new StubAuthorization();
+    const localOrder = { ...order, version: 4, authoritativeVersion: 2 };
+    const operationId = "operation-split-version-00000000-0000-4000-8000-000000000098";
+    authorization.requestResponse = { status: "authorized", grant: grant(operationId, 2) };
+
+    const result = await executeCut({ ...input(repository, authorization, operationId), order: localOrder });
+
+    expect(result.outcome).toBe("executed");
+    expect(authorization.requestCalls[0]).toMatchObject({ orderVersion: 2, operationId });
+    if (result.outcome !== "executed") throw new Error("Expected confirmed cut result.");
+    expect(result.operation.authorizationVersion).toBe(2);
+    expect(repository.updates[0]?.order?.version).toBe(6);
   });
 
   it("treats an already-consumed authorization as physical uncertainty", async () => {
@@ -530,83 +549,6 @@ describe("cut process integration boundaries", () => {
     expect(repository.updates[0].operation).toMatchObject({ status: "PHYSICAL_UNKNOWN", physicalStatus: "PHYSICAL_UNKNOWN", syncStatus: "failed" });
     expect(repository.updates[0].order).toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN", version: 3 });
     expect(repository.updates[0].syncItem).toMatchObject({ status: "failed", uncertain: true });
-  });
-
-  it("persists request-side payment detection as an annulled order", async () => {
-    const repository = new MemoryRepository();
-    const authorization = new StubAuthorization();
-    authorization.requestResponse = {
-      status: "payment_detected",
-      payment: { reason: "Payment settled remotely", detectedAt: "2026-09-11T10:02:00.000Z" },
-    };
-
-    const result = await executeCut(input(repository, authorization, "operation-payment-request-00000000-0000-4000-8000-000000000015"));
-
-    expect(result.outcome).toBe("visit_recorded");
-    expect(repository.claims[0].order).toMatchObject({
-      status: "ANULADO",
-      physicalStatus: "NONE",
-      cancellation: {
-        reason: "Payment settled remotely",
-        detectedAt: "2026-09-11T10:02:00.000Z",
-      },
-    });
-    expect(repository.claims[0].syncItem).toMatchObject({
-      action: "VISIT",
-      status: "pending",
-      attempts: 1,
-      errorCode: "Payment settled remotely",
-    });
-  });
-
-  it("keeps payment visit when order changes during authorization", async () => {
-    const repository = new MemoryRepository();
-    const authorization = new StubAuthorization();
-    authorization.requestResponse = {
-      status: "payment_detected",
-      payment: { reason: "Payment settled remotely", detectedAt: "2026-09-11T10:02:00.000Z" },
-    };
-    authorization.onRequest = () => {
-      repository.setOrder({ ...order, version: 2 });
-    };
-
-    const result = await executeCut(input(repository, authorization, "operation-payment-race-00000000-0000-4000-8000-000000000016"));
-
-    expect(result.outcome).toBe("visit_recorded");
-    if (result.outcome !== "visit_recorded") throw new Error("Expected payment visit");
-    expect(result.visit.errorCode).toBe("ORDER_VERSION_CONFLICT");
-    expect(repository.claims[0].order).toBeUndefined();
-    expect(await repository.getOrder("order-1")).toMatchObject({
-      status: "GENERADO",
-      physicalStatus: "NONE",
-      version: 2,
-    });
-  });
-
-  it("persists consume-side payment detection as an annulled order", async () => {
-    const repository = new MemoryRepository();
-    const authorization = new StubAuthorization();
-    authorization.requestResponse = { status: "authorized", grant: grant() };
-    authorization.consumeResponse = {
-      status: "payment_detected",
-      payment: { reason: "Payment arrived during claim", detectedAt: "2026-09-11T10:03:00.000Z" },
-    };
-
-    const result = await executeCut(input(repository, authorization, "operation-00000000-0000-4000-8000-000000000001"));
-
-    expect(result.outcome).toBe("blocked");
-    expect(repository.updates[0].order).toMatchObject({
-      status: "ANULADO",
-      physicalStatus: "NONE",
-      cancellation: {
-        reason: "Payment arrived during claim",
-        detectedAt: "2026-09-11T10:03:00.000Z",
-      },
-    });
-    expect(repository.updates[0].operation?.cancellation).toEqual({
-      reason: "Payment arrived during claim",
-      detectedAt: "2026-09-11T10:03:00.000Z",
-    });
   });
 
   it("releases not-authorized claim with CAS", async () => {

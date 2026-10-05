@@ -8,19 +8,26 @@ import type { Config } from "../src/config.js";
 import { assertSchema } from "./contract-schema.js";
 
 const fixtures = JSON.parse(await readFile(new URL("./fixtures/pilot-contract.json", import.meta.url), "utf8")) as Record<string, unknown>;
-const config: Config = { host: "127.0.0.1", port: 0, databaseUrl: "", sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, paymentAuthorityTimeoutMs: 3000, maxBodyBytes: 1024 * 1024, corsOrigin: "http://localhost:5173" };
+const config: Config = { host: "127.0.0.1", port: 0, databaseUrl: "", sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, maxBodyBytes: 1024 * 1024, corsOrigin: "http://localhost:5173" };
 
 test("synthetic fixtures conform to canonical request and response schemas", () => {
   assertSchema("CreateOrderRequest", fixtures.orderCreateRequest);
   assertSchema("Order", fixtures.order);
   assertSchema("AssignOrderRequest", fixtures.assignmentRequest);
   assertSchema("SyncRequest", fixtures.visitSyncRequest);
+  assertSchema("SyncRequest", fixtures.reconnectionSyncRequest);
   assertSchema("SyncResponse", fixtures.syncResponse);
+  assertSchema("SyncResponse", fixtures.reconnectionSyncResponse);
   assertSchema("LookupResponse", fixtures.lookupUnknown);
   assertSchema("LookupResponse", fixtures.lookupConfirmed);
+  assertSchema("LookupResponse", fixtures.reconnectionLookupConfirmed);
+  assertSchema("ReconnectionEnablementRequest", fixtures.reconnectionEnablementRequest);
+  assertSchema("ReconnectionEnablementResponse", fixtures.reconnectionEnablementResponse);
+  assertSchema("ReconnectionEnablementConsumeRequest", fixtures.reconnectionEnablementConsumeRequest);
+  assertSchema("ReconnectionEnablementConsumeResponse", fixtures.reconnectionEnablementConsumeResponse);
+  assertSchema("ReconnectionEnablementLookup", fixtures.reconnectionEnablementLookup);
   assertSchema("HumanReviewRequest", fixtures.humanReviewRequest);
   assertSchema("HumanReviewResponse", fixtures.humanReviewResponse);
-  assert.deepEqual(fixtures.paymentAvailability, { availability: "NOT_IMPLEMENTED", pending: ["TODO: VALIDAR CON SEPSA"] });
 });
 
 test("canonical schemas reject missing fields, wrong types, enums, and extra request fields", () => {
@@ -31,6 +38,11 @@ test("canonical schemas reject missing fields, wrong types, enums, and extra req
   assert.throws(() => assertSchema("CreateOrderRequest", { ...create, unexpected: true }), /unexpected/);
   const visit = fixtures.visitSyncRequest as Record<string, unknown>;
   assert.throws(() => assertSchema("SyncRequest", { ...visit, action: "PAYMENT" }), /enum/);
+  const reconnection = fixtures.reconnectionSyncRequest as Record<string, unknown>;
+  assert.throws(() => {
+    const { effective_at: _effectiveAt, ...missingEffectiveAt } = reconnection;
+    assertSchema("SyncRequest", missingEffectiveAt);
+  }, /effective_at/);
   assert.throws(() => assertSchema("LookupResponse", { status: "confirmed", operation_id: "legacy-operation" }), /order_id/);
   assert.throws(() => assertSchema("SyncResponse", { status: "acknowledged", operation_id: "legacy-operation", source: "PILOT_PROVISIONAL" }), /order_id/);
 });
@@ -115,7 +127,7 @@ async function start(role: "ADMIN" | "TECHNICIAN"): Promise<{ url: string; close
       return { rows: [], rowCount: 1 };
     }, release() {} }; },
   } as unknown as Pool;
-  const app = new Application(pool, config, { async checkPayment() { return { status: "CLEAR" }; } });
+  const app = new Application(pool, config);
   const server = createServer((request, response) => { void app.handle(request, response); });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const address = server.address();

@@ -340,7 +340,7 @@ describe("IndexedDB local repository", () => {
     await repository.claimCut({ operation: confirmed, order: orderFor({ status: "EJECUTADO", physicalStatus: "CONFIRMED", version: 2 }), syncItem: { operationId: confirmed.operationId, action: "CUT", orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", status: "pending", attempts: 0 } }, 1);
     await repository.claimSync(confirmed.operationId, "owner-confirmed", "2026-09-12T09:01:00.000Z", 1);
     await repository.recoverInFlight("2026-09-12T09:01:00.001Z");
-    await expect(repository.getRecord(confirmed.operationId)).resolves.toMatchObject({ status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: "failed" });
+    await expect(repository.getRecord(confirmed.operationId)).resolves.toMatchObject({ status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: "pending" });
     await expect(repository.getOrder("order-1")).resolves.toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED", version: 2 });
   });
 

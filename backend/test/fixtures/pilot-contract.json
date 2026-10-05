@@ -31,6 +31,7 @@
     "action": "VISIT",
     "order_id": "synthetic-order-01",
     "technician_id": "synthetic-tech-01",
+    "technician_name_snapshot": "Técnico Sintético",
     "device_id": "synthetic-device-01",
     "recorded_at": "2026-09-29T12:05:00.000Z",
     "evidence_refs": [],
@@ -62,12 +63,6 @@
     "operation_id": "synthetic-visit-01",
     "error_code": "CONFLICT_REQUIRES_REVIEW"
   },
-  "paymentAvailability": {
-    "availability": "NOT_IMPLEMENTED",
-    "pending": [
-      "TODO: VALIDAR CON SEPSA"
-    ]
-  },
   "lookupConfirmed": {
     "status": "confirmed",
     "operation_id": "synthetic-cut-01",
@@ -86,6 +81,88 @@
         "unit": "kWh"
       }
     }
+  },
+  "reconnectionEnablementRequest": {
+    "operation_id": "synthetic-reconnection-01",
+    "order_id": "00000000-0000-4000-8000-000000000001",
+    "device_id": "synthetic-device-01",
+    "order_version": 2
+  },
+  "reconnectionEnablementResponse": {
+    "enablement_id": "00000000-0000-4000-8000-000000000002",
+    "token": "synthetic-one-use-token",
+    "order_id": "00000000-0000-4000-8000-000000000001",
+    "technician_id": "00000000-0000-4000-8000-000000000003",
+    "technician_name_snapshot": "Técnico Sintético",
+    "device_id": "synthetic-device-01",
+    "operation_id": "synthetic-reconnection-01",
+    "version": 2,
+    "issued_at": "2026-09-29T12:05:00.000Z",
+    "expires_at": "2026-09-29T12:10:00.000Z",
+    "source": "PILOT_PROVISIONAL"
+  },
+  "reconnectionEnablementConsumeRequest": {
+    "enablement_id": "00000000-0000-4000-8000-000000000002",
+    "token": "synthetic-one-use-token",
+    "order_id": "00000000-0000-4000-8000-000000000001",
+    "technician_id": "00000000-0000-4000-8000-000000000003",
+    "device_id": "synthetic-device-01",
+    "operation_id": "synthetic-reconnection-01",
+    "version": 2
+  },
+  "reconnectionEnablementConsumeResponse": {
+    "status": "consumed",
+    "operation_id": "synthetic-reconnection-01",
+    "source": "PILOT_PROVISIONAL"
+  },
+  "reconnectionEnablementLookup": {
+    "status": "consumed",
+    "operation_id": "synthetic-reconnection-01",
+    "source": "PILOT_PROVISIONAL"
+  },
+  "reconnectionSyncRequest": {
+    "operation_id": "synthetic-reconnection-01",
+    "action": "RECONNECTION",
+    "order_id": "00000000-0000-4000-8000-000000000001",
+    "technician_id": "00000000-0000-4000-8000-000000000003",
+    "technician_name_snapshot": "Técnico Sintético",
+    "device_id": "synthetic-device-01",
+    "recorded_at": "2026-09-29T12:05:00.000Z",
+    "effective_at": "2026-09-29T12:05:00.000Z",
+    "demora": "Sin demora",
+    "evidence_refs": [],
+    "order_version": 2,
+    "authorization_id": "00000000-0000-4000-8000-000000000002",
+    "exception_reason": "saltar_control_fotos: prueba sintética"
+  },
+  "reconnectionSyncResponse": {
+    "status": "acknowledged",
+    "operation_id": "synthetic-reconnection-01",
+    "source": "PILOT_PROVISIONAL",
+    "order_id": "00000000-0000-4000-8000-000000000001",
+    "technician_id": "00000000-0000-4000-8000-000000000003",
+    "technician_name_snapshot": "Técnico Sintético",
+    "device_id": "synthetic-device-01",
+    "order_version": 2,
+    "action": "RECONNECTION",
+    "recorded_at": "2026-09-29T12:05:00.000Z",
+    "effective_at": "2026-09-29T12:05:00.000Z",
+    "demora": "Sin demora",
+    "evidence_refs": []
+  },
+  "reconnectionLookupConfirmed": {
+    "status": "confirmed",
+    "operation_id": "synthetic-reconnection-01",
+    "order_id": "00000000-0000-4000-8000-000000000001",
+    "technician_id": "00000000-0000-4000-8000-000000000003",
+    "technician_name_snapshot": "Técnico Sintético",
+    "device_id": "synthetic-device-01",
+    "order_version": 2,
+    "action": "RECONNECTION",
+    "recorded_at": "2026-09-29T12:05:00.000Z",
+    "effective_at": "2026-09-29T12:05:00.000Z",
+    "demora": "Sin demora",
+    "evidence_refs": []
   },
   "humanReviewRequest": {
     "order_id": "synthetic-order-01",

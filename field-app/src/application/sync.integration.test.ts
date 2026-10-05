@@ -82,7 +82,7 @@ describe("durable sync engine", () => {
     const operationId = "operation-lost-response-00000000-0000-4000-8000-000000000029";
     const authorization = new MockAuthorizationAdapter();
     authorization.requestResponse = { status: "authorized", grant: { ...authGrant(operationId), consumption: "deferred" } };
-    await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-lost-response", orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
+    await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", exceptionReason: "saltar_control_fotos: prueba sintética", fieldCapture: validFieldCapture(operationId) });
     const transport = new MockSyncTransport();
     transport.response = { status: "unknown", operationId, errorCode: "RESPONSE_LOST" };
     const engine = new SyncEngine(repository, new MockConnectivity("online"), transport);
@@ -123,7 +123,7 @@ describe("durable sync engine", () => {
     const repository = await setup("sync-conflict");
     const authorization = new MockAuthorizationAdapter();
     authorization.requestResponse = { status: "authorized", grant: authGrant("operation-conflict-00000000-0000-4000-8000-000000000019") };
-     const result = await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-conflict", orderId: "order-sync", operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture("operation-conflict-00000000-0000-4000-8000-000000000019") });
+    const result = await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", exceptionReason: "saltar_control_fotos: prueba sintética", fieldCapture: validFieldCapture("operation-conflict-00000000-0000-4000-8000-000000000019") });
     expect(result.outcome).toBe("executed");
     const transport = new MockSyncTransport();
     transport.response = { status: "conflict", operationId: "operation-conflict-00000000-0000-4000-8000-000000000019", remote: { status: "already_processed" }, reason: "REMOTE_ORDER_CHANGED" };
@@ -139,12 +139,13 @@ describe("durable sync engine", () => {
     const evidenceId = "evidence-local-photo-retry";
     const authorization = new MockAuthorizationAdapter();
     authorization.requestResponse = { status: "authorized", grant: authGrant(operationId) };
-    const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId, orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
+    const bytes = new Blob(["synthetic legacy image"], { type: "image/jpeg" });
+    const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId, orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true, content: bytes, contentHash: "a".repeat(64) }, fieldCapture: validFieldCapture(operationId) });
     expect(result.outcome).toBe("executed");
 
     const transport = new MockSyncTransport();
     transport.response = { status: "conflict", operationId, remote: { code: "CONFLICT", message: LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON }, reason: "CONFLICT" };
-    const engine = new SyncEngine(repository, new MockConnectivity("online"), transport);
+    const engine = new SyncEngine(repository, new MockConnectivity("online"), transport, {}, { uploadEvidence: async () => "verified" });
     await expect(engine.syncOnce()).resolves.toMatchObject({ failed: 1 });
     await expect(repository.listSyncItems()).resolves.toMatchObject([{ status: "failed", manualReview: true }]);
     await expect(repository.getEvidence(evidenceId)).resolves.toMatchObject({ evidenceId, operationId });
@@ -240,7 +241,7 @@ describe("durable sync engine", () => {
         consumption: "deferred",
       },
     };
-    const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-deferred-cut", orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
+    const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", exceptionReason: "saltar_control_fotos: prueba sintética", fieldCapture: validFieldCapture(operationId) });
     expect(result.outcome).toBe("pending_sync");
 
     const transport = new MockSyncTransport();
@@ -261,7 +262,7 @@ describe("durable sync engine", () => {
     const repository = await setup("sync-id-mismatch");
     const authorization = new MockAuthorizationAdapter();
     authorization.requestResponse = { status: "authorized", grant: authGrant("operation-id-mismatch-00000000-0000-4000-8000-00000000001c") };
-     await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-id-mismatch-00000000-0000-4000-8000-00000000001c", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-mismatch", orderId: "order-sync", operationId: "operation-id-mismatch-00000000-0000-4000-8000-00000000001c", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture("operation-id-mismatch-00000000-0000-4000-8000-00000000001c") });
+     await executeCut({ repository, authorization, order: cutOrder, operationId: "operation-id-mismatch-00000000-0000-4000-8000-00000000001c", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", exceptionReason: "saltar_control_fotos: prueba sintética", fieldCapture: validFieldCapture("operation-id-mismatch-00000000-0000-4000-8000-00000000001c") });
     const mismatchTransport = new MockSyncTransport();
     mismatchTransport.response = { status: "acknowledged", operationId: "wrong-operation" };
     const engine = new SyncEngine(repository, new MockConnectivity("online"), mismatchTransport, { owner: "mismatch-owner" });
@@ -271,7 +272,7 @@ describe("durable sync engine", () => {
     const conflictRepository = await setup("sync-manual-review");
     const conflictAuthorization = new MockAuthorizationAdapter();
     conflictAuthorization.requestResponse = { status: "authorized", grant: authGrant("operation-manual-00000000-0000-4000-8000-00000000001d") };
-     await executeCut({ repository: conflictRepository, authorization: conflictAuthorization, order: cutOrder, operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: "evidence-manual", orderId: "order-sync", operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture("operation-manual-00000000-0000-4000-8000-00000000001d") });
+      await executeCut({ repository: conflictRepository, authorization: conflictAuthorization, order: cutOrder, operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", exceptionReason: "saltar_control_fotos: prueba sintética", fieldCapture: validFieldCapture("operation-manual-00000000-0000-4000-8000-00000000001d") });
     const conflictTransport = new MockSyncTransport();
     conflictTransport.response = { status: "conflict", operationId: "operation-manual-00000000-0000-4000-8000-00000000001d", remote: { state: "different" }, reason: "STATE_CONFLICT" };
     const conflictEngine = new SyncEngine(conflictRepository, new MockConnectivity("online"), conflictTransport, { owner: "manual-owner" });

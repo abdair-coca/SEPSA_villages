@@ -121,6 +121,37 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     expect(JSON.parse(String(requests[2]?.init.body))).toMatchObject({ authorization_id: "auth-1", authorization_token: "opaque-1", order_version: 2, operation_id: "cut-1" });
   });
 
+  it("uses provisional reconnection habilitation and sync contracts without resending the consumed token", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const operationId = "reconnection-http-1";
+    const effectiveAt = "2026-10-04T10:00:00.000Z";
+    const client = new HttpPilotClient({
+      baseUrl: "http://localhost:8080",
+      fetchImpl: async (input, init = {}) => {
+        requests.push({ url: String(input), init });
+        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Técnico Uno", role: "TECHNICIAN" } });
+        if (String(input).endsWith("/authorizations/reconnection")) return json({ enablement_id: "enablement-1", token: "one-use-token", order_id: "order-1", technician_id: "tech-1", technician_name_snapshot: "Técnico Uno", device_id: "device-1", operation_id: operationId, version: 4, issued_at: effectiveAt, expires_at: "2099-09-12T17:05:00.000Z", source: "PILOT_PROVISIONAL" });
+        if (String(input).endsWith("/authorizations/reconnection/consume")) return json({ status: "consumed", operation_id: operationId, source: "PILOT_PROVISIONAL" });
+        if (String(input).includes("/authorizations/reconnection/")) return json({ status: "consumed", operation_id: operationId, source: "PILOT_PROVISIONAL" });
+        if (String(input).endsWith("/sync/operations")) return json({ status: "acknowledged", operation_id: operationId, source: "PILOT_PROVISIONAL", order_id: "order-1", technician_id: "tech-1", technician_name_snapshot: "Técnico Uno", device_id: "device-1", order_version: 4, action: "RECONNECTION", recorded_at: effectiveAt, effective_at: effectiveAt, demora: "Sin demora", evidence_refs: [] });
+        return json({ status: "not_found", operation_id: operationId });
+      },
+    });
+    const session = await client.authenticate({ username: "tech", password: "password" });
+    const request = { orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", operationId, orderVersion: 4, technicianNameSnapshot: "cliente-no-autoritativo" };
+    const habilitation = await client.requestReconnection(request);
+    expect(habilitation.grant).toMatchObject({ enablementId: "enablement-1", technicianNameSnapshot: "Técnico Uno", operationId });
+    await expect(client.consumeReconnection({ enablementId: "enablement-1", token: "one-use-token", ...request, version: 4 })).resolves.toMatchObject({ status: "consumed", operationId });
+    await expect(client.lookupReconnection(operationId)).resolves.toMatchObject({ status: "consumed", operationId });
+    const payload = { operationId, action: "RECONNECTION" as const, orderId: "order-1", technicianId: "tech-1", technicianNameSnapshot: "Técnico Uno", deviceId: "device-1", recordedAt: effectiveAt, effectiveAt, demora: "Sin demora", evidenceRefs: [], orderVersion: 4, authorizationId: "enablement-1" };
+    await expect(client.send(payload, session)).resolves.toMatchObject({ status: "acknowledged", orderVersion: 4, action: "RECONNECTION", effectiveAt, demora: "Sin demora", technicianNameSnapshot: "Técnico Uno" });
+
+    expect(JSON.parse(String(requests[1]?.init.body))).toEqual({ operation_id: operationId, order_id: "order-1", device_id: "device-1", order_version: 4 });
+    const syncBody = JSON.parse(String(requests[4]?.init.body)) as Record<string, unknown>;
+    expect(syncBody).toMatchObject({ action: "RECONNECTION", operation_id: operationId, technician_name_snapshot: "Técnico Uno", effective_at: effectiveAt, demora: "Sin demora", authorization_id: "enablement-1" });
+    expect(syncBody).not.toHaveProperty("authorization_token");
+  });
+
   it("rejects a tampered assigned package before local persistence", async () => {
     const packageValue = { package_id: "package-1", technician_id: "tech-1", device_id: "device-1", version: 1, downloaded_at: "2026-09-12T09:00:00.000Z", orders: [] };
     const client = new HttpPilotClient({

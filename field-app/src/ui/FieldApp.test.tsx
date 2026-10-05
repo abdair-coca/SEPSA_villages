@@ -85,6 +85,10 @@ describe("capture wizard QA recovery", () => {
     const blocked = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "VISIT", outcome: "blocked", localSaved: true, operationId: "visit-1", syncStatus: "pending" }} onDismiss={() => undefined} />).toLocaleLowerCase();
     const blockedAndSynced = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "VISIT", outcome: "blocked", localSaved: true, operationId: "visit-2", syncStatus: "synced" }} onDismiss={() => undefined} />).toLocaleLowerCase();
     const review = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "CUT", recordedAction: "CUT", outcome: "review", localSaved: true, operationId: "cut-3", syncStatus: "failed" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const reconnectionSaved = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "RECONNECTION", recordedAction: "RECONNECTION", outcome: "saved", localSaved: true, operationId: "reconnection-1", syncStatus: "pending" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const reconnectionConfirmed = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "RECONNECTION", recordedAction: "RECONNECTION", outcome: "confirmed", localSaved: true, operationId: "reconnection-2", syncStatus: "synced" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const reconnectionSyncUncertain = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "RECONNECTION", recordedAction: "RECONNECTION", outcome: "review", localSaved: true, operationId: "reconnection-3", syncStatus: "failed", physicalStatus: "CONFIRMED" }} onDismiss={() => undefined} />).toLocaleLowerCase();
+    const reconnectionBlocked = renderToStaticMarkup(<ActionCompletionDialog result={{ requestedAction: "RECONNECTION", recordedAction: "RECONNECTION", outcome: "blocked", localSaved: true, operationId: "reconnection-4", syncStatus: "pending", physicalStatus: "NONE" }} onDismiss={() => undefined} />).toLocaleLowerCase();
     expect(confirmed).toContain('role="dialog"');
     expect(confirmed).toContain("corte confirmado");
     expect(confirmed).toContain(">listo</button>");
@@ -99,6 +103,14 @@ describe("capture wizard QA recovery", () => {
     expect(blockedAndSynced).toContain("el corte no se ejecutó");
     expect(review).toContain("se requiere revisión humana");
     expect(review).toContain("no repita la acción");
+    expect(reconnectionSaved).toContain("reposición guardada");
+    expect(reconnectionSaved).toContain("este dispositivo");
+    expect(reconnectionConfirmed).toContain("reposición confirmada");
+    expect(reconnectionConfirmed).toContain("confirmados por el servidor");
+    expect(reconnectionSyncUncertain).toContain("sincronización incierta");
+    expect(reconnectionSyncUncertain).toContain("no vuelva a ejecutar la acción");
+    expect(reconnectionBlocked).toContain("reposición bloqueada");
+    expect(reconnectionBlocked).toContain("no se registró como una reposición completada");
   });
 
   it("reports durable cut as pending when order refresh leaves a stale snapshot", () => {
