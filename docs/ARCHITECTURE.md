@@ -48,8 +48,6 @@ El técnico mantiene su paquete, borradores, evidencias, operaciones y cola en I
 
 `backend/` es un servidor HTTP Node.js/TypeScript con `pg`. Usa sesiones, roles `ADMIN` y `TECHNICIAN`, cookies/sesiones provisionales, transacciones PostgreSQL y auditoría. El origen se identifica como `PILOT_PROVISIONAL`.
 
-La aplicación recibe un módulo interno `PaymentAuthority` por su constructor. Runtime actual no configura adapter: consulta de pago devuelve `UNKNOWN` y bloquea autorización/consumo CUT. No hay transporte ni fuente oficial. La consulta ocurre dentro de la transacción PostgreSQL local, sin atomicidad con el ledger; una garantía concurrente real requiere contrato y consumo autoritativo oficial. Eventos confirmados observados viven append-only en `payment_observations`.
-
 El backend actual expone operaciones para:
 
 - autenticación y cierre de sesión;
@@ -58,7 +56,8 @@ El backend actual expone operaciones para:
 - asignación con versión esperada;
 - descarga de órdenes asignadas;
 - autorización de corte;
-- recepción y consulta de operaciones sincronizadas;
+- habilitación provisional de reconexión;
+- recepción y consulta de CUT, VISIT y RECONNECTION sincronizados;
 - consulta de auditoría.
 
 La sesión del navegador usa cookie HttpOnly `SameSite=Lax`, `Path=/`; no expone token en JSON ni almacenamiento frontend. `COOKIE_SECURE=true` o `NODE_ENV=production` activan `Secure` y HSTS. CORS compara origen exacto; POST de cookie exige Origin permitido y rechaza `Sec-Fetch-Site: cross-site`. `X-Request-Id` y cabeceras de seguridad salen en respuestas, incluidos errores y preflight. Rate limit de login usa dirección del socket y username normalizado, en memoria de proceso. No se confía en `X-Forwarded-For`.
@@ -92,4 +91,4 @@ El frontend usa permisos para orientar la experiencia; el backend vuelve a valid
 
 ## PLANNED
 
-La API oficial de SEPSA, políticas definitivas de identidad, contrato de evidencia, integración de cobranza y validación de campo son trabajo futuro. No deben modelarse como componentes actuales ni como endpoints confirmados.
+La API oficial de SEPSA, políticas definitivas de identidad, contrato de evidencia y validación de campo son trabajo futuro. No deben modelarse como componentes actuales ni como endpoints confirmados.

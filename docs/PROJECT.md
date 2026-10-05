@@ -11,8 +11,7 @@ La fuente oficial de SEPSA todavía no está integrada. El backend actual es un 
 - El flujo principal implementado es: administrador busca morosos → crea/asigna una orden → técnico descarga sus órdenes → consulta contexto → registra visita o corte → sincroniza.
 - La aplicación tiene modo simulado local y modo conectado al backend provisional.
 - La creación masiva existe en el piloto, pero la validación funcional prioritaria sigue siendo una orden individual de extremo a extremo.
-- Reconexión existe como capacidad del prototipo; sus reglas externas y operación oficial siguen pendientes.
-- Cobranza presencial no forma parte del flujo del técnico.
+- Reconexión se guarda localmente y sincroniza con el backend piloto mediante habilitación provisional ligada a orden/técnico/dispositivo/operación/versión; la fuente oficial y sus reglas siguen pendientes de SEPSA.
 - La integración oficial, políticas definitivas de datos y validación en campo todavía están pendientes.
 
 ## Stack actual
@@ -69,6 +68,5 @@ La falta de conexión permite trabajo local, nunca autoriza un corte físico. Un
 - [Cortes y captura](features/cuts.md)
 - [Lecturas](features/readings.md)
 - [Sincronización](features/synchronization.md)
-- [Pagos y concurrencia](features/payments.md)
 
 El material anterior se conserva en [archive/](archive/README.md) solo para investigación histórica o revisión de decisiones previas.

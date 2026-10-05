@@ -19,10 +19,8 @@ Este es el documento operativo principal para agentes. Si una regla aquí contra
 - Prioridad de entrega: una orden individual completa antes de ampliar operación masiva.
 - No crear órdenes activas duplicadas para el mismo suministro y propósito.
 - Toda asignación, anulación, autorización, ejecución y sincronización conserva actor, fecha, versión y resultado.
-- El técnico no cobra ni registra pagos dentro del flujo de corte.
 - Un corte físico exige autorización online concluyente, vigente y de un solo uso inmediatamente antes de ejecutarse.
-- Timeout, ausencia de respuesta, `unknown`, pago detectado, conflicto o datos obsoletos bloquean; nunca autorizan por inferencia.
-- Si el pago se confirma antes de consumir la autorización, prevalece y bloquea/anula el corte según el estado vigente.
+- Timeout, ausencia de respuesta, `unknown`, conflicto o datos obsoletos bloquean; nunca autorizan por inferencia.
 - Lectura final, GPS y evidencia deben ser reales y vinculados a orden, técnico, dispositivo y operación. Solo GPS/fotos tienen excepciones controladas y justificadas.
 
 ## Offline-first
@@ -31,10 +29,12 @@ Este es el documento operativo principal para agentes. Si una regla aquí contra
 - Información de trabajo debe sobrevivir recarga, cierre, reinicio y pérdida temporal de red.
 - La cola usa identificadores únicos, estados `pending`, `syncing`, `synced`, `failed`, intentos y errores.
 - No eliminar una operación hasta confirmación válida. Reintentos deben ser idempotentes.
-- No usar “última escritura gana” para pagos, asignaciones, anulaciones, autorizaciones o resultados físicos.
+- No usar “última escritura gana” para asignaciones, anulaciones, autorizaciones o resultados físicos.
 - Conservar conflictos y resultados inciertos para revisión humana; no repetir automáticamente una acción física.
 
 ## Datos e integración
+
+El producto activo conserva deuda, facturas y mora, sin procesar ni presentar pagos. Las columnas, tablas, migraciones y snapshots históricos permanecen intactos; la carga histórica de morosidad conserva columnas legacy sin darles comportamiento operativo; las proyecciones operativas omiten sus metadatos de pago y no reclasifican facturas.
 
 - Excel, mocks y backend actual son provisionales; la API oficial de SEPSA aún no está definida.
 - No inventar columnas, estados, tarifas, contratos ni endpoints oficiales. Marcar incertidumbres como `TODO: VALIDAR CON SEPSA`.
@@ -44,7 +44,7 @@ Este es el documento operativo principal para agentes. Si una regla aquí contra
 
 ## Reglas observadas pero no vigentes
 
-Los documentos históricos describen umbral fijo de facturas/mora, exclusión de intereses, bloqueo por CI/NIT, protección por reclamos o planes de pago y cargos/prioridad de reconexión. El código actual no los establece como autoridad general. Mantenerlos como `TODO: VALIDAR CON SEPSA` hasta recibir confirmación y contrato; no implementarlos por inferencia.
+Los documentos históricos describen umbral fijo de facturas/mora, exclusión de intereses, bloqueo por CI/NIT, protección por reclamos y cargos/prioridad de reconexión. El código actual no los establece como autoridad general. Mantenerlos como `TODO: VALIDAR CON SEPSA` hasta recibir confirmación y contrato; no implementarlos por inferencia.
 
 ## Antes de entregar
 

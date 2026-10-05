@@ -28,4 +28,4 @@ Permitir que un administrador encuentre un suministro moroso, cree una orden de 
 
 ## Casos especiales
 
-Pago concurrente, conflicto de versión, técnico inválido, suministro inexistente o fallo posterior a la creación requieren conservar el resultado y pedir revisión; nunca repetir creación automáticamente.
+Conflicto de versión, técnico inválido, suministro inexistente o fallo posterior a la creación requieren conservar el resultado y pedir revisión; nunca repetir creación automáticamente.
