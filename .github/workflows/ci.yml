@@ -54,6 +54,8 @@ jobs:
 
   field-app:
     runs-on: ubuntu-24.04
+    env:
+      VITE_PILOT_BACKEND_URL: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
