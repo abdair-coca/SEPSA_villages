@@ -1,4 +1,4 @@
-import { DomainError, assertCan, permissionsForRole, type AssignOrderCommand, type AuditEvent, type BatchOrderSkip, type CreateOrderCommand, type CreateOrdersBatchCommand, type CreateOrdersBatchResult, type DebtorQuery, type DebtorRecord, type DemoCredentials, type OperationRecord, type Session, type SimulatedUser, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackage, type WorkPackageEnvelope } from "../../domain";
+import { DomainError, assertCan, copyOperationalContext, copyOrderForOperationalUse, permissionsForRole, type AssignOrderCommand, type AuditEvent, type BatchOrderSkip, type CreateOrderCommand, type CreateOrdersBatchCommand, type CreateOrdersBatchResult, type DebtorQuery, type DebtorRecord, type DemoCredentials, type OperationRecord, type Session, type SimulatedUser, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackage, type WorkPackageEnvelope } from "../../domain";
 import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
 import type { RemoteResult } from "../../ports/authorization";
 import { createSimulatedPackageEnvelope } from "./package-validation";
@@ -146,7 +146,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       return textMatch && matchesOptional(debtor.area, query.area) && matchesOptional(debtor.locality, query.locality) && matchesOptional(debtor.route, query.route)
         && (query.minMonthsPending === undefined || debtor.monthsPending >= query.minMonthsPending)
         && matchesOptional(debtor.supplyStatus ?? "", query.supplyStatus);
-    }).map((debtor) => structuredClone(debtor));
+    }).map(copyOperationalContext);
     transaction.objectStore("audit").put(auditEvent({ actorId: session.userId, actorRole: session.role, action: "FIND_DEBTORS", result: "accepted", occurredAt: new Date().toISOString() }));
     await transactionComplete(transaction);
     return result;
@@ -177,7 +177,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       transaction.abort();
       if (prior.action !== "CREATE_ORDER" || prior.commandHash !== hash) throw new DomainError("Operation identifier was reused with different data.", "IDEMPOTENCY_CONFLICT");
       if (!prior.result || !isWorkOrderResult(prior.result)) throw new DomainError("Stored create result is invalid.", "IDEMPOTENCY_CONFLICT");
-      return structuredClone(prior.result);
+      return copyOrderForOperationalUse(prior.result);
     }
     const debtor = await requestResult(transaction.objectStore("debtors").get(input.debtorId)) as DebtorRecord | undefined;
     if (!debtor || !debtor.supplyId.trim()) {
@@ -206,7 +206,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       createdBy: session.userId,
       createdAt: now,
       origin: "SIMULATED",
-      context: structuredClone(debtor),
+      context: copyOperationalContext(debtor),
     };
     transaction.objectStore("orders").put(order);
     operationStore.put({ operationId: input.operationId, commandHash: hash, action: "CREATE_ORDER", result: order } satisfies StoredOperation);
@@ -227,11 +227,11 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     if (prior) {
       transaction.abort();
       if (prior.action !== "CREATE_ORDER_BATCH" || prior.commandHash !== hash || !prior.result || !isBatchResult(prior.result)) throw new DomainError("Operation identifier was reused with different data.", "IDEMPOTENCY_CONFLICT");
-      return structuredClone(prior.result);
+      return { ...structuredClone(prior.result), created: prior.result.created.map(copyOrderForOperationalUse) };
     }
     const debtors = (await requestResult(transaction.objectStore("debtors").getAll())) as DebtorRecord[];
     const orders = (await requestResult(transaction.objectStore("orders").getAll())) as WorkOrder[];
-    const debtorById = new Map(debtors.map((debtor) => [debtor.debtorId, debtor]));
+    const debtorById = new Map(debtors.map((debtor) => [debtor.debtorId, copyOperationalContext(debtor)]));
     const created: WorkOrder[] = [];
     const skipped: BatchOrderSkip[] = [];
     const now = new Date().toISOString();
@@ -243,7 +243,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
         skipped.push({ debtorId, reason: "ACTIVE_ORDER_EXISTS", message: "Ya existe una orden activa para esta cuenta." });
         continue;
       }
-      const order: WorkOrder = { orderId: secureUuid("order"), cuc: secureUuid("cuc"), assignedTechnicianId: "", status: "GENERADO", physicalStatus: "NONE", version: 1, purpose: input.purpose, debtorId: debtor.debtorId, accountId: debtor.accountId, supplyId: debtor.supplyId, referenceBalanceCents: debtor.debtCents, createdBy: session.userId, createdAt: now, origin: "SIMULATED", context: structuredClone(debtor) };
+      const order: WorkOrder = { orderId: secureUuid("order"), cuc: secureUuid("cuc"), assignedTechnicianId: "", status: "GENERADO", physicalStatus: "NONE", version: 1, purpose: input.purpose, debtorId: debtor.debtorId, accountId: debtor.accountId, supplyId: debtor.supplyId, referenceBalanceCents: debtor.debtCents, createdBy: session.userId, createdAt: now, origin: "SIMULATED", context: copyOperationalContext(debtor) };
       orders.push(order);
       created.push(order);
       transaction.objectStore("orders").put(order);
@@ -268,7 +268,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       transaction.abort();
       if (prior.action !== "ASSIGN_ORDER" || prior.commandHash !== hash) throw new DomainError("Operation identifier was reused with different data.", "IDEMPOTENCY_CONFLICT");
       if (!prior.result || !isWorkOrderResult(prior.result)) throw new DomainError("Stored assignment result is invalid.", "IDEMPOTENCY_CONFLICT");
-      return structuredClone(prior.result);
+      return copyOrderForOperationalUse(prior.result);
     }
     const technician = await requestResult(transaction.objectStore("users").get(input.technicianId)) as StoredUser | undefined;
     if (!technician || technician.role !== "TECHNICIAN" || !technician.enabled) {
@@ -293,7 +293,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       throw new DomainError("Order is already assigned to this technician.", "ORDER_ALREADY_ASSIGNED");
     }
     const now = new Date().toISOString();
-    const assigned: WorkOrder = { ...current, assignedTechnicianId: technician.userId, assignedTechnicianName: technician.displayName, version: input.expectedOrderVersion + 1 };
+    const assigned: WorkOrder = { ...copyOrderForOperationalUse(current), assignedTechnicianId: technician.userId, assignedTechnicianName: technician.displayName, version: input.expectedOrderVersion + 1 };
     transaction.objectStore("orders").put(assigned);
     operationStore.put({ operationId: input.operationId, commandHash: hash, action: "ASSIGN_ORDER", result: assigned } satisfies StoredOperation);
     transaction.objectStore("audit").put(auditEvent({ actorId: session.userId, actorRole: session.role, action: "ASSIGN_ORDER", entityId: assigned.orderId, orderId: assigned.orderId, operationId: input.operationId, result: "accepted", occurredAt: now, transition: { before: { assignedTechnicianId: current.assignedTechnicianId, version: input.expectedOrderVersion }, after: { assignedTechnicianId: assigned.assignedTechnicianId, version: assigned.version ?? input.expectedOrderVersion + 1 } } }));
@@ -314,7 +314,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       occurredAt: new Date().toISOString(),
     }));
     await transactionComplete(transaction);
-    return orders.map((order) => structuredClone(order));
+    return orders.map(copyOrderForOperationalUse);
   }
 
   async downloadAssigned(technicianId: string, deviceId: string, session?: Session): Promise<WorkPackageEnvelope> {
@@ -333,10 +333,10 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     }
     const orders = (await requestResult(transaction.objectStore("orders").getAll())) as WorkOrder[];
     const debtors = (await requestResult(transaction.objectStore("debtors").getAll())) as DebtorRecord[];
-    const debtorById = new Map(debtors.map((debtor) => [debtor.debtorId, debtor]));
+    const debtorById = new Map(debtors.map((debtor) => [debtor.debtorId, copyOperationalContext(debtor)]));
     const assignedOrders = orders.filter((order) => order.assignedTechnicianId === technicianId).map((order) => ({
-      ...structuredClone(order),
-      context: order.debtorId ? structuredClone(debtorById.get(order.debtorId)) : order.context,
+      ...copyOrderForOperationalUse(order),
+      context: order.debtorId ? debtorById.get(order.debtorId) : order.context ? copyOperationalContext(order.context) : undefined,
     }));
     const previousPackageVersion = currentBinding?.packageVersion;
     const version = typeof previousPackageVersion === "number" && Number.isFinite(previousPackageVersion) ? Math.max(0, previousPackageVersion) + 1 : 1;
@@ -409,7 +409,10 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       await this.recordRejectedAudit(authorized, operation, error);
       throw error;
     }
-    if (requiresAuthorization && (order.status !== "GENERADO" || order.physicalStatus !== "NONE")) {
+    const eligibleStatus = operation.kind !== "VISIT" && operation.action === "RECONNECTION"
+      ? order.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED"
+      : order.status === "GENERADO" && order.physicalStatus === "NONE";
+    if (requiresAuthorization && !eligibleStatus) {
       transaction.abort();
       const error = new DomainError("Order is no longer eligible for this technical authorization.", "ORDER_STATE_INVALID");
       await transactionComplete(transaction).catch(() => undefined);
@@ -500,7 +503,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
 
        transaction.objectStore("audit").put(auditEvent({ actorId: input.session.userId, actorRole: input.session.role, action: "TECHNICAL_AUTHORIZATION", orderId: input.orderId, deviceId: input.deviceId, result: "accepted", occurredAt: new Date().toISOString() }));
       await transactionComplete(transaction);
-      return { status: "authorized", order: structuredClone(order as WorkOrder) };
+      return { status: "authorized", order: copyOrderForOperationalUse(order as WorkOrder) };
     } catch (error) {
       return { status: "unknown", errorCode: errorCode(error, "AUTHORITY_LOOKUP_UNKNOWN") };
     }
@@ -587,8 +590,8 @@ async function simulatedUsers(): Promise<StoredUser[]> {
 
 function simulatedDebtors(): DebtorRecord[] {
   return [
-    { debtorId: "debtor-1001", accountId: "CTA-1001", supplyId: "SUM-1001", customerName: "María Flores", address: "Av. Petrolera 145, Villa Esperanza", references: "Frente a unidad educativa", meterId: "MED-1001", area: "B", locality: "002 - MOJOTORILLO", route: "002", circuit: "D-1182", tariff: "RS", supplyStatus: "A", enablingTitle: "R", routeOrder: 129, meterBrand: "WASION", meterIndex: "MED-1001", meterMultiplier: 1, cadastralLatitude: -19.589366, cadastralLongitude: -65.259119, claims: false, paymentPlan: false, suspensionDate: "2026-08-27T00:00:00.000Z", debtCents: 24050, monthsPending: 3, updatedAt: "2026-09-10T12:00:00.000Z", source: "SIMULATED", kardex: [{ entryId: "k-1001-1", period: "2026-07", amountCents: 8017, status: "PENDING", billingDate: "2026-07-27", invoiceOrigin: "FA_FACTURAS", daysLate: 63 }, { entryId: "k-1001-2", period: "2026-08", amountCents: 8017, status: "PENDING", billingDate: "2026-08-27", invoiceOrigin: "FA_FACTURAS", daysLate: 31 }, { entryId: "k-1001-3", period: "2026-09", amountCents: 8016, status: "PENDING", billingDate: "2026-09-10", invoiceOrigin: "FA_FACTURAS", daysLate: 2 }] },
-    { debtorId: "debtor-1002", accountId: "CTA-1002", supplyId: "SUM-1002", customerName: "José Quispe", address: "Calle Los Álamos 22, San Pedro", references: "A dos cuadras del mercado", meterId: "MED-1002", area: "B", locality: "002 - MOJOTORILLO", route: "002", circuit: "D-1182", tariff: "RS", supplyStatus: "A", enablingTitle: "R", routeOrder: 132, meterBrand: "WASION", meterIndex: "MED-1002", meterMultiplier: 1, cadastralLatitude: -19.588912, cadastralLongitude: -65.258647, claims: false, paymentPlan: false, suspensionDate: "2026-08-27T00:00:00.000Z", debtCents: 11800, monthsPending: 2, updatedAt: "2026-09-10T12:00:00.000Z", source: "SIMULATED", kardex: [{ entryId: "k-1002-1", period: "2026-08", amountCents: 5900, status: "PENDING", billingDate: "2026-08-27", invoiceOrigin: "FA_FACTURAS", daysLate: 31 }, { entryId: "k-1002-2", period: "2026-09", amountCents: 5900, status: "PENDING", billingDate: "2026-09-10", invoiceOrigin: "FA_FACTURAS", daysLate: 2 }] },
+    { debtorId: "debtor-1001", accountId: "CTA-1001", supplyId: "SUM-1001", customerName: "María Flores", address: "Av. Petrolera 145, Villa Esperanza", references: "Frente a unidad educativa", meterId: "MED-1001", area: "B", locality: "002 - MOJOTORILLO", route: "002", circuit: "D-1182", tariff: "RS", supplyStatus: "A", enablingTitle: "R", routeOrder: 129, meterBrand: "WASION", meterIndex: "MED-1001", meterMultiplier: 1, cadastralLatitude: -19.589366, cadastralLongitude: -65.259119, claims: false, suspensionDate: "2026-08-27T00:00:00.000Z", debtCents: 24050, monthsPending: 3, updatedAt: "2026-09-10T12:00:00.000Z", source: "SIMULATED", kardex: [{ entryId: "k-1001-1", period: "2026-07", amountCents: 8017, billingDate: "2026-07-27", invoiceOrigin: "FA_FACTURAS", daysLate: 63 }, { entryId: "k-1001-2", period: "2026-08", amountCents: 8017, billingDate: "2026-08-27", invoiceOrigin: "FA_FACTURAS", daysLate: 31 }, { entryId: "k-1001-3", period: "2026-09", amountCents: 8016, billingDate: "2026-09-10", invoiceOrigin: "FA_FACTURAS", daysLate: 2 }] },
+    { debtorId: "debtor-1002", accountId: "CTA-1002", supplyId: "SUM-1002", customerName: "José Quispe", address: "Calle Los Álamos 22, San Pedro", references: "A dos cuadras del mercado", meterId: "MED-1002", area: "B", locality: "002 - MOJOTORILLO", route: "002", circuit: "D-1182", tariff: "RS", supplyStatus: "A", enablingTitle: "R", routeOrder: 132, meterBrand: "WASION", meterIndex: "MED-1002", meterMultiplier: 1, cadastralLatitude: -19.588912, cadastralLongitude: -65.258647, claims: false, suspensionDate: "2026-08-27T00:00:00.000Z", debtCents: 11800, monthsPending: 2, updatedAt: "2026-09-10T12:00:00.000Z", source: "SIMULATED", kardex: [{ entryId: "k-1002-1", period: "2026-08", amountCents: 5900, billingDate: "2026-08-27", invoiceOrigin: "FA_FACTURAS", daysLate: 31 }, { entryId: "k-1002-2", period: "2026-09", amountCents: 5900, billingDate: "2026-09-10", invoiceOrigin: "FA_FACTURAS", daysLate: 2 }] },
   ];
 }
 
@@ -605,20 +608,19 @@ interface ExtraSimulatedDebtorSeed {
   monthsPending: number;
   supplyStatus: string;
   claims: boolean;
-  paymentPlan: boolean;
   latitude: number;
   longitude: number;
 }
 
 const EXTRA_SIMULATED_DEBTORS: ExtraSimulatedDebtorSeed[] = [
-  { code: "1003", name: "Ana Condori", address: "Calle Tarija 18, Villa Esperanza", references: "Junto al mercado vecinal", area: "A", locality: "001 - VILLA ESPERANZA", route: "001", circuit: "D-1181", debtCents: 3150, monthsPending: 1, supplyStatus: "A", claims: false, paymentPlan: false, latitude: -19.590101, longitude: -65.260201 },
-  { code: "1004", name: "Luis Mamani", address: "Pasaje Sucre 44, Villa Esperanza", references: "Casa de esquina azul", area: "A", locality: "001 - VILLA ESPERANZA", route: "001", circuit: "D-1181", debtCents: 15600, monthsPending: 4, supplyStatus: "A", claims: false, paymentPlan: true, latitude: -19.590412, longitude: -65.260543 },
-  { code: "1005", name: "Rosa Choque", address: "Av. Central 302, Mojotorillo", references: "Frente a cancha comunal", area: "B", locality: "002 - MOJOTORILLO", route: "003", circuit: "D-1183", debtCents: 27800, monthsPending: 5, supplyStatus: "A", claims: true, paymentPlan: false, latitude: -19.587901, longitude: -65.257821 },
-  { code: "1006", name: "Juan Calle", address: "Calle Los Pinos 7, San Pedro", references: "Portón metálico verde", area: "C", locality: "003 - SAN PEDRO", route: "004", circuit: "D-1184", debtCents: 8900, monthsPending: 2, supplyStatus: "A", claims: false, paymentPlan: false, latitude: -19.586744, longitude: -65.256421 },
-  { code: "1007", name: "Elena Poma", address: "Barrio Nuevo 56, San Pedro", references: "A media cuadra de la plaza", area: "C", locality: "003 - SAN PEDRO", route: "004", circuit: "D-1184", debtCents: 42500, monthsPending: 8, supplyStatus: "A", claims: false, paymentPlan: false, latitude: -19.586201, longitude: -65.255988 },
-  { code: "1008", name: "Miguel Vargas", address: "Camino a Chullpa 91", references: "Poste numerado 14", area: "D", locality: "004 - CHULLPA", route: "005", circuit: "D-1185", debtCents: 12600, monthsPending: 3, supplyStatus: "I", claims: false, paymentPlan: false, latitude: -19.594101, longitude: -65.263771 },
-  { code: "1009", name: "Carla Nina", address: "Calle Libertad 109, Mojotorillo", references: "Al lado de la farmacia", area: "B", locality: "002 - MOJOTORILLO", route: "003", circuit: "D-1183", debtCents: 20400, monthsPending: 6, supplyStatus: "A", claims: false, paymentPlan: true, latitude: -19.588321, longitude: -65.257412 },
-  { code: "1010", name: "Pedro Huanca", address: "Av. Sucre 210, Villa Esperanza", references: "Tienda La Esquina", area: "A", locality: "001 - VILLA ESPERANZA", route: "006", circuit: "D-1181", debtCents: 6700, monthsPending: 2, supplyStatus: "A", claims: false, paymentPlan: false, latitude: -19.591002, longitude: -65.261102 },
+  { code: "1003", name: "Ana Condori", address: "Calle Tarija 18, Villa Esperanza", references: "Junto al mercado vecinal", area: "A", locality: "001 - VILLA ESPERANZA", route: "001", circuit: "D-1181", debtCents: 3150, monthsPending: 1, supplyStatus: "A", claims: false, latitude: -19.590101, longitude: -65.260201 },
+  { code: "1004", name: "Luis Mamani", address: "Pasaje Sucre 44, Villa Esperanza", references: "Casa de esquina azul", area: "A", locality: "001 - VILLA ESPERANZA", route: "001", circuit: "D-1181", debtCents: 15600, monthsPending: 4, supplyStatus: "A", claims: false, latitude: -19.590412, longitude: -65.260543 },
+  { code: "1005", name: "Rosa Choque", address: "Av. Central 302, Mojotorillo", references: "Frente a cancha comunal", area: "B", locality: "002 - MOJOTORILLO", route: "003", circuit: "D-1183", debtCents: 27800, monthsPending: 5, supplyStatus: "A", claims: true, latitude: -19.587901, longitude: -65.257821 },
+  { code: "1006", name: "Juan Calle", address: "Calle Los Pinos 7, San Pedro", references: "Portón metálico verde", area: "C", locality: "003 - SAN PEDRO", route: "004", circuit: "D-1184", debtCents: 8900, monthsPending: 2, supplyStatus: "A", claims: false, latitude: -19.586744, longitude: -65.256421 },
+  { code: "1007", name: "Elena Poma", address: "Barrio Nuevo 56, San Pedro", references: "A media cuadra de la plaza", area: "C", locality: "003 - SAN PEDRO", route: "004", circuit: "D-1184", debtCents: 42500, monthsPending: 8, supplyStatus: "A", claims: false, latitude: -19.586201, longitude: -65.255988 },
+  { code: "1008", name: "Miguel Vargas", address: "Camino a Chullpa 91", references: "Poste numerado 14", area: "D", locality: "004 - CHULLPA", route: "005", circuit: "D-1185", debtCents: 12600, monthsPending: 3, supplyStatus: "I", claims: false, latitude: -19.594101, longitude: -65.263771 },
+  { code: "1009", name: "Carla Nina", address: "Calle Libertad 109, Mojotorillo", references: "Al lado de la farmacia", area: "B", locality: "002 - MOJOTORILLO", route: "003", circuit: "D-1183", debtCents: 20400, monthsPending: 6, supplyStatus: "A", claims: false, latitude: -19.588321, longitude: -65.257412 },
+  { code: "1010", name: "Pedro Huanca", address: "Av. Sucre 210, Villa Esperanza", references: "Tienda La Esquina", area: "A", locality: "001 - VILLA ESPERANZA", route: "006", circuit: "D-1181", debtCents: 6700, monthsPending: 2, supplyStatus: "A", claims: false, latitude: -19.591002, longitude: -65.261102 },
 ];
 
 function createExtraSimulatedDebtor(seed: ExtraSimulatedDebtorSeed): DebtorRecord {
@@ -629,7 +631,6 @@ function createExtraSimulatedDebtor(seed: ExtraSimulatedDebtorSeed): DebtorRecor
       entryId: `k-${seed.code}-${index + 1}`,
       period: billingDate.toISOString().slice(0, 7),
       amountCents: index === seed.monthsPending - 1 ? seed.debtCents - monthlyAmount * index : monthlyAmount,
-      status: "PENDING" as const,
       billingDate: billingDate.toISOString().slice(0, 10),
       invoiceOrigin: "FA_FACTURAS",
       daysLate: (seed.monthsPending - index) * 30,
@@ -657,7 +658,6 @@ function createExtraSimulatedDebtor(seed: ExtraSimulatedDebtorSeed): DebtorRecor
     cadastralLatitude: seed.latitude,
     cadastralLongitude: seed.longitude,
     claims: seed.claims,
-    paymentPlan: seed.paymentPlan,
     suspensionDate: "2026-08-27T00:00:00.000Z",
     debtCents: seed.debtCents,
     monthsPending: seed.monthsPending,
@@ -734,8 +734,7 @@ function searchableDebtorValues(debtor: DebtorRecord): Array<string | number | b
     debtor.meterIndex,
     debtor.meterMultiplier,
     debtor.claims,
-    debtor.paymentPlan,
-    ...debtor.kardex.flatMap((entry) => [entry.period, entry.amountCents, (entry.amountCents / 100).toFixed(2), entry.status, entry.daysLate]),
+    ...debtor.kardex.flatMap((entry) => [entry.period, entry.amountCents, (entry.amountCents / 100).toFixed(2), entry.daysLate]),
   ];
 }
 

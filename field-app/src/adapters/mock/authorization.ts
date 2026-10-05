@@ -8,6 +8,7 @@ import type {
   ConsumeResponse,
   EnablementAdapter,
   EnablementGrant,
+  EnablementLookupResult,
   EnablementRequest,
   EnablementResponse,
   AuthorizationGrant,
@@ -64,7 +65,12 @@ export class MockAuthorizationAdapter implements AuthorizationAdapter {
       this.requestAttempts += 1;
       return this.networkCall(signal, () => {
         if (this.requestError) throw this.requestError;
-        const response = { ...clone(this.requestResponse), operationId: this.requestResponse.operationId ?? input.operationId };
+        const configuredGrant = this.requestResponse.grant;
+        const response = {
+          ...clone(this.requestResponse),
+          operationId: this.requestResponse.operationId ?? input.operationId,
+          grant: configuredGrant ? { ...clone(configuredGrant), technicianNameSnapshot: configuredGrant.technicianNameSnapshot ?? input.technicianNameSnapshot } : undefined,
+        };
         if (response.status === "authorized" && response.grant) this.issuedGrants.set(response.grant.authorizationId, response.grant);
         return response;
       });
@@ -111,6 +117,7 @@ export class MockEnablementAdapter implements EnablementAdapter {
   readonly requestCalls: EnablementRequest[] = [];
   readonly consumeCalls: ConsumeEnablementRequest[] = [];
   readonly lookupCalls: string[] = [];
+  readonly lookupReconnectionCalls: string[] = [];
   readonly issuedGrants = new Map<string, EnablementGrant>();
   readonly consumedGrantIds = new Set<string>();
   requestAttempts = 0;
@@ -119,6 +126,7 @@ export class MockEnablementAdapter implements EnablementAdapter {
   requestResponse: ConfiguredEnablementResponse = { status: "enabled" };
   consumeResponse: ConfiguredConsumeEnablementResponse = { status: "consumed" };
   lookupResponse: RemoteResult = { status: "not_found" };
+  lookupReconnectionResponse?: EnablementLookupResult;
   requestError: unknown;
   consumeError: unknown;
   lookupError: unknown;
@@ -142,7 +150,12 @@ export class MockEnablementAdapter implements EnablementAdapter {
       this.requestAttempts += 1;
       return this.networkCall(signal, () => {
         if (this.requestError) throw this.requestError;
-        const response = { ...clone(this.requestResponse), operationId: this.requestResponse.operationId ?? input.operationId };
+        const configuredGrant = this.requestResponse.grant;
+        const response = {
+          ...clone(this.requestResponse),
+          operationId: this.requestResponse.operationId ?? input.operationId,
+          grant: configuredGrant ? { ...clone(configuredGrant), technicianNameSnapshot: configuredGrant.technicianNameSnapshot ?? input.technicianNameSnapshot } : undefined,
+        };
         if (response.status === "enabled" && response.grant) this.issuedGrants.set(response.grant.enablementId, response.grant);
         return response;
       });
@@ -172,6 +185,22 @@ export class MockEnablementAdapter implements EnablementAdapter {
       return this.networkCall(signal, () => {
         if (this.lookupError) throw this.lookupError;
         return { ...clone(this.lookupResponse), operationId: this.lookupResponse.operationId ?? operationId };
+      });
+    }, this.retryPolicy);
+  }
+
+  lookupReconnection(operationId: string): Promise<EnablementLookupResult> {
+    this.lookupReconnectionCalls.push(operationId);
+    this.lookupCalls.push(operationId);
+    return withRetries((_attempt, signal) => {
+      this.lookupAttempts += 1;
+      return this.networkCall(signal, () => {
+        if (this.lookupError) throw this.lookupError;
+        if (this.lookupReconnectionResponse) return { ...clone(this.lookupReconnectionResponse), operationId: this.lookupReconnectionResponse.operationId };
+        if (this.lookupResponse.status === "unknown") return { status: "unknown", operationId, errorCode: this.lookupResponse.errorCode };
+        const grant = [...this.issuedGrants.values()].find((candidate) => candidate.operationId === operationId);
+        if (!grant) return { status: "not_found", operationId };
+        return { status: this.consumedGrantIds.has(grant.enablementId) ? "consumed" : "reserved", operationId };
       });
     }, this.retryPolicy);
   }

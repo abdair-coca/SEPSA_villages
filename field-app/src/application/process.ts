@@ -1,13 +1,11 @@
 import {
   assertCutEligible,
   assertOperationId,
-  copyOrderAsCancelled,
   copyOrderWithPhysicalStatus,
   createVisit,
   DomainError,
   validateFieldCapture,
   validateEvidence,
-  type CancellationDetails,
   type EvidenceReference,
   type FieldCapture,
   type OperationRecord,
@@ -34,6 +32,7 @@ export interface CutProcessInput {
   order: WorkOrder;
   operationId: string;
   technicianId: string;
+  technicianNameSnapshot?: string;
   deviceId: string;
   now: string;
   evidence?: EvidenceReference;
@@ -45,7 +44,6 @@ export type CutBlockReason =
   | "AUTHORIZATION_TIMEOUT"
   | "AUTHORIZATION_UNKNOWN"
   | "NOT_AUTHORIZED"
-  | "PAYMENT_DETECTED"
   | "AUTHORIZATION_ALREADY_CONSUMED"
   | "AUTHORIZATION_CONSUMPTION_UNKNOWN"
   | "AUTHORIZATION_EXPIRED"
@@ -129,6 +127,7 @@ function createIntent(
     action: "CUT",
     orderId: input.order.orderId,
     technicianId: input.technicianId,
+    technicianNameSnapshot: grant.technicianNameSnapshot ?? input.technicianNameSnapshot,
     deviceId: input.deviceId,
     status: "INTENT_PERSISTED",
     physicalStatus: "CLAIMED",
@@ -168,8 +167,6 @@ function createVisitFor(
 
 function responseBlockReason(response: AuthResponse): CutBlockReason {
   switch (response.status) {
-    case "payment_detected":
-      return "PAYMENT_DETECTED";
     case "not_authorized":
       return "NOT_AUTHORIZED";
     default:
@@ -183,7 +180,7 @@ function grantIsValid(grant: AuthorizationGrant, input: CutProcessInput): boolea
     grant.technicianId === input.technicianId &&
     grant.deviceId === input.deviceId &&
     grant.operationId === input.operationId &&
-    grant.version === input.order.version &&
+    grant.version === (input.order.authoritativeVersion ?? input.order.version) &&
     input.now < grant.expiresAt
   );
 }
@@ -201,17 +198,6 @@ function assertReplayBinding(existing: StoredRecord, input: CutProcessInput): vo
       "OPERATION_BINDING_MISMATCH",
     );
   }
-}
-
-function paymentDetails(
-  payment: { reason: string; detectedAt: string } | undefined,
-  fallbackReason: string | undefined,
-  now: string,
-): CancellationDetails {
-  return {
-    reason: payment?.reason || fallbackReason || "PAYMENT_DETECTED",
-    detectedAt: payment?.detectedAt || now,
-  };
 }
 
 function requireOrderVersion(order: WorkOrder): number {
@@ -254,25 +240,6 @@ async function recordVisit(
   expectedOrderVersion = order?.version,
 ): Promise<CutProcessResult> {
   const result = await input.repository.claimVisit(visitChange(visit, order, input.evidence), expectedOrderVersion);
-  return claimedVisitResult(result, input);
-}
-
-async function recordPaymentDetected(
-  input: CutProcessInput,
-  payment: CancellationDetails,
-): Promise<CutProcessResult> {
-  const visit = createVisitFor(input, "PAYMENT_DETECTED", payment.reason);
-  const cancelledOrder = copyOrderAsCancelled(input.order, payment);
-  const result = await input.repository.claimVisit(
-    visitChange(visit, cancelledOrder, input.evidence),
-    requireOrderVersion(input.order),
-  );
-  if (result.status === "order_conflict") {
-    return recordVisit(
-      input,
-      { ...visit, errorCode: "ORDER_VERSION_CONFLICT" },
-    );
-  }
   return claimedVisitResult(result, input);
 }
 
@@ -401,9 +368,10 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     authorizationResponse = await input.authorization.requestCut({
       orderId: input.order.orderId,
       technicianId: input.technicianId,
+      technicianNameSnapshot: input.technicianNameSnapshot,
       deviceId: input.deviceId,
       operationId: input.operationId,
-      orderVersion: input.order.version,
+      orderVersion: input.order.authoritativeVersion ?? input.order.version,
     });
   } catch (error) {
     if (!uncertainError(error)) throw error;
@@ -421,12 +389,6 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
 
   if (authorizationResponse.status !== "authorized" || !authorizationResponse.grant) {
     const reason = responseBlockReason(authorizationResponse);
-    if (reason === "PAYMENT_DETECTED") {
-      return recordPaymentDetected(
-        input,
-        paymentDetails(authorizationResponse.payment, authorizationResponse.errorCode, input.now),
-      );
-    }
     const visit = createVisitFor(input, reason, authorizationResponse.errorCode);
     return recordVisit(input, visit);
   }
@@ -485,23 +447,6 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
 
   if (consumeResponse.status === "unknown") {
     return recordPhysicalUnknown(input, intent, claimedOrder, consumeResponse.errorCode ?? "RESPONSE_UNKNOWN");
-  }
-
-  if (consumeResponse.status === "payment_detected") {
-    const payment = paymentDetails(consumeResponse.payment, consumeResponse.errorCode, input.now);
-    const blockedOperation: OperationRecord = {
-      ...intent,
-      status: "BLOCKED",
-      physicalStatus: "NONE",
-      updatedAt: input.now,
-      errorCode: payment.reason,
-      cancellation: payment,
-    };
-    await input.repository.updateOperationAndOrder(
-      operationChange(blockedOperation, copyOrderAsCancelled(claimedOrder, payment), input.evidence),
-      requireOrderVersion(claimedOrder),
-    );
-    return { outcome: "blocked", reason: "PAYMENT_DETECTED", operation: blockedOperation };
   }
 
   if (consumeResponse.status === "not_authorized") {

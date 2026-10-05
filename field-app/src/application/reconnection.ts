@@ -19,8 +19,10 @@ export interface ReconnectionProcessInput {
   order: WorkOrder;
   operationId: string;
   technicianId: string;
+  technicianNameSnapshot?: string;
   deviceId: string;
   now: string;
+  demora?: string;
   evidence?: EvidenceReference;
   exceptionReason?: string;
 }
@@ -80,9 +82,94 @@ function operationChange(operation: OperationRecord, order?: WorkOrder, evidence
       deviceId: operation.deviceId,
       errorCode: operation.errorCode,
       uncertain: operation.physicalStatus === "PHYSICAL_UNKNOWN",
+      manualReview: operation.status === "BLOCKED",
     },
     evidence,
   };
+}
+
+function reconnectionDelay(input: ReconnectionProcessInput): string {
+  const value = input.demora;
+  if (!value?.trim()) throw new DomainError("Ingrese una observación de demora o Sin demora.", "RECONNECTION_DEMORA_REQUIRED");
+  if (value.length > 1000) throw new DomainError("La observación de demora no puede superar 1000 caracteres.", "RECONNECTION_DEMORA_TOO_LONG");
+  return value;
+}
+
+function operationFromGrant(input: ReconnectionProcessInput, grant: EnablementGrant): OperationRecord {
+  const technicianNameSnapshot = grant.technicianNameSnapshot?.trim() ? grant.technicianNameSnapshot : input.technicianNameSnapshot;
+  if (!technicianNameSnapshot?.trim()) throw new DomainError("No se pudo conservar el nombre histórico del técnico.", "TECHNICIAN_NAME_REQUIRED");
+  return {
+    operationId: input.operationId,
+    kind: "RECONNECTION",
+    action: "RECONNECTION",
+    orderId: input.order.orderId,
+    technicianId: input.technicianId,
+    deviceId: input.deviceId,
+    status: "INTENT_PERSISTED",
+    physicalStatus: "CLAIMED",
+    syncStatus: "pending",
+    recordedAt: input.now,
+    effectiveAt: input.now,
+    technicianNameSnapshot,
+    demora: reconnectionDelay(input),
+    updatedAt: input.now,
+    attempts: 0,
+    authorizationId: grant.enablementId,
+    authorizationToken: grant.token,
+    authorizationVersion: grant.version,
+    authorizationConsumption: "immediate",
+    evidenceRefs: input.evidence ? [input.evidence.evidenceId] : [],
+  };
+}
+
+function consumeInput(operation: OperationRecord): Parameters<EnablementAdapter["consumeReconnection"]>[0] {
+  if (!operation.authorizationId || !operation.authorizationToken || operation.authorizationVersion === undefined) {
+    throw new DomainError("La habilitación de reconexión no se conservó localmente.", "RECONNECTION_ENABLEMENT_MISSING");
+  }
+  return {
+    enablementId: operation.authorizationId,
+    token: operation.authorizationToken,
+    orderId: operation.orderId,
+    technicianId: operation.technicianId,
+    deviceId: operation.deviceId,
+    operationId: operation.operationId,
+    version: operation.authorizationVersion,
+  };
+}
+
+function isConsumed(status: string): boolean {
+  return status === "consumed" || status === "already_consumed";
+}
+
+async function completeReconnection(input: ReconnectionProcessInput, operation: OperationRecord): Promise<ReconnectionResult> {
+  const currentOrder = await input.repository.getOrder(operation.orderId);
+  if (!currentOrder || currentOrder.version === undefined || currentOrder.assignedTechnicianId !== operation.technicianId) {
+    return persistUnknown(input, operation, currentOrder, "ORDER_RECOVERY_UNAVAILABLE");
+  }
+  const executed: OperationRecord = {
+    ...operation,
+    status: "CONFIRMED",
+    physicalStatus: "CONFIRMED",
+    syncStatus: "pending",
+    authorizationToken: undefined,
+    updatedAt: input.now,
+    errorCode: undefined,
+  };
+  if (currentOrder.status === "RECONEXIÓN" && currentOrder.physicalStatus === "CONFIRMED") {
+    await input.repository.updateOperationAndOrder(operationChange(executed));
+    return { outcome: "executed", operation: executed };
+  }
+  if (currentOrder.status !== "EJECUTADO" || !["CLAIMED", "PHYSICAL_UNKNOWN"].includes(currentOrder.physicalStatus)) {
+    const uncertain: OperationRecord = { ...operation, status: "PHYSICAL_UNKNOWN", physicalStatus: "PHYSICAL_UNKNOWN", syncStatus: "failed", updatedAt: input.now, errorCode: "ORDER_STATE_CONFLICT" };
+    await input.repository.updateOperationAndOrder(operationChange(uncertain));
+    return { outcome: "physical_unknown", operation: uncertain, lookupStatus: "unknown" };
+  }
+  const finished: WorkOrder = {
+    ...copyOrderWithPhysicalStatus(currentOrder, "RECONEXIÓN", "CONFIRMED"),
+    version: currentOrder.version + 1,
+  };
+  await input.repository.updateOperationAndOrder(operationChange(executed, finished), currentOrder.version);
+  return { outcome: "executed", operation: executed };
 }
 
 function makeVisit(input: ReconnectionProcessInput, reason: string, errorCode?: string): VisitRecord {
@@ -116,36 +203,29 @@ function isVisitRecord(record: StoredRecord): record is VisitRecord {
 }
 
 async function lookupExisting(input: ReconnectionProcessInput, operation: OperationRecord): Promise<ReconnectionResult> {
-  if (operation.status === "INTENT_PERSISTED" || operation.physicalStatus === "CLAIMED") {
-    const currentOrder = await input.repository.getOrder(operation.orderId);
-    if (!currentOrder || currentOrder.version === undefined) {
-      throw new DomainError("Persisted reconnection recovery cannot prove current order version.", "ORDER_VERSION_REQUIRED");
+  let lookup;
+  try {
+    lookup = await input.enablement.lookupReconnection(operation.operationId);
+  } catch {
+    return persistUnknown(input, operation, await input.repository.getOrder(operation.orderId), "ENABLEMENT_LOOKUP_UNKNOWN");
+  }
+  if (lookup.operationId !== operation.operationId) {
+    return persistUnknown(input, operation, await input.repository.getOrder(operation.orderId), "ENABLEMENT_LOOKUP_MISMATCH");
+  }
+  if (lookup.status === "consumed") return completeReconnection(input, operation);
+  if (lookup.status === "reserved" && operation.authorizationToken && operation.authorizationId) {
+    let consumed;
+    try {
+      consumed = await input.enablement.consumeReconnection(consumeInput(operation));
+    } catch {
+      return persistUnknown(input, operation, await input.repository.getOrder(operation.orderId), "ENABLEMENT_CONSUME_UNKNOWN");
     }
-    const uncertainOperation: OperationRecord = {
-      ...operation,
-      status: "PHYSICAL_UNKNOWN",
-      physicalStatus: "PHYSICAL_UNKNOWN",
-      syncStatus: "failed",
-      updatedAt: input.now,
-      errorCode: "RECOVERY_REQUIRED",
-    };
-    const uncertainOrder: WorkOrder = {
-      ...currentOrder,
-      physicalStatus: "PHYSICAL_UNKNOWN",
-      version: currentOrder.version + 1,
-    };
-    await input.repository.updateOperationAndOrder(
-      operationChange(uncertainOperation, uncertainOrder),
-      currentOrder.version,
-    );
-    const lookup = await input.enablement.lookup(operation.operationId);
-    return { outcome: "physical_unknown", operation: uncertainOperation, lookupStatus: lookup.status };
+    if (consumed.operationId !== operation.operationId) return persistUnknown(input, operation, await input.repository.getOrder(operation.orderId), "CONSUME_OPERATION_ID_MISMATCH");
+    if (isConsumed(consumed.status)) return completeReconnection(input, operation);
   }
-  const lookup = await input.enablement.lookup(operation.operationId);
-  if (operation.physicalStatus === "PHYSICAL_UNKNOWN") {
-    return { outcome: "physical_unknown", operation, lookupStatus: lookup.status };
-  }
-  return { outcome: "recovery_required", operation, lookupStatus: lookup.status };
+  const currentOrder = await input.repository.getOrder(operation.orderId);
+  const uncertain = await persistUnknown(input, operation, currentOrder, lookup.status === "expired" ? "ENABLEMENT_EXPIRED" : "RECOVERY_REQUIRED");
+  return { outcome: "physical_unknown", operation: uncertain.operation, lookupStatus: lookup.status };
 }
 
 function grantValid(grant: EnablementGrant, input: ReconnectionProcessInput): boolean {
@@ -154,7 +234,7 @@ function grantValid(grant: EnablementGrant, input: ReconnectionProcessInput): bo
     grant.technicianId === input.technicianId &&
     grant.deviceId === input.deviceId &&
     grant.operationId === input.operationId &&
-    grant.version === input.order.version &&
+    grant.version === (input.order.authoritativeVersion ?? input.order.version) &&
     input.now < grant.expiresAt
   );
 }
@@ -175,6 +255,7 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
   }
 
   assertReconnectionEligible(input.order, input.technicianId);
+  reconnectionDelay(input);
   validateEvidence(input.evidence, input.exceptionReason, {
     orderId: input.order.orderId,
     operationId: input.operationId,
@@ -188,7 +269,7 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
       technicianId: input.technicianId,
       deviceId: input.deviceId,
       operationId: input.operationId,
-      orderVersion: input.order.version,
+      orderVersion: input.order.authoritativeVersion ?? input.order.version,
     });
   } catch (error) {
     if (!uncertainError(error)) throw error;
@@ -207,22 +288,13 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
     return persistVisit(input, makeVisit(input, "ENABLEMENT_EXPIRED", "ENABLEMENT_EXPIRED"));
   }
 
-  const intent: OperationRecord = {
-    operationId: input.operationId,
-    kind: "RECONNECTION",
-    action: "RECONNECTION",
-    orderId: input.order.orderId,
-    technicianId: input.technicianId,
-    deviceId: input.deviceId,
-    status: "INTENT_PERSISTED",
-    physicalStatus: "CLAIMED",
-    syncStatus: "pending",
-    recordedAt: input.now,
-    updatedAt: input.now,
-    attempts: 0,
-    authorizationId: response.grant.enablementId,
-    evidenceRefs: input.evidence ? [input.evidence.evidenceId] : [],
-  };
+  let intent: OperationRecord;
+  try {
+    intent = operationFromGrant(input, response.grant);
+  } catch (error) {
+    if (!(error instanceof DomainError)) throw error;
+    return persistVisit(input, makeVisit(input, "ENABLEMENT_UNKNOWN", error.code));
+  }
   const claim = input.repository.claimReconnection
     ? await input.repository.claimReconnection(operationChange(intent, claimedOrder(input.order), input.evidence), versionOf(input.order))
     : await input.repository.claimCut(operationChange(intent, claimedOrder(input.order), input.evidence), versionOf(input.order));
@@ -237,15 +309,7 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
 
   let consumed;
   try {
-    consumed = await input.enablement.consumeReconnection({
-      enablementId: response.grant.enablementId,
-      token: response.grant.token,
-      orderId: input.order.orderId,
-      technicianId: input.technicianId,
-      deviceId: input.deviceId,
-      operationId: input.operationId,
-      version: response.grant.version,
-    });
+    consumed = await input.enablement.consumeReconnection(consumeInput(intent));
   } catch (error) {
     if (!uncertainError(error)) throw error;
     return persistUnknown(input, intent, claim.order, error instanceof Error && "code" in error ? String(error.code) : "RESPONSE_UNKNOWN");
@@ -255,20 +319,17 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
     return persistUnknown(input, intent, claim.order, "CONSUME_OPERATION_ID_MISMATCH");
   }
 
-  if (consumed.status === "unknown" || consumed.status === "already_consumed") {
+  if (consumed.status === "unknown") {
     return persistUnknown(input, intent, claim.order, consumed.errorCode ?? "RESPONSE_UNKNOWN");
   }
   if (consumed.status === "not_enabled") {
-    const blocked: OperationRecord = { ...intent, status: "BLOCKED", physicalStatus: "NONE", updatedAt: input.now, errorCode: consumed.errorCode ?? "NOT_ENABLED" };
-    const released = { ...copyOrderWithPhysicalStatus(claim.order, "EJECUTADO", "NONE"), version: versionOf(claim.order) + 1 };
+    const blocked: OperationRecord = { ...intent, status: "BLOCKED", physicalStatus: "NONE", syncStatus: "failed", authorizationToken: undefined, updatedAt: input.now, errorCode: "RECONNECTION_NOT_COMPLETED" };
+    const released = { ...copyOrderWithPhysicalStatus(claim.order, "EJECUTADO", "CONFIRMED"), version: versionOf(claim.order) + 1 };
     await input.repository.updateOperationAndOrder(operationChange(blocked, released, input.evidence), versionOf(claim.order));
     return { outcome: "blocked", reason: "NOT_ENABLED", operation: blocked };
   }
 
-  const executed: OperationRecord = { ...intent, status: "CONFIRMED", physicalStatus: "CONFIRMED", updatedAt: input.now };
-  const finished = { ...copyOrderWithPhysicalStatus(claim.order, "RECONEXIÓN", "CONFIRMED"), version: versionOf(claim.order) + 1 };
-  await input.repository.updateOperationAndOrder(operationChange(executed, finished, input.evidence), versionOf(claim.order));
-  return { outcome: "executed", operation: executed };
+  return completeReconnection(input, intent);
 }
 
 async function persistVisit(input: ReconnectionProcessInput, visit: VisitRecord): Promise<ReconnectionResult> {
@@ -285,14 +346,17 @@ async function persistVisit(input: ReconnectionProcessInput, visit: VisitRecord)
 async function persistUnknown(
   input: ReconnectionProcessInput,
   intent: OperationRecord,
-  claimed: WorkOrder,
+  claimed: WorkOrder | undefined,
   errorCode: string,
-): Promise<ReconnectionResult> {
+): Promise<Extract<ReconnectionResult, { outcome: "physical_unknown" }>> {
   const operation = { ...intent, status: "PHYSICAL_UNKNOWN" as const, physicalStatus: "PHYSICAL_UNKNOWN" as const, syncStatus: "failed" as const, updatedAt: input.now, errorCode };
+  if (!claimed || claimed.version === undefined || claimed.status !== "EJECUTADO" || claimed.physicalStatus === "PHYSICAL_UNKNOWN" || claimed.physicalStatus === "CONFIRMED") {
+    await input.repository.updateOperationAndOrder(operationChange(operation));
+    return { outcome: "physical_unknown", operation, lookupStatus: "unknown" };
+  }
   const order = { ...copyOrderWithPhysicalStatus(claimed, "EJECUTADO", "PHYSICAL_UNKNOWN"), version: versionOf(claimed) + 1 };
-  await input.repository.updateOperationAndOrder(operationChange(operation, order, input.evidence), versionOf(claimed));
-  const lookup = await input.enablement.lookup(input.operationId);
-  return { outcome: "physical_unknown", operation, lookupStatus: lookup.status };
+  await input.repository.updateOperationAndOrder(operationChange(operation, order), versionOf(claimed));
+  return { outcome: "physical_unknown", operation, lookupStatus: "unknown" };
 }
 
 export const processReconnection = executeReconnection;

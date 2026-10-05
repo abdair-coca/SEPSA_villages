@@ -16,6 +16,8 @@ export interface SyncItem {
   leaseOwner?: string;
   leaseExpiresAt?: string;
   leaseToken?: string;
+  /** Durable proof that CUT sync has not started; absent on legacy items. */
+  cutSendPhase?: "preparing" | "send-started";
   manualReview?: boolean;
   fieldCapture?: FieldCapture;
 }
@@ -38,6 +40,9 @@ export interface SyncPayload {
   orderVersion?: number;
   authorizationId?: string;
   authorizationToken?: string;
+  effectiveAt?: string;
+  technicianNameSnapshot?: string;
+  demora?: string;
   reason?: string;
   exceptionReason?: string;
   fieldCapture?: FieldCapture;

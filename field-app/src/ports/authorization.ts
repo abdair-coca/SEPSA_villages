@@ -1,8 +1,7 @@
-export type AuthorizationStatus = "authorized" | "payment_detected" | "not_authorized" | "unknown";
+export type AuthorizationStatus = "authorized" | "not_authorized" | "unknown";
 export type ConsumeStatus =
   | "consumed"
   | "already_consumed"
-  | "payment_detected"
   | "not_authorized"
   | "unknown";
 
@@ -12,6 +11,7 @@ export interface AuthRequest {
   deviceId: string;
   operationId: string;
   orderVersion?: number;
+  technicianNameSnapshot?: string;
   signal?: AbortSignal;
 }
 
@@ -20,6 +20,7 @@ export interface AuthorizationGrant {
   token: string;
   orderId: string;
   technicianId: string;
+  technicianNameSnapshot?: string;
   deviceId: string;
   operationId: string;
   version: number;
@@ -29,17 +30,11 @@ export interface AuthorizationGrant {
   consumption?: "immediate" | "deferred";
 }
 
-export interface PaymentDetection {
-  reason: string;
-  detectedAt: string;
-}
-
 export interface AuthResponse {
   operationId: string;
   status: AuthorizationStatus;
   grant?: AuthorizationGrant;
   errorCode?: string;
-  payment?: PaymentDetection;
 }
 
 export interface ConsumeRequest {
@@ -57,7 +52,6 @@ export interface ConsumeResponse {
   operationId: string;
   status: ConsumeStatus;
   errorCode?: string;
-  payment?: PaymentDetection;
 }
 
 export type RemoteResult =
@@ -72,6 +66,9 @@ export interface RemoteOperationReceipt {
   orderVersion?: number;
   action: "CUT" | "RECONNECTION" | "VISIT";
   recordedAt: string;
+  effectiveAt?: string;
+  technicianNameSnapshot?: string;
+  demora?: string;
   evidenceRefs: string[];
   fieldCapture?: import("../domain").FieldCapture;
 }
@@ -90,6 +87,7 @@ export interface EnablementRequest {
   deviceId: string;
   operationId: string;
   orderVersion?: number;
+  technicianNameSnapshot?: string;
   signal?: AbortSignal;
 }
 
@@ -98,6 +96,7 @@ export interface EnablementGrant {
   token: string;
   orderId: string;
   technicianId: string;
+  technicianNameSnapshot?: string;
   deviceId: string;
   operationId: string;
   version: number;
@@ -135,10 +134,17 @@ export interface ConsumeEnablementResponse {
   errorCode?: string;
 }
 
+export interface EnablementLookupResult {
+  status: "reserved" | "consumed" | "expired" | "not_found" | "unknown";
+  operationId: string;
+  errorCode?: string;
+}
+
 /** Provisional seam for external reconnection habilitation. */
 export interface EnablementAdapter {
   requestReconnection(input: EnablementRequest): Promise<EnablementResponse>;
   consumeReconnection(input: ConsumeEnablementRequest): Promise<ConsumeEnablementResponse>;
+  lookupReconnection(operationId: string): Promise<EnablementLookupResult>;
   lookup(operationId: string): Promise<RemoteResult>;
 }
 

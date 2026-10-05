@@ -3,6 +3,7 @@ import type {
   EvidenceReference,
   FieldCapture,
   OperationRecord,
+  OperationalContext,
   PhysicalStatus,
   AuthorizedAction,
   Role,
@@ -195,6 +196,9 @@ export function assertHistoricalOperationImmutable(
     "technicianId",
     "deviceId",
     "recordedAt",
+    "effectiveAt",
+    "technicianNameSnapshot",
+    "demora",
   ];
   for (const field of immutableFields) {
     if (previous[field] !== replacement[field]) {
@@ -256,15 +260,29 @@ export function copyOrderWithPhysicalStatus(
   return { ...order, status, physicalStatus };
 }
 
-export function copyOrderAsCancelled(
-  order: WorkOrder,
-  cancellation: { reason: string; detectedAt: string },
-): WorkOrder {
+/** Current operational projection; stored snapshots keep their original history. */
+export function copyOperationalContext(context: OperationalContext): OperationalContext {
   return {
-    ...order,
-    status: "ANULADO",
-    physicalStatus: "NONE",
-    version: order.version === undefined ? undefined : order.version + 1,
-    cancellation: { ...cancellation },
+    debtorId: context.debtorId, accountId: context.accountId, supplyId: context.supplyId,
+    customerName: context.customerName, address: context.address, references: context.references,
+    meterId: context.meterId, area: context.area, areaName: context.areaName, locality: context.locality,
+    route: context.route, routeName: context.routeName, debtCents: context.debtCents,
+    monthsPending: context.monthsPending, updatedAt: context.updatedAt, source: context.source,
+    customerCi: context.customerCi, contactPhone: context.contactPhone, tariff: context.tariff,
+    supplyStatus: context.supplyStatus, enablingTitle: context.enablingTitle, routeOrder: context.routeOrder,
+    circuit: context.circuit, cadastralLatitude: context.cadastralLatitude, cadastralLongitude: context.cadastralLongitude,
+    meterBrand: context.meterBrand, meterIndex: context.meterIndex, meterMultiplier: context.meterMultiplier,
+    claims: context.claims, suspensionDate: context.suspensionDate, reconnectionManual: context.reconnectionManual,
+    reconnectionDate: context.reconnectionDate, reconnectionTechnician: context.reconnectionTechnician,
+    kardex: context.kardex.map((invoice) => ({
+      entryId: invoice.entryId, period: invoice.period, amountCents: invoice.amountCents,
+      billingDate: invoice.billingDate, invoiceOrigin: invoice.invoiceOrigin, daysLate: invoice.daysLate,
+    })),
   };
+}
+
+export function copyOrderForOperationalUse(order: WorkOrder): WorkOrder {
+  const projected = structuredClone(order) as WorkOrder & { cancellation?: unknown };
+  delete projected.cancellation;
+  return { ...projected, context: order.context ? copyOperationalContext(order.context) : undefined };
 }

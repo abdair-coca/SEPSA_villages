@@ -83,11 +83,15 @@ export class SyncEngine {
       return "failed";
     }
 
-    if (isPendingPhysicalOperation(record) && !hasDeferredAuthorization(record)) {
-      await this.repository.recoverPhysicalUnknown(item.operationId, this.now(), {
-        owner: this.owner,
-        leaseToken: leaseToken(item),
-      });
+    const cutLookupOnly = record.kind !== "VISIT" && record.action === "CUT" && (item.cutSendPhase !== "preparing" || record.physicalStatus === "PHYSICAL_UNKNOWN" || record.status === "PHYSICAL_UNKNOWN");
+    const reconnectionLookupOnly = record.kind !== "VISIT" && record.action === "RECONNECTION" && (record.physicalStatus === "PHYSICAL_UNKNOWN" || record.status === "PHYSICAL_UNKNOWN");
+    if (cutLookupOnly || reconnectionLookupOnly || (isPendingPhysicalOperation(record) && !hasDeferredAuthorization(record))) {
+      if (isPendingPhysicalOperation(record)) {
+        await this.repository.recoverPhysicalUnknown(item.operationId, this.now(), {
+          owner: this.owner,
+          leaseToken: leaseToken(item),
+        });
+      }
       let lookup;
       try {
         lookup = await this.transport.lookup(item.operationId);
@@ -100,7 +104,7 @@ export class SyncEngine {
         return "failed";
       }
       if (lookup.status === "confirmed" && receiptMatches(lookup, toPayload(record))) {
-        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true, manualReview: false });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true, authoritativeVersion: acknowledgedVersion(record), manualReview: false });
         return "synced";
       }
       if (lookup.status === "confirmed") {
@@ -124,7 +128,7 @@ export class SyncEngine {
         return "failed";
       }
       if (lookup.status === "confirmed" && receiptMatches(lookup, toPayload(record))) {
-        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true, manualReview: false });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: true, authoritativeVersion: acknowledgedVersion(record), manualReview: false });
         return "synced";
       }
       if (lookup.status === "confirmed") {
@@ -139,34 +143,47 @@ export class SyncEngine {
       return "failed";
     }
 
+    let sendStarted = false;
     try {
-      if (record.kind !== "VISIT" && record.action === "CUT" && record.evidenceRefs.length > 0 && this.evidenceUpload) {
-        for (const evidenceId of record.evidenceRefs) {
-          const evidence = await this.repository.getEvidence?.(evidenceId);
-          if (!evidence?.content || !evidence.contentHash) {
-            await this.repository.updateEvidenceUploadState?.(evidenceId, "review-required", "LOCAL_EVIDENCE_BYTES_MISSING");
-            await this.fail(item, "LOCAL_EVIDENCE_BYTES_MISSING", false);
-            return "failed";
-          }
-          await this.repository.updateEvidenceUploadState?.(evidenceId, "uploading");
-          try {
-            const state = await this.evidenceUpload.uploadEvidence(evidence);
-            await this.repository.updateEvidenceUploadState?.(evidenceId, state);
-          } catch (error) {
-            const code = errorCode(error, "EVIDENCE_UPLOAD_FAILED");
-            await this.repository.updateEvidenceUploadState?.(evidenceId, "failed", code);
-            await this.fail(item, code, false);
-            return "failed";
-          }
+      if (record.kind !== "VISIT" && record.action === "CUT") {
+        if (!isCutSendEligible(record)) {
+          await this.fail(item, "CUT_AUTHORIZATION_NOT_CONFIRMED", false);
+          return "failed";
+        }
+        if (!hasAuthorizationData(record)) {
+          await this.fail(item, "CUT_AUTHORIZATION_MISSING", false);
+          return "failed";
+        }
+        if (!this.repository.markCutSendStarted) {
+          await this.fail(item, "CUT_SEND_FENCING_UNAVAILABLE", false);
+          return "failed";
         }
       }
+      if (record.kind !== "VISIT" && record.action === "RECONNECTION" && (
+        record.status !== "CONFIRMED" || record.physicalStatus !== "CONFIRMED" ||
+        !record.authorizationId?.trim() || !Number.isSafeInteger(record.authorizationVersion) ||
+        !record.effectiveAt || !record.technicianNameSnapshot?.trim() || !record.demora?.trim() || record.demora.length > 1000
+      )) {
+        await this.fail(item, "RECONNECTION_DATA_INCOMPLETE", false);
+        return "failed";
+      }
+      const evidenceError = await this.uploadOperationEvidence(item, record);
+      if (evidenceError) {
+        await this.fail(item, evidenceError, false);
+        return "failed";
+      }
+      if (record.kind !== "VISIT" && record.action === "CUT") {
+        await this.repository.markCutSendStarted!(item.operationId, this.owner, leaseToken(item), this.now);
+        if (!item.leaseExpiresAt || item.leaseExpiresAt <= this.now()) throw new Error("Sync lease fencing token is invalid.");
+      }
+      sendStarted = true;
       const response = await this.transport.send(toPayload(record));
       if (response.operationId !== item.operationId) {
         await this.fail(item, "RESPONSE_OPERATION_ID_MISMATCH", true);
         return "failed";
       }
       if (response.status === "acknowledged" && receiptMatches(response, toPayload(record))) {
-        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: record.kind !== "VISIT", manualReview: false });
+        await this.finish(item, "synced", { uncertain: false, remoteConfirmed: record.kind !== "VISIT", authoritativeVersion: acknowledgedVersion(record), manualReview: false });
         return "synced";
       }
       if (response.status === "acknowledged") {
@@ -191,12 +208,45 @@ export class SyncEngine {
       await this.fail(item, response.errorCode ?? "RESPONSE_UNKNOWN", true);
       return "failed";
     } catch (error) {
-      await this.fail(item, errorCode(error, "RESPONSE_UNKNOWN"), true);
+      if (isLeaseFencingError(error)) throw error;
+      await this.fail(item, errorCode(error, sendStarted ? "RESPONSE_UNKNOWN" : "CUT_PREPARATION_FAILED"), sendStarted);
       return "failed";
     }
   }
 
-  private async finish(item: SyncItem, status: SyncItem["status"], options: { uncertain?: boolean; errorCode?: string; remoteConfirmed?: boolean; manualReview?: boolean } = {}): Promise<void> {
+  private async updateEvidence(item: SyncItem, evidenceId: string, state: "uploading" | "verified" | "failed" | "review-required", code?: string): Promise<void> {
+    if (!this.repository.updateEvidenceUploadState) throw new Error("EVIDENCE_UPLOAD_UNAVAILABLE");
+    await this.repository.updateEvidenceUploadState(evidenceId, state, code, { owner: this.owner, leaseToken: leaseToken(item), now: this.now() });
+  }
+
+  private async uploadOperationEvidence(item: SyncItem, record: StoredRecord): Promise<string | undefined> {
+    if (record.kind === "VISIT" || record.evidenceRefs.length === 0) return undefined;
+    if (!this.evidenceUpload || !this.repository.getEvidence || !this.repository.updateEvidenceUploadState) return "EVIDENCE_UPLOAD_UNAVAILABLE";
+    for (const evidenceId of record.evidenceRefs) {
+      const evidence = await this.repository.getEvidence(evidenceId);
+      if (!evidence) return "LOCAL_EVIDENCE_BYTES_MISSING";
+      if (evidence.operationId !== record.operationId || evidence.orderId !== record.orderId || evidence.technicianId !== record.technicianId || evidence.deviceId !== record.deviceId || evidence.evidenceId !== evidenceId) return "LOCAL_EVIDENCE_BINDING_MISMATCH";
+      if (!evidence.content || !evidence.contentHash) {
+        await this.updateEvidence(item, evidenceId, "review-required", "LOCAL_EVIDENCE_BYTES_MISSING");
+        return "LOCAL_EVIDENCE_BYTES_MISSING";
+      }
+      if (evidence.uploadStatus === "verified") continue;
+      await this.updateEvidence(item, evidenceId, "uploading");
+      try {
+        const state = await this.evidenceUpload.uploadEvidence(evidence);
+        if (state !== "verified") throw new Error("EVIDENCE_UPLOAD_NOT_VERIFIED");
+        await this.updateEvidence(item, evidenceId, state);
+      } catch (error) {
+        if (isLeaseFencingError(error)) throw error;
+        const code = errorCode(error, "EVIDENCE_UPLOAD_FAILED");
+        await this.updateEvidence(item, evidenceId, "failed", code);
+        return code;
+      }
+    }
+    return undefined;
+  }
+
+  private async finish(item: SyncItem, status: SyncItem["status"], options: { uncertain?: boolean; errorCode?: string; remoteConfirmed?: boolean; manualReview?: boolean; authoritativeVersion?: number } = {}): Promise<void> {
     await this.repository.updateSyncState(item.operationId, status, { ...options, owner: this.owner, leaseToken: leaseToken(item), now: this.now() });
   }
 
@@ -226,10 +276,13 @@ function toPayload(record: OperationRecord | VisitRecord): SyncPayload {
     technicianId: record.technicianId,
     deviceId: record.deviceId,
     recordedAt: record.recordedAt,
+    effectiveAt: record.kind === "VISIT" ? undefined : record.effectiveAt,
+    technicianNameSnapshot: record.kind === "VISIT" ? undefined : record.technicianNameSnapshot,
+    demora: record.kind === "VISIT" ? undefined : record.demora,
     evidenceRefs: [...record.evidenceRefs],
     orderVersion: record.kind === "VISIT" ? undefined : record.authorizationVersion,
     authorizationId: record.kind === "VISIT" ? undefined : record.authorizationId,
-    authorizationToken: record.kind === "VISIT" ? undefined : record.authorizationToken,
+    authorizationToken: record.kind === "VISIT" || record.action === "RECONNECTION" ? undefined : record.authorizationToken,
     reason: visit ? record.reason : undefined,
     exceptionReason: record.exceptionReason,
     fieldCapture: record.fieldCapture,
@@ -240,12 +293,29 @@ function isVisitRecord(record: OperationRecord | VisitRecord): record is VisitRe
   return record.kind === "VISIT" && "reason" in record;
 }
 
+function acknowledgedVersion(record: StoredRecord): number | undefined {
+  if (record.kind === "VISIT") return undefined;
+  const expectedVersion = record.authorizationVersion;
+  return expectedVersion === undefined ? undefined : expectedVersion + 1;
+}
+
 function isPendingPhysicalOperation(record: StoredRecord): record is OperationRecord {
   return record.kind !== "VISIT" && (record.status === "INTENT_PERSISTED" || record.physicalStatus === "CLAIMED");
 }
 
 function hasDeferredAuthorization(record: StoredRecord): record is OperationRecord {
   return record.kind !== "VISIT" && record.authorizationConsumption === "deferred";
+}
+
+function hasAuthorizationData(record: OperationRecord): boolean {
+  return Boolean(record.authorizationId?.trim() && record.authorizationToken?.trim() && Number.isFinite(record.authorizationVersion));
+}
+
+function isCutSendEligible(record: OperationRecord): boolean {
+  return (
+    (record.status === "CONFIRMED" && record.physicalStatus === "CONFIRMED" && record.authorizationConsumption !== "deferred") ||
+    (record.status === "INTENT_PERSISTED" && record.physicalStatus === "CLAIMED" && record.authorizationConsumption === "deferred")
+  );
 }
 
 function errorCode(error: unknown, fallback: string): string {
@@ -272,6 +342,9 @@ function receiptMatches(receipt: unknown, payload: SyncPayload): boolean {
     value.orderVersion === payload.orderVersion &&
     value.action === payload.action &&
     value.recordedAt === payload.recordedAt &&
+    value.effectiveAt === payload.effectiveAt &&
+    value.technicianNameSnapshot === payload.technicianNameSnapshot &&
+    value.demora === payload.demora &&
     canonicalJson(value.evidenceRefs) === canonicalJson(payload.evidenceRefs) &&
     canonicalJson(value.fieldCapture) === canonicalJson(payload.fieldCapture);
 }

@@ -828,12 +828,7 @@ function OrderDetail({
       {/* Banner de orden anulada si corresponde */}
       {isCancelled ? (
         <div className="alert-banner alert-banner-warning" role="alert">
-          <strong>ORDEN ANULADA:</strong> Anulado ya que se registró la regularización de la mora.
-          {order.cancellation?.detectedAt ? (
-            <div className="cancellation-timestamp">
-              Fecha de regularización: {formatDate(order.cancellation.detectedAt)}
-            </div>
-          ) : null}
+          <strong>ORDEN ANULADA:</strong> La orden fue anulada administrativamente.
         </div>
       ) : null}
 
@@ -936,7 +931,9 @@ function OrderDetail({
               setActionCompletion(result);
               completed = result.localSaved;
             } else {
-              completed = await store.executeReconnection(order.orderId, input);
+              const result = await store.executeReconnection(order.orderId, input);
+              setActionCompletion(result);
+              completed = result.localSaved;
             }
             if (completed) setDraft(null);
             return completed;
@@ -960,7 +957,18 @@ export function ActionCompletionDialog({ result, onDismiss }: { result: ActionRe
 }
 
 function completionDialogContent(result: ActionResult): { title: string; message: string } {
+  if (result.requestedAction === "RECONNECTION" && result.outcome === "review" && result.recordedAction === "RECONNECTION" && result.physicalStatus === "CONFIRMED") {
+    return { title: "Sincronización incierta", message: "La reposición quedó guardada localmente, pero falta confirmar el ACK del servidor. Verifique el estado y no vuelva a ejecutar la acción." };
+  }
   if (result.outcome === "review") return { title: "Resultado incierto", message: "Los datos siguen guardados, pero se requiere revisión humana. No repita la acción." };
+  if (result.requestedAction === "RECONNECTION") {
+    if (!result.localSaved) return { title: "Reposición bloqueada", message: "No se confirmó la habilitación. La acción no quedó registrada como reposición." };
+    if (result.recordedAction === "VISIT") return { title: "Reposición bloqueada", message: "La visita quedó guardada, pero la reposición no se ejecutó porque la habilitación no fue confirmada." };
+    if (result.outcome === "blocked") return { title: "Reposición bloqueada", message: "El intento quedó guardado para auditoría, pero no se registró como una reposición completada." };
+    return result.outcome === "confirmed"
+      ? { title: "Reposición confirmada", message: "La reposición y sus datos históricos quedaron guardados y confirmados por el servidor." }
+      : { title: "Reposición guardada", message: "La reposición y sus datos quedaron guardados en este dispositivo. El servidor todavía no confirmó la sincronización." };
+  }
   if (result.requestedAction === "CUT" && result.recordedAction === "VISIT") {
     return result.syncStatus === "synced"
       ? { title: "Visita confirmada", message: "La visita y los datos capturados quedaron guardados y fueron confirmados por el servidor. El corte no se ejecutó porque requiere autorización online." }
@@ -1057,7 +1065,7 @@ function MobileOrderReview({
           {order.status === "ANULADO" ? (
             <div className="order-review-alert order-review-alert--cancelled" role="alert">
               <strong>Corte bloqueado</strong>
-              <span>{order.cancellation?.detectedAt ? `Regularización registrada ${formatDate(order.cancellation.detectedAt)}. No registrar corte ni visita.` : "No registrar corte ni visita."}</span>
+              <span>La orden fue anulada administrativamente. No registrar corte ni visita.</span>
             </div>
           ) : null}
           {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
@@ -1089,7 +1097,7 @@ function MobileOrderReview({
             </div> : null}
             {showKardex ? <section className="order-review-kardex" aria-label="Kardex de deuda">
               <div><strong>Kardex</strong><span>{kardex.length ? `${kardexIndex + 1} de ${kardex.length}` : "No disponible"}</span></div>
-              {currentKardex ? <p>{currentKardex.period} · {formatDebt(currentKardex.amountCents) ?? "Dato no disponible"} · {currentKardex.status === "PENDING" ? "Pendiente" : "Pagado"} · {currentKardex.daysLate ?? "Dato no disponible"} días mora</p> : <p>Historial no disponible en paquete local.</p>}
+              {currentKardex ? <p>{currentKardex.period} · {formatDebt(currentKardex.amountCents) ?? "Dato no disponible"} · {currentKardex.daysLate ?? "Dato no disponible"} días mora</p> : <p>Historial no disponible en paquete local.</p>}
               {kardex.length > 1 ? <div className="order-review-pager"><button type="button" disabled={kardexIndex <= 0} onClick={() => onKardexIndexChange(kardexIndex - 1)}>Anterior</button><button type="button" disabled={kardexIndex >= kardex.length - 1} onClick={() => onKardexIndexChange(kardexIndex + 1)}>Siguiente</button></div> : null}
             </section> : null}
             <div className="order-review-pager" aria-label="Páginas de datos">
@@ -1238,13 +1246,12 @@ function OperationalContext({ context }: { context: NonNullable<WorkOrder["conte
         {context.kardex.length ? (
           <div className="kardex-table-wrap">
             <table className="kardex-table">
-              <thead><tr><th scope="col">Periodo</th><th scope="col">Monto</th><th scope="col">Estado</th><th scope="col">Días mora</th></tr></thead>
+              <thead><tr><th scope="col">Periodo</th><th scope="col">Monto</th><th scope="col">Días mora</th></tr></thead>
               <tbody>
                 {context.kardex.map((entry) => (
                   <tr key={entry.entryId}>
                     <td>{entry.period}</td>
                     <td>{formatDebt(entry.amountCents) ?? "Dato no disponible"}</td>
-                    <td><span className={`kardex-status kardex-status--${entry.status.toLowerCase()}`}>{entry.status === "PENDING" ? "Pendiente" : "Pagado"}</span></td>
                     <td>{entry.daysLate ?? "Dato no disponible"}</td>
                   </tr>
                 ))}
@@ -1414,7 +1421,9 @@ function ActionForm({
         setDraftLoadStatus("error");
         return;
       }
-      const restored = result.content;
+      const restored = kind === "RECONNECTION" && !result.content.demora
+        ? { ...result.content, demora: "Sin demora" }
+        : result.content;
       contentRef.current = restored;
       setContent(restored);
       setDraftLoadStatus("ready");
@@ -1488,7 +1497,11 @@ function ActionForm({
 
   async function submit() {
     if (!captureDraftCanAdvance(draftLoadStatus)) return;
-    const draft = contentRef.current;
+    const draft = kind === "RECONNECTION" && !contentRef.current.demora
+      ? { ...contentRef.current, demora: "Sin demora" }
+      : contentRef.current;
+    if (kind === "RECONNECTION" && !draft.demora?.trim()) return setFormError("Escriba una observación o deje «Sin demora».");
+    if (kind === "RECONNECTION" && (draft.demora?.length ?? 0) > 1000) return setFormError("La observación no puede superar 1000 caracteres.");
     for (const required of steps.slice(0, -1)) {
       const problem = validate(required, draft);
       if (problem) return setFormError(problem);
@@ -1508,6 +1521,7 @@ function ActionForm({
         file: photoException ? undefined : file,
         exceptionReason: photoException ? `saltar_control_fotos: ${draft.exceptionReason}` : undefined,
         gpsExceptionReason: gpsException ? `saltar_control_coordenadas: ${draft.gpsExceptionReason}` : undefined,
+        demora: kind === "RECONNECTION" ? draft.demora : undefined,
         fieldCapture,
         reason: kind === "VISIT" ? "Visita de campo sin ejecución" : `Intento de ${actionLabel(kind).toLocaleLowerCase()}`,
       });
@@ -1566,6 +1580,7 @@ function ActionForm({
         {!loading && activeStep === "review" ? <div className="capture-wizard__review">
           {kind === "CUT" ? <><p>Lectura: {content.reading?.value ?? "No disponible"} kWh · {content.cutType ?? "RED"}</p><p>GPS: {gpsException ? "Excepción justificada" : content.location?.status === "CAPTURED" ? "Capturado" : "No disponible"}</p></> : null}
           <p>Evidencia: {photoException ? "Excepción justificada" : file?.name ?? "No disponible"}</p>
+          {kind === "RECONNECTION" ? <label className="text-field"><span>Observación de demora</span><textarea rows={3} maxLength={1000} value={content.demora ?? "Sin demora"} onChange={(event) => change({ demora: event.target.value })} /><small>Si no hubo demora, deje «Sin demora».</small></label> : null}
           {kind === "CUT" ? <p className="capture-wizard__authorization-note">El corte requiere autorización online concluyente y vigente. Sin ella, queda bloqueado.</p> : <p>El resultado se guarda primero en este dispositivo.</p>}
         </div> : null}
       </div>
@@ -1666,7 +1681,8 @@ function QueueItem({ item, order, onRetry, onViewOrder, onViewFullDetails, canRe
   );
 }
 
-export function queueReviewMessage(item: Pick<import("../ports").SyncItem, "manualReview" | "uncertain">): string | undefined {
+export function queueReviewMessage(item: Pick<import("../ports").SyncItem, "manualReview" | "uncertain"> & Partial<Pick<import("../ports").SyncItem, "errorCode">>): string | undefined {
+  if (item.errorCode === "RECONNECTION_NOT_COMPLETED") return "Habilitación denegada; no se registró una reposición. Puede iniciar una nueva solicitud si corresponde.";
   if (item.manualReview) return "Revisión humana · no reenviar";
   if (item.uncertain) return "Resultado incierto: verificar estado podría continuar sincronización según el motor.";
   return undefined;

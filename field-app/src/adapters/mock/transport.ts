@@ -57,6 +57,9 @@ function receiptFor(payload: SyncPayload) {
     orderVersion: payload.orderVersion,
     action: payload.action,
     recordedAt: payload.recordedAt,
+    effectiveAt: payload.effectiveAt,
+    technicianNameSnapshot: payload.technicianNameSnapshot,
+    demora: payload.demora,
     evidenceRefs: [...payload.evidenceRefs],
     fieldCapture: structuredClone(payload.fieldCapture),
   };

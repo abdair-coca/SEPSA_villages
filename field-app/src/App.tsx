@@ -125,7 +125,7 @@ function TechnicianRuntime({ authority, session, onLogout, remote = false }: { a
       try {
          const envelope = await loadPackage(authority, session, deviceId, repository);
          const transport = remote ? authority as HttpPilotClient : new SimulatedAuthoritySyncTransport(authority as IndexedDbAuthorityRepository, session, repository);
-         const nextStore = createAuthenticatedTechnicianStore(session.userId, deviceId, { repository, seedPackage: envelope.package, transport, authorization: remote ? authority as HttpPilotClient : undefined });
+          const nextStore = createAuthenticatedTechnicianStore(session.userId, deviceId, { repository, seedPackage: envelope.package, transport, authorization: remote ? authority as HttpPilotClient : undefined, enablement: remote ? authority as HttpPilotClient : undefined, technicianName: session.displayName });
          let refreshInFlight: Promise<void> | undefined;
          const refreshAssignedPackage = async (): Promise<void> => {
            if (refreshInFlight) return refreshInFlight;
@@ -156,7 +156,7 @@ function TechnicianRuntime({ authority, session, onLogout, remote = false }: { a
 
   if (error) return <AppStateCard as="main" className="state-card" tone="error" title="No pudimos abrir jornada" description={error} action={{ label: "Volver al inicio", onClick: onLogout }} />;
   if (!store) return <AppStateCard as="main" className="state-card" tone="loading" title="Descargando jornada" description="Validando identidad y órdenes asignadas." />;
-  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection={!remote} onRefreshAssigned={refreshAssigned} onLogout={onLogout} />;
+  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection onRefreshAssigned={refreshAssigned} onLogout={onLogout} />;
 }
 
 async function loadPackage(authority: IdentityPort & OperationsAuthorityPort, session: Session, deviceId: string, repository: IndexedDbLocalRepository): Promise<WorkPackageEnvelope> {

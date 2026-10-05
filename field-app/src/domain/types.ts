@@ -57,11 +57,9 @@ export interface KardexEntry {
   entryId: string;
   period: string;
   amountCents: number;
-  status: "PENDING" | "PAID";
   billingDate?: string;
   invoiceOrigin?: string;
   daysLate?: number;
-  paidAt?: string;
 }
 
 export interface OperationalContext {
@@ -95,7 +93,6 @@ export interface OperationalContext {
   meterIndex?: string;
   meterMultiplier?: number;
   claims?: boolean;
-  paymentPlan?: boolean;
   suspensionDate?: string;
   reconnectionManual?: boolean;
   reconnectionDate?: string;
@@ -200,6 +197,8 @@ export interface WorkOrder {
   assignedTechnicianId: string;
   status: WorkOrderStatus;
   physicalStatus: PhysicalStatus;
+  /** Last backend-authoritative version; local `version` remains the IndexedDB CAS revision. */
+  authoritativeVersion?: number;
   version?: number;
   purpose?: OrderPurpose;
   debtorId?: string;
@@ -210,15 +209,9 @@ export interface WorkOrder {
   createdAt?: string;
   origin?: "SIMULATED";
   context?: OperationalContext;
-  cancellation?: CancellationDetails;
   cuc?: string;
   debtTopMonth?: string;
   assignedTechnicianName?: string;
-}
-
-export interface CancellationDetails {
-  reason: string;
-  detectedAt: string;
 }
 
 export interface WorkPackage {
@@ -289,6 +282,12 @@ export interface OperationRecord {
   physicalStatus: PhysicalStatus;
   syncStatus: SyncStatus;
   recordedAt: string;
+  /** Physical occurrence time, distinct from mutable sync timestamps. */
+  effectiveAt?: string;
+  /** Technician display name captured at authorization/action time. */
+  technicianNameSnapshot?: string;
+  /** SC08 DEMORA for a reconnection; `Sin demora` when none occurred. */
+  demora?: string;
   updatedAt: string;
   attempts: number;
   authorizationId?: string;
@@ -296,7 +295,6 @@ export interface OperationRecord {
   authorizationVersion?: number;
   authorizationConsumption?: "immediate" | "deferred";
   exceptionReason?: string;
-  cancellation?: CancellationDetails;
   evidenceRefs: string[];
   errorCode?: string;
   fieldCapture?: FieldCapture;

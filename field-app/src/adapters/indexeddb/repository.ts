@@ -8,7 +8,7 @@ import type {
   WorkPackage,
   WorkPackageEnvelope,
 } from "../../domain";
-import { generateOperationId } from "../../domain";
+import { assertHistoricalOperationImmutable, copyOrderForOperationalUse, generateOperationId } from "../../domain";
 import type {
   AtomicOperationChange,
   CaptureDraft,
@@ -176,7 +176,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     await transactionComplete(transaction);
     return {
       ...structuredClone(valid[0].package),
-      orders: valid[0].package.orders.map((order, index) => structuredClone(fromStoredOrder((orders[index] as StoredOrderOrder | undefined)) ?? order)),
+      orders: valid[0].package.orders.map((order, index) => copyOrderForOperationalUse(fromStoredOrder((orders[index] as StoredOrderOrder | undefined)) ?? order)),
     };
   }
 
@@ -287,9 +287,12 @@ export class IndexedDbLocalRepository implements LocalRepository {
       return { status: "rejected", reason: "Order claim must advance version by one.", currentOrder: current };
     }
     try {
-      this.putRecord(transaction, record);
+      await this.putRecord(transaction, record);
       transaction.objectStore("orders").put(toStoredOrder(change.order, this.orderKey(change.order.orderId)));
-      transaction.objectStore("sync").put(change.syncItem);
+      transaction.objectStore("sync").put({
+        ...change.syncItem,
+        cutSendPhase: record.kind !== "VISIT" && record.action === "CUT" ? "preparing" : undefined,
+      });
       if (change.evidence) await this.putEvidence(transaction, change.evidence);
       if (record.kind !== "VISIT" && record.physicalStatus !== (current.physicalStatus ?? "NONE")) {
         this.appendPhysicalTransition(transaction, record, current.physicalStatus ?? "NONE", record.physicalStatus, current.version ?? expectedOrderVersion, change.order.version ?? expectedOrderVersion + 1, record.updatedAt, "PHYSICAL_ACTION_CLAIMED");
@@ -344,7 +347,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
       return { status: "rejected", reason: "Order update requires an expected version." };
     }
     try {
-      this.putRecord(transaction, record);
+      await this.putRecord(transaction, record);
       if (change.order) transaction.objectStore("orders").put(toStoredOrder(change.order, this.orderKey(change.order.orderId)));
       transaction.objectStore("sync").put(change.syncItem);
       if (change.evidence) await this.putEvidence(transaction, change.evidence);
@@ -396,8 +399,9 @@ export class IndexedDbLocalRepository implements LocalRepository {
       throw new Error("Operation identifier belongs to another technician and device.");
     }
     try {
-      this.putRecord(transaction, record);
-      transaction.objectStore("sync").put(change.syncItem);
+      await this.putRecord(transaction, record);
+      const currentSync = await requestResult(transaction.objectStore("sync").get(record.operationId)) as SyncItem | undefined;
+      transaction.objectStore("sync").put({ ...change.syncItem, cutSendPhase: currentSync?.cutSendPhase });
       if (change.evidence) await this.putEvidence(transaction, change.evidence);
       if (record.kind !== "VISIT" && existing && existing.kind !== "VISIT" && record.physicalStatus !== existing.physicalStatus) {
         const order = change.order ?? fromStoredOrder(await requestResult(transaction.objectStore("orders").get(this.orderKey(record.orderId))) as StoredOrderOrder | undefined);
@@ -453,7 +457,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
         transaction.abort();
         throw new Error("Operation is outside this technician and device scope.");
       }
-      this.putRecord(transaction, { ...record, syncStatus: "syncing" } as StoredRecord);
+       await this.putRecord(transaction, { ...record, syncStatus: "syncing" } as StoredRecord);
     }
     await transactionComplete(transaction);
     return { status: "claimed", item };
@@ -462,7 +466,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
   async updateSyncState(
     operationId: string,
     status: SyncItem["status"],
-    options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean; remoteConfirmed?: boolean },
+    options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean; remoteConfirmed?: boolean; authoritativeVersion?: number },
   ): Promise<void> {
     const db = await this.dbPromise;
     const transaction = db.transaction(["operations", "visits", "orders", "sync", "physicalTransitions"], "readwrite");
@@ -499,19 +503,67 @@ export class IndexedDbLocalRepository implements LocalRepository {
       }
       if (options.remoteConfirmed && record.kind !== "VISIT") {
         const confirmedRecord: OperationRecord = { ...record, status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: status, errorCode: undefined, updatedAt: options.now };
-        this.putRecord(transaction, confirmedRecord);
+        await this.putRecord(transaction, confirmedRecord);
         const order = fromStoredOrder(await requestResult(transaction.objectStore("orders").get(this.orderKey(record.orderId))) as StoredOrderOrder | undefined);
         if (!order) {
           transaction.abort();
           throw new Error("Confirmed operation order is missing from local repository.");
         }
-        const nextOrder: WorkOrder = { ...order, status: record.action === "CUT" ? "EJECUTADO" : "RECONEXIÓN", physicalStatus: "CONFIRMED", version: (order.version ?? 0) + 1 };
-        transaction.objectStore("orders").put(toStoredOrder(nextOrder, this.orderKey(order.orderId)));
-        if (record.physicalStatus !== "CONFIRMED") this.appendPhysicalTransition(transaction, confirmedRecord, record.physicalStatus, "CONFIRMED", order.version ?? 0, nextOrder.version ?? 0, options.now, "REMOTE_RECEIPT_VALIDATED");
+        const expectedStatus = record.action === "CUT" ? "EJECUTADO" : "RECONEXIÓN";
+        const alreadyConfirmed = record.physicalStatus === "CONFIRMED" && order.physicalStatus === "CONFIRMED" && order.status === expectedStatus;
+        if (!alreadyConfirmed) {
+          const nextOrder: WorkOrder = { ...order, status: expectedStatus, physicalStatus: "CONFIRMED", authoritativeVersion: options.authoritativeVersion ?? order.authoritativeVersion, version: (order.version ?? 0) + 1 };
+          transaction.objectStore("orders").put(toStoredOrder(nextOrder, this.orderKey(order.orderId)));
+          if (record.physicalStatus !== "CONFIRMED") this.appendPhysicalTransition(transaction, confirmedRecord, record.physicalStatus, "CONFIRMED", order.version ?? 0, nextOrder.version ?? 0, options.now, "REMOTE_RECEIPT_VALIDATED");
+        } else if (options.authoritativeVersion !== undefined && order.authoritativeVersion !== options.authoritativeVersion) {
+          transaction.objectStore("orders").put(toStoredOrder({ ...order, authoritativeVersion: options.authoritativeVersion }, this.orderKey(order.orderId)));
+        }
       } else {
-        this.putRecord(transaction, { ...record, syncStatus: status, errorCode: options.errorCode } as StoredRecord);
+        await this.putRecord(transaction, { ...record, syncStatus: status, errorCode: options.errorCode } as StoredRecord);
       }
     }
+    await transactionComplete(transaction);
+  }
+
+  async markCutSendStarted(operationId: string, owner: string, leaseToken: string, now: () => string): Promise<void> {
+    const db = await this.dbPromise;
+    const transaction = db.transaction(["sync", "operations", "evidence"], "readwrite");
+    const syncStore = transaction.objectStore("sync");
+    const current = await requestResult(syncStore.get(operationId)) as SyncItem | undefined;
+    if (!current || !this.identityMatches(current) || current.status !== "syncing" || current.leaseOwner !== owner || current.leaseToken !== leaseToken || !current.leaseExpiresAt || current.leaseExpiresAt <= now()) {
+      transaction.abort();
+      throw new Error("Sync lease fencing token is invalid.");
+    }
+    const record = await requestResult(transaction.objectStore("operations").get(operationId)) as OperationRecord | undefined;
+    const authorizationStateConfirmed = record && (
+      (record.status === "CONFIRMED" && record.physicalStatus === "CONFIRMED" && record.authorizationConsumption !== "deferred") ||
+      (record.status === "INTENT_PERSISTED" && record.physicalStatus === "CLAIMED" && record.authorizationConsumption === "deferred")
+    );
+    if (current.cutSendPhase !== "preparing" || current.uncertain || current.manualReview || !record || !this.identityMatches(record) || record.kind === "VISIT" || record.action !== "CUT" || !authorizationStateConfirmed) {
+      transaction.abort();
+      throw new Error("CUT_SEND_NOT_PERMITTED");
+    }
+    if (!record.authorizationId?.trim() || !record.authorizationToken?.trim() || !Number.isFinite(record.authorizationVersion)) {
+      transaction.abort();
+      throw new Error("CUT_AUTHORIZATION_MISSING");
+    }
+    if (record.physicalStatus === "CLAIMED" && record.authorizationConsumption !== "deferred") {
+      transaction.abort();
+      throw new Error("CUT_SEND_NOT_PERMITTED");
+    }
+    for (const evidenceId of record.evidenceRefs) {
+      const evidence = await requestResult(transaction.objectStore("evidence").get(this.evidenceKey(evidenceId))) as StoredEvidence | undefined;
+      if (!evidence || evidence.uploadStatus !== "verified" || !evidence.contentHash || evidence.operationId !== operationId || evidence.orderId !== record.orderId || !this.identityMatches(evidence)) {
+        transaction.abort();
+        throw new Error("CUT_EVIDENCE_NOT_VERIFIED");
+      }
+    }
+    const sendStartedAt = now();
+    if (current.leaseExpiresAt <= sendStartedAt) {
+      transaction.abort();
+      throw new Error("Sync lease fencing token is invalid.");
+    }
+    syncStore.put({ ...current, cutSendPhase: "send-started", updatedAt: sendStartedAt });
     await transactionComplete(transaction);
   }
 
@@ -552,6 +604,14 @@ export class IndexedDbLocalRepository implements LocalRepository {
       transaction.abort();
       return undefined;
     }
+    // Only the durable pre-send marker proves an expired worker never started CUT.
+    if (!lease && currentSync.cutSendPhase === "preparing" && !currentSync.uncertain && !currentSync.manualReview && record.kind !== "VISIT" && record.action === "CUT" && record.physicalStatus !== "PHYSICAL_UNKNOWN" && record.status !== "PHYSICAL_UNKNOWN" && (record.physicalStatus !== "CLAIMED" || record.authorizationConsumption === "deferred")) {
+      syncStore.put({ ...currentSync, status: "pending", uncertain: false, errorCode: "EVIDENCE_PREPARATION_INTERRUPTED", leaseOwner: undefined, leaseExpiresAt: undefined, leaseToken: undefined, updatedAt: now });
+      const nextRecord = { ...record, syncStatus: "pending", errorCode: "EVIDENCE_PREPARATION_INTERRUPTED" } as OperationRecord;
+      await this.putRecord(transaction, nextRecord);
+      await transactionComplete(transaction);
+      return nextRecord;
+    }
     const pendingPhysical = record.kind !== "VISIT" && (record.status === "INTENT_PERSISTED" || record.physicalStatus === "CLAIMED");
     let nextRecord: StoredRecord = { ...record, syncStatus: "failed", errorCode: "RESPONSE_UNKNOWN" } as StoredRecord;
     let nextSync: SyncItem = { ...currentSync, status: "failed", uncertain: true, errorCode: "RESPONSE_UNKNOWN", updatedAt: now };
@@ -579,7 +639,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
       nextSync = { ...nextSync, leaseOwner: undefined, leaseExpiresAt: undefined, leaseToken: undefined };
     }
     syncStore.put(nextSync);
-    this.putRecord(transaction, nextRecord);
+    await this.putRecord(transaction, nextRecord);
     await transactionComplete(transaction);
     return nextRecord;
   }
@@ -607,7 +667,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     const operation = await requestResult(transaction.objectStore("operations").get(operationId));
     const visit = await requestResult(transaction.objectStore("visits").get(operationId));
     const record = operation ?? visit;
-    if (record) this.putRecord(transaction, { ...record, syncStatus: "failed", errorCode: "REMOTE_CONFLICT" } as StoredRecord);
+    if (record) await this.putRecord(transaction, { ...record, syncStatus: "failed", errorCode: "REMOTE_CONFLICT" } as StoredRecord);
     const scopedConflict = { ...structuredClone(conflict), technicianId: this.technicianId, deviceId: this.deviceId };
     transaction.objectStore("conflicts").put(toStoredConflict(scopedConflict, this.conflictKey(conflict.conflictId)));
     await transactionComplete(transaction);
@@ -623,14 +683,34 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return evidence ? fromStoredEvidence(evidence) : undefined;
   }
 
-  async updateEvidenceUploadState(evidenceId: string, state: NonNullable<EvidenceReference["uploadStatus"]>, errorCode?: string): Promise<void> {
+  async updateEvidenceUploadState(evidenceId: string, state: NonNullable<EvidenceReference["uploadStatus"]>, errorCode?: string, lease?: { owner: string; leaseToken: string; now: string }): Promise<void> {
     const db = await this.dbPromise;
-    const transaction = db.transaction(["evidence"], "readwrite");
+    const transaction = db.transaction(["evidence", "sync"], "readwrite");
     const store = transaction.objectStore("evidence");
     const key = this.evidenceKey(evidenceId);
     const current = await requestResult(store.get(key)) as StoredEvidence | undefined;
-    if (!current) throw new Error("Evidence is missing from local storage.");
+    if (!current || !this.identityMatches(current)) {
+      transaction.abort();
+      throw new Error("Evidence is missing from local storage.");
+    }
+    const currentSync = await requestResult(transaction.objectStore("sync").get(current.operationId)) as SyncItem | undefined;
+    if (lease) {
+      const actionCanUpload = currentSync?.action === "CUT"
+        ? currentSync.cutSendPhase === "preparing"
+        : currentSync?.action === "RECONNECTION" && !currentSync.uncertain && !currentSync.manualReview;
+      if (!currentSync || !this.identityMatches(currentSync) || currentSync.status !== "syncing" || !actionCanUpload || currentSync.leaseOwner !== lease.owner || currentSync.leaseToken !== lease.leaseToken || !currentSync.leaseExpiresAt || currentSync.leaseExpiresAt <= lease.now) {
+        transaction.abort();
+        throw new Error("Sync lease fencing token is invalid.");
+      }
+    } else if (currentSync?.status === "syncing" || currentSync?.cutSendPhase === "send-started") {
+      transaction.abort();
+      throw new Error("Evidence update requires the current sync lease fencing token.");
+    }
     const evidence = fromStoredEvidence(current);
+    if (evidence.uploadStatus === "verified") {
+      await transactionComplete(transaction);
+      return;
+    }
     store.put(toStoredEvidence({ ...evidence, uploadStatus: state, uploadErrorCode: errorCode }, key));
     await transactionComplete(transaction);
   }
@@ -646,8 +726,13 @@ export class IndexedDbLocalRepository implements LocalRepository {
     if (!current) store.put(toStoredEvidence({ uploadStatus: "pending", ...evidence }, key));
   }
 
-  private putRecord(transaction: IDBTransaction, record: StoredRecord): void {
-    transaction.objectStore(record.kind === "VISIT" ? "visits" : "operations").put(record);
+  private async putRecord(transaction: IDBTransaction, record: StoredRecord): Promise<void> {
+    const store = transaction.objectStore(record.kind === "VISIT" ? "visits" : "operations");
+    if (record.kind !== "VISIT") {
+      const previous = await requestResult(store.get(record.operationId)) as OperationRecord | undefined;
+      if (previous) assertHistoricalOperationImmutable(previous, record);
+    }
+    store.put(record);
   }
 
   private appendPhysicalTransition(
@@ -741,9 +826,9 @@ function toStoredOrder(order: WorkOrder, key: string): StoredOrderOrder {
 
 function fromStoredOrder(order: StoredOrderOrder | undefined): WorkOrder | undefined {
   if (!order) return undefined;
-  if (!order.__orderId) return structuredClone(order);
+  if (!order.__orderId) return copyOrderForOperationalUse(order);
   const { __orderId, ...domainOrder } = order;
-  return { ...domainOrder, orderId: __orderId };
+  return copyOrderForOperationalUse({ ...domainOrder, orderId: __orderId });
 }
 
 function toStoredEvidence(evidence: EvidenceReference, key: string): StoredEvidence {

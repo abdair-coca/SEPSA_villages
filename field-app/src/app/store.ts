@@ -32,6 +32,7 @@ export interface ActionInput {
   reason?: string;
   fieldCapture?: FieldCapture;
   gpsExceptionReason?: string;
+  demora?: string;
 }
 
 export interface AppMessage {
@@ -86,6 +87,7 @@ export interface AppStoreDependencies {
   prepareExternalValidation?: PrepareExternalValidation;
   now?: () => string;
   technicianId?: string;
+  technicianName?: string;
   deviceId?: string;
 }
 
@@ -106,7 +108,7 @@ export interface AppStore {
   saveCaptureDraft(orderId: string, action: ActionKind, content: CaptureDraftContent): Promise<void>;
   registerVisit(orderId: string, input?: ActionInput): Promise<ActionResult>;
   executeCut(orderId: string, input?: ActionInput): Promise<ActionResult>;
-  executeReconnection(orderId: string, input?: ActionInput): Promise<boolean>;
+  executeReconnection(orderId: string, input?: ActionInput): Promise<ActionResult>;
   sync(): Promise<void>;
 }
 
@@ -117,6 +119,7 @@ interface SeedableRepository extends LocalRepository {
 export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   const now = dependencies.now ?? (() => new Date().toISOString());
   const technicianId = dependencies.technicianId ?? DEMO_TECHNICIAN_ID;
+  const technicianName = dependencies.technicianName ?? technicianId;
   const deviceId = dependencies.deviceId ?? DEMO_DEVICE_ID;
   const listeners = new Set<() => void>();
   let snapshot: AppState = {
@@ -187,6 +190,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           await dependencies.repository.recoverInFlight?.(now());
           const workPackage = await loadOrSeed();
           assertPackageScope(workPackage, dependencies);
+          await recoverPendingReconnections();
           await refresh();
          update({ status: "ready", busyAction: undefined, message: undefined });
         } catch (error) {
@@ -288,6 +292,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           order,
           operationId,
           technicianId,
+          technicianNameSnapshot: technicianName,
           deviceId,
           now: timestamp,
           evidence,
@@ -309,7 +314,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     async executeReconnection(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
-      const completed = await runWithBusy("RECONNECTION", async () => {
+      const result = await runWithBusy("RECONNECTION", async (): Promise<ReconnectionResult> => {
         const operationId = generateOperationId("reconnection");
         const timestamp = now();
         const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
@@ -320,19 +325,21 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           order,
           operationId,
           technicianId,
+          technicianNameSnapshot: technicianName,
           deviceId,
           now: timestamp,
           evidence,
           exceptionReason: input.exceptionReason,
+          demora: input.demora,
         });
         const committed = result.outcome === "executed" || (result.outcome === "duplicate" && result.operation.status === "CONFIRMED");
         if (committed) await finishDraftIfCommitted(orderId, "RECONNECTION", result.operation.operationId, input);
         const refreshed = await refreshAfterCommit();
         if (refreshed) update({ message: messageForReconnection(result, snapshot.mode) });
-        return committed;
+        return result;
       });
       await syncAfterLocalAction();
-      return completed;
+      return actionResultForReconnection(result, snapshot);
     },
     async sync() {
       return requestSync();
@@ -424,6 +431,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       update({ message: { tone: "warning", text: "Sin conexión útil. La cola permanece guardada para después." } });
       return;
     }
+    await recoverPendingReconnections();
     await runWithBusy("SYNC", async () => {
       const report = await new SyncEngine(dependencies.repository, dependencies.connectivity, dependencies.transport, { now }, dependencies.evidenceUploader).syncOnce();
       await refresh();
@@ -436,6 +444,34 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   async function syncAfterLocalAction(): Promise<void> {
     if (snapshot.mode === "offline" || !snapshot.syncItems.some((item) => item.status !== "synced")) return;
     await requestSync();
+  }
+
+  async function recoverPendingReconnections(): Promise<void> {
+    if (!dependencies.connectivity.isUsable()) return;
+    const items = await dependencies.repository.listSyncItems();
+    for (const item of items) {
+      if (item.action !== "RECONNECTION" || item.status === "synced" || item.manualReview) continue;
+      const record = await dependencies.repository.getRecord(item.operationId);
+      if (!record || record.kind !== "RECONNECTION" || (record.status !== "INTENT_PERSISTED" && record.status !== "PHYSICAL_UNKNOWN")) continue;
+      const order = await dependencies.repository.getOrder(record.orderId);
+      if (!order || order.assignedTechnicianId !== technicianId) continue;
+      try {
+        await runReconnection({
+          repository: dependencies.repository,
+          enablement: dependencies.enablement,
+          order,
+          operationId: record.operationId,
+          technicianId: record.technicianId,
+          technicianNameSnapshot: record.technicianNameSnapshot,
+          deviceId: record.deviceId,
+          now: now(),
+          demora: record.demora,
+          exceptionReason: record.exceptionReason,
+        });
+      } catch {
+        // Keep the operation durable and uncertain; recovery never invents success.
+      }
+    }
   }
 
   return store;
@@ -495,6 +531,44 @@ function actionResultForCut(result: CutProcessResult, state: AppState): ActionRe
   };
 }
 
+function actionResultForReconnection(result: ReconnectionResult, state: AppState): ActionResult {
+  const record = result.outcome === "visit_recorded"
+    ? result.visit
+    : "operation" in result
+      ? result.operation
+      : undefined;
+  const item = record ? state.syncItems.find((candidate) => candidate.operationId === record.operationId) : undefined;
+  const syncStatus = item?.status ?? record?.syncStatus;
+  const order = record ? state.orders.find((candidate) => candidate.orderId === record.orderId) : undefined;
+  const recordedAction = record?.kind === "VISIT" ? "VISIT" : "RECONNECTION";
+  const locallySaved = Boolean(record);
+  const serverConfirmed = recordedAction === "RECONNECTION"
+    && syncStatus === "synced"
+    && order?.status === "RECONEXIÓN"
+    && order.physicalStatus === "CONFIRMED";
+  const uncertain = result.outcome === "physical_unknown"
+    || result.outcome === "recovery_required"
+    || (item?.manualReview && result.outcome !== "blocked")
+    || item?.uncertain;
+  const outcome: ActionResultOutcome = serverConfirmed
+    ? "confirmed"
+    : uncertain
+      ? "review"
+      : result.outcome === "blocked" || result.outcome === "visit_recorded"
+        ? "blocked"
+        : "saved";
+  return {
+    requestedAction: "RECONNECTION",
+    recordedAction,
+    outcome,
+    localSaved: locallySaved,
+    operationId: record?.operationId,
+    syncStatus,
+    physicalStatus: order?.physicalStatus ?? (record && record.kind !== "VISIT" ? record.physicalStatus : undefined),
+    reason: result.outcome === "blocked" ? result.reason : record && "reason" in record ? record.reason : undefined,
+  };
+}
+
 export function createUnavailableAppStore(): AppStore {
   const snapshot: AppState = { status: "error", error: "IndexedDB no está disponible en este dispositivo.", orders: [], syncItems: [], activity: [], selectedOrderId: null, query: "", filter: "ALL", tab: "home", mode: "offline" };
   return {
@@ -512,7 +586,7 @@ export function createUnavailableAppStore(): AppStore {
     saveCaptureDraft: async () => { throw new Error("IndexedDB no está disponible en este dispositivo."); },
     registerVisit: async () => ({ requestedAction: "VISIT", recordedAction: "VISIT", outcome: "review", localSaved: false }),
     executeCut: async () => ({ requestedAction: "CUT", recordedAction: "CUT", outcome: "review", localSaved: false }),
-    executeReconnection: async () => false,
+    executeReconnection: async () => ({ requestedAction: "RECONNECTION", recordedAction: "RECONNECTION", outcome: "review", localSaved: false }),
     sync: async () => undefined,
   };
 }

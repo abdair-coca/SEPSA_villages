@@ -25,6 +25,7 @@ export type CaptureDraftContent = Partial<Pick<FieldCapture, "cutType" | "nearby
   location?: Partial<FieldCapture["location"]>;
   evidence?: Array<File | Blob>;
   exceptionReason?: string;
+  demora?: string;
   gpsExceptionReason?: string;
 };
 
@@ -65,13 +66,15 @@ export interface LocalRepository {
   updateOperationAndOrder(change: AtomicOperationChange, expectedOrderVersion?: number): Promise<void>;
   listSyncItems(): Promise<SyncItem[]>;
   getEvidence?(evidenceId: string): Promise<EvidenceReference | undefined>;
-  updateEvidenceUploadState?(evidenceId: string, state: NonNullable<EvidenceReference["uploadStatus"]>, errorCode?: string): Promise<void>;
+  updateEvidenceUploadState?(evidenceId: string, state: NonNullable<EvidenceReference["uploadStatus"]>, errorCode?: string, lease?: { owner: string; leaseToken: string; now: string }): Promise<void>;
+  /** Atomically fences CUT send-start against the live lease and verified evidence. */
+  markCutSendStarted?(operationId: string, owner: string, leaseToken: string, now: () => string): Promise<void>;
   claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number, options?: { allowManualReview?: boolean }): Promise<SyncClaimResult>;
   recoverPhysicalUnknown(operationId: string, now: string, lease?: { owner: string; leaseToken: string; errorCode?: string }): Promise<StoredRecord | undefined>;
   updateSyncState(
     operationId: string,
     status: SyncItem["status"],
-    options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean; remoteConfirmed?: boolean },
+    options: { errorCode?: string; uncertain?: boolean; attempts?: number; owner: string; leaseToken: string; now: string; manualReview?: boolean; remoteConfirmed?: boolean; authoritativeVersion?: number },
   ): Promise<void>;
   recoverInFlight?(now?: string): Promise<void>;
   recordConflict?(conflict: ConflictRecord): Promise<void>;

@@ -2,7 +2,7 @@ import { IndexedDbAuthorityRepository, IndexedDbLocalRepository } from "../adapt
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
 import type { ActionKind, AppStore, PrepareExternalValidation } from "./store";
 import { createAppStore, DEMO_DEVICE_ID, DEMO_PACKAGE_ID, DEMO_TECHNICIAN_ID } from "./store";
-import type { AuthorizationAdapter, AuthorizationGrant, AuthRequest, AuthResponse, ConsumeEnablementRequest, ConsumeEnablementResponse, ConsumeRequest, ConsumeResponse, EnablementAdapter, EnablementGrant, EnablementRequest, EnablementResponse, RemoteResult, OperationsAuthorityPort } from "../ports";
+import type { AuthorizationAdapter, AuthorizationGrant, AuthRequest, AuthResponse, ConsumeEnablementRequest, ConsumeEnablementResponse, ConsumeRequest, ConsumeResponse, EnablementAdapter, EnablementGrant, EnablementLookupResult, EnablementRequest, EnablementResponse, RemoteResult, OperationsAuthorityPort } from "../ports";
 import type { WorkOrder, WorkPackage } from "../domain";
 import type { Session } from "../domain";
 import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../ports";
@@ -21,6 +21,7 @@ export function prepareDemoExternalValidation(
   adapters: DemoValidationAdapters,
   technicianId = DEMO_TECHNICIAN_ID,
   deviceId = DEMO_DEVICE_ID,
+  technicianName = technicianId,
 ): void {
   const expiresAt = new Date(Date.parse(now) + 5 * 60_000).toISOString();
   if (action === "CUT") {
@@ -31,9 +32,10 @@ export function prepareDemoExternalValidation(
       technicianId,
       deviceId,
       operationId,
-      version: order.version ?? 0,
+      version: order.authoritativeVersion ?? order.version ?? 0,
       issuedAt: now,
       expiresAt,
+      technicianNameSnapshot: technicianName,
     };
     adapters.authorization.requestResponse = { status: "authorized", grant };
   } else {
@@ -44,9 +46,10 @@ export function prepareDemoExternalValidation(
       technicianId,
       deviceId,
       operationId,
-      version: order.version ?? 0,
+      version: order.authoritativeVersion ?? order.version ?? 0,
       issuedAt: now,
       expiresAt,
+      technicianNameSnapshot: technicianName,
     };
     adapters.enablement.requestResponse = { status: "enabled", grant };
   }
@@ -83,9 +86,9 @@ export function createDemoAppStoreFor(technicianId: string, deviceId: string): A
   const transport = new MockSyncTransport({ mode: "online" });
   const repository = new IndexedDbLocalRepository({ technicianId, deviceId });
   const prepareExternalValidation: PrepareExternalValidation = (action, order, operationId, now) => {
-    prepareDemoExternalValidation(action, order, operationId, now, { authorization, enablement }, technicianId, deviceId);
+    prepareDemoExternalValidation(action, order, operationId, now, { authorization, enablement }, technicianId, deviceId, technicianId);
   };
-  return createAppStore({ repository, authorization, enablement, connectivity, transport, evidenceUploader: isEvidenceUploader(transport) ? transport : undefined, technicianId, deviceId, seedPackage: createDemoPackageFor(new Date().toISOString(), technicianId, deviceId), prepareExternalValidation });
+  return createAppStore({ repository, authorization, enablement, connectivity, transport, evidenceUploader: isEvidenceUploader(transport) ? transport : undefined, technicianId, technicianName: technicianId, deviceId, seedPackage: createDemoPackageFor(new Date().toISOString(), technicianId, deviceId), prepareExternalValidation });
 }
 
 export interface AuthenticatedStoreOptions {
@@ -93,6 +96,8 @@ export interface AuthenticatedStoreOptions {
   seedPackage?: WorkPackage;
   transport?: SyncTransport;
   authorization?: AuthorizationAdapter;
+  enablement?: EnablementAdapter;
+  technicianName?: string;
 }
 
 export function createAuthenticatedTechnicianStore(technicianId: string, deviceId: string, options: AuthenticatedStoreOptions = {}): AppStore {
@@ -105,13 +110,13 @@ export function createAuthenticatedTechnicianStore(technicianId: string, deviceI
   const authorization: AuthorizationAdapter = options.authorization ?? (authorityContext
     ? new AuthorityBackedAuthorizationAdapter(authorizationDelegate, authorityContext.authority, authorityContext.session)
     : authorizationDelegate);
-  const enablement: EnablementAdapter = authorityContext
+  const enablement: EnablementAdapter = options.enablement ?? (authorityContext
     ? new AuthorityBackedEnablementAdapter(enablementDelegate, authorityContext.authority, authorityContext.session)
-    : enablementDelegate;
+    : enablementDelegate);
   const prepareExternalValidation: PrepareExternalValidation | undefined = authorityContext
-    ? (action, order, operationId, now) => prepareDemoExternalValidation(action, order, operationId, now, { authorization: authorizationDelegate, enablement: enablementDelegate }, technicianId, deviceId)
-    : undefined;
-  return createAppStore({ repository, authorization, enablement, connectivity, transport, evidenceUploader: isEvidenceUploader(transport) ? transport : undefined, technicianId, deviceId, seedPackage: options.seedPackage, prepareExternalValidation });
+      ? (action, order, operationId, now) => prepareDemoExternalValidation(action, order, operationId, now, { authorization: authorizationDelegate, enablement: enablementDelegate }, technicianId, deviceId, options.technicianName ?? technicianId)
+      : undefined;
+  return createAppStore({ repository, authorization, enablement, connectivity, transport, evidenceUploader: isEvidenceUploader(transport) ? transport : undefined, technicianId, technicianName: options.technicianName, deviceId, seedPackage: options.seedPackage, prepareExternalValidation });
 }
 
 function isEvidenceUploader(value: unknown): value is import("../ports").EvidenceUploadPort {
@@ -215,6 +220,10 @@ class AuthorityBackedEnablementAdapter implements EnablementAdapter {
 
   lookup(operationId: string): Promise<RemoteResult> {
     return this.delegate.lookup(operationId);
+  }
+
+  lookupReconnection(operationId: string): Promise<EnablementLookupResult> {
+    return this.delegate.lookupReconnection(operationId);
   }
 }
 
