@@ -1,15 +1,15 @@
 const supplies = [
   {
     id: 'elena', name: 'Elena Poma', account: 'CTA-1007', meter: 'MED-1007', meterBrand: 'Wasion', debt: '425.00', invoices: 8,
-    area: 'C', locality: 'San Pedro', localityCode: '003', route: '004', circuit: 'D 1184', address: 'Barrio Nuevo 56, San Pedro', plan: 'Sin plan de pago', activeOrder: false, cuc: '57f28e2f…0456'
+    area: 'C', locality: 'San Pedro', localityCode: '003', route: '004', circuit: 'D 1184', address: 'Barrio Nuevo 56, San Pedro', activeOrder: false, cuc: '57f28e2f…0456'
   },
   {
     id: 'pedro', name: 'Pedro Muñoz', account: 'CTA-1008', meter: 'MED-1008', meterBrand: 'Wasion', debt: '94.34', invoices: 2,
-    area: 'B', locality: 'Mojotorillo', localityCode: '002', route: '002', circuit: 'D 1182', address: 'Mojotorillo s/n', plan: 'Sin plan de pago', activeOrder: false, cuc: '62a09c1d…91b0'
+    area: 'B', locality: 'Mojotorillo', localityCode: '002', route: '002', circuit: 'D 1182', address: 'Mojotorillo s/n', activeOrder: false, cuc: '62a09c1d…91b0'
   },
   {
     id: 'norma', name: 'Norma Choque', account: 'CTA-1009', meter: 'MED-1009', meterBrand: 'Wasion', debt: '66.82', invoices: 3,
-    area: 'B', locality: 'Mojotorillo', localityCode: '002', route: '002', circuit: 'D 1182', address: 'San Miguel de Khari s/n', plan: 'Sin plan de pago', activeOrder: true, orderTime: 'hoy a las 20:51', technician: 'Sin técnico asignado', cuc: '443794'
+    area: 'B', locality: 'Mojotorillo', localityCode: '002', route: '002', circuit: 'D 1182', address: 'San Miguel de Khari s/n', activeOrder: true, orderTime: 'hoy a las 20:51', technician: 'Sin técnico asignado', cuc: '443794'
   }
 ];
 
@@ -76,11 +76,11 @@ function renderSelectedSupply() {
   const values = {
     'selected-title': supply.name, 'order-detail-title': `Orden de corte · ${supply.name}`, 'detail-account': supply.account, 'detail-meter': supply.meter, 'detail-meter-brand': supply.meterBrand,
     'detail-locality': supply.locality, 'detail-route': `Ruta ${supply.route}`, 'detail-address': supply.address, 'detail-area': `${supply.area} · ${supply.localityCode} ${supply.locality}`,
-    'detail-circuit': supply.circuit, 'detail-debt': formatDebt(supply.debt), 'detail-invoices': `${supply.invoices} facturas pendientes`, 'detail-plan': supply.plan,
+    'detail-circuit': supply.circuit, 'detail-debt': formatDebt(supply.debt), 'detail-invoices': `${supply.invoices} facturas pendientes`,
     'action-name': supply.name, 'action-debt': formatDebt(supply.debt), 'action-invoices': supply.invoices, 'action-meter': supply.meter,
     'detail-cuc': supply.cuc, 'active-order-cuc': supply.cuc, 'order-cuc': supply.cuc, 'order-name': supply.name, 'order-account': supply.account,
     'order-meter': supply.meter, 'order-debt': formatDebt(supply.debt), 'table-total': `Total ${formatDebt(supply.debt)}`, 'order-route': `${supply.route} · ${supply.locality}`,
-    'order-address': supply.address.replace(', San Pedro', ''), 'additional-plan': supply.plan === 'Sin plan de pago' ? 'No' : 'Sí'
+    'order-address': supply.address.replace(', San Pedro', '')
   };
   Object.entries(values).forEach(([id, value]) => { const element = document.getElementById(id); if (element) element.textContent = value; });
   const status = document.getElementById('supply-status');

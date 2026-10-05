@@ -156,7 +156,6 @@ select { min-height: 36px; padding: 7px 28px 7px 10px; border: 1px solid var(--b
 .debt-block { padding-left: 24px; border-left: 1px solid var(--border); }
 .debt-total { margin-top: 8px; color: var(--text); font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .debt-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; color: var(--red); font-size: 13px; }
-.payment-plan { padding: 3px 6px; border-radius: 4px; background: var(--surface-soft); color: var(--text-muted); font-size: 12px; }
 .active-order-alert { display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px; margin-top: 20px; padding: 16px; border: 1px solid #efc7bf; border-radius: 8px; background: var(--red-soft); }
 .alert-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--red); color: white; font-weight: 700; }
 .active-order-alert strong { display: block; color: var(--red); font-size: 14px; }
