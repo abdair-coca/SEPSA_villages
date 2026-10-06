@@ -5,7 +5,7 @@ import { AppHeader, type AppHeaderRoleSwitch } from "./AppHeader";
 import { IconAlertTriangle, IconCheck, IconDocument } from "./Icons";
 import { AppModal } from "./Modal";
 import { AppStateCard } from "./UiState";
-import { Notification } from "./Notification";
+import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "./Notification";
 import { SearchField } from "./SearchField";
 import { PaginationControls } from "./PaginationControls";
 
@@ -137,6 +137,14 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     setMessage(text);
     setMessageTone(tone);
   }
+
+  useEffect(() => {
+    if (!message) return;
+    const isMobile = window.matchMedia?.("(max-width: 760px)").matches ?? false;
+    if (!shouldAutoDismissNotification(messageTone, { isMobile })) return;
+    const timeout = window.setTimeout(() => setMessage((current) => current === message ? "" : current), NOTIFICATION_AUTO_DISMISS_MS);
+    return () => window.clearTimeout(timeout);
+  }, [message, messageTone]);
 
   async function loadAdminData(nextFilters = filters): Promise<void> {
     try { await refresh(nextFilters, "load"); } catch { /* Current request owns error presentation. */ }
@@ -343,7 +351,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
         roleSwitch={roleSwitch ? { ...roleSwitch, disabled: roleSwitch.disabled || busy } : undefined}
       />
 
-      {message ? <Notification tone={messageTone} text={message} /> : null}
+      {message ? <Notification tone={messageTone} text={message} onDismiss={() => setMessage("")} /> : null}
 
       <main className="operations-main">
         <section className="admin-summary" aria-label="Resumen de órdenes">

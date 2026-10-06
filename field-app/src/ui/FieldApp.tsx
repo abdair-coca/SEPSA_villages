@@ -8,7 +8,7 @@ import type { ConnectivityMode, CutType, FieldCapture, WorkOrder } from "../doma
 import { AppHeader, type AppHeaderRoleSwitch } from "./AppHeader";
 import { FieldMap } from "./FieldMap";
 import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconScissors, IconUser } from "./Icons";
-import { Notification } from "./Notification";
+import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "./Notification";
 import { createCaptureGpsRequest } from "./capture-gps-request";
 import { AppModal } from "./Modal";
 import { SearchField } from "./SearchField";
@@ -47,6 +47,7 @@ export function FieldApp({
   roleSwitch,
 }: FieldAppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
+  const pending = pendingCount(state.syncItems);
   const [isProbingNetwork, setIsProbingNetwork] = useState(false);
   const [isRefreshingAssigned, setIsRefreshingAssigned] = useState(false);
   const [assignedRefreshError, setAssignedRefreshError] = useState<string>();
@@ -55,12 +56,17 @@ export function FieldApp({
   const prevModeRef = useRef<ConnectivityMode>(state.mode);
 
   useEffect(() => {
-    const message = state.message;
     setDismissedMessage(undefined);
-    if (!message?.transient) return;
-    const timeout = window.setTimeout(() => setDismissedMessage(message), 4000);
-    return () => window.clearTimeout(timeout);
   }, [state.message]);
+
+  useEffect(() => {
+    const message = state.message;
+    if (!message) return;
+    const isMobile = window.matchMedia?.("(max-width: 760px)").matches ?? false;
+    if (!shouldAutoDismissNotification(message.tone, { isMobile, hasAction: pending > 0, transient: message.transient })) return;
+    const timeout = window.setTimeout(() => setDismissedMessage(message), NOTIFICATION_AUTO_DISMISS_MS);
+    return () => window.clearTimeout(timeout);
+  }, [state.message, pending]);
 
   useEffect(() => {
     void store.init();
@@ -136,7 +142,6 @@ export function FieldApp({
     }
   };
 
-  const pending = pendingCount(state.syncItems);
   const modeLabel = state.mode === "online" ? "Red disponible" : state.mode === "weak" ? "Señal débil" : "Sin conexión";
   const openPendingQueue = () => {
     if (state.message) setDismissedMessage(state.message);

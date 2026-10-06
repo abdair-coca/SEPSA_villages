@@ -100,6 +100,9 @@ try {
   await waitFor(`document.querySelector('.current-order-card') !== null`);
   await screenshot("home-390");
   if (!baseline) {
+    for (const width of [360, 390]) await assertMobileNotification(width);
+  }
+  if (!baseline) {
     await viewport(1280, 900);
     await click(".current-order-card__navigation button:last-child");
     const customer = await evaluate(`document.querySelector('.current-order-card__identity p').textContent`);
@@ -223,6 +226,41 @@ async function screenshot(name) {
   await delay(350);
   const { data } = await cdp.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
   writeFileSync(join(outputDirectory, `${baseline ? "before" : "after"}-${name}.png`), Buffer.from(data, "base64"));
+}
+async function assertMobileNotification(width) {
+  await viewport(width, 844);
+  const layout = await evaluate(`(() => {
+    document.querySelector('#notification-layout-smoke')?.remove();
+    const notification = document.createElement('div');
+    notification.id = 'notification-layout-smoke';
+    notification.className = 'message notification message--warning';
+    notification.setAttribute('role', 'status');
+    notification.setAttribute('aria-live', 'polite');
+    notification.innerHTML = '<span class="notification__kind notification__kind--warning"><svg class="notification__glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 10 18H2L12 3Z"/></svg><span>Advertencia</span></span><span class="notification__text">Algunas operaciones requieren revisión; ninguna fue eliminada.</span><div class="notification__actions"><button type="button" class="notification__action">Ver operaciones pendientes</button><button type="button" class="notification__dismiss" aria-label="Cerrar notificación">×</button></div>';
+    document.querySelector('.field-app .app-header').after(notification);
+    const rect = notification.getBoundingClientRect();
+    const text = notification.querySelector('.notification__text').getBoundingClientRect();
+    const actions = notification.querySelector('.notification__actions').getBoundingClientRect();
+    const dismiss = notification.querySelector('.notification__dismiss').getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height,
+      textWidth: text.width,
+      actionsBelowText: actions.top >= text.bottom - 1,
+      dismissHeight: dismiss.height,
+      dismissSharesActionRow: Math.abs(dismiss.top - actions.top) < 1,
+      horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+    };
+  })()`);
+  assert.ok(layout.textWidth >= 180, `Notification text must keep a readable width at ${width}px: ${JSON.stringify(layout)}`);
+  assert.ok(layout.height <= 180, `Notification must remain compact at ${width}px: ${JSON.stringify(layout)}`);
+  assert.equal(layout.actionsBelowText, true, `Notification actions must follow the message at ${width}px`);
+  assert.ok(layout.dismissHeight >= 44, `Dismiss action must remain accessible at ${width}px`);
+  assert.equal(layout.dismissSharesActionRow, true, `Dismiss action should share the action row at ${width}px`);
+  assert.equal(layout.horizontalOverflow, false, `Notification must not cause horizontal overflow at ${width}px`);
+  observations.push({ check: `mobile-notification-layout-${width}`, passed: true, ...layout });
+  await screenshot(`notification-warning-${width}`);
+  await evaluate(`document.querySelector('#notification-layout-smoke')?.remove()`);
 }
 async function click(selector) {
   await waitFor(`document.querySelector(${JSON.stringify(selector)}) !== null`);

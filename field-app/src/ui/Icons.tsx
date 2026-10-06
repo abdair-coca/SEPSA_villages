@@ -261,6 +261,28 @@ export function IconAlertTriangle({ className = "icon", ...props }: SVGProps<SVG
   );
 }
 
+export function IconInfo({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+      {...props}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" y1="11" x2="12" y2="16" />
+      <circle cx="12" cy="8" r=".75" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function IconClock({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" {...props}>
