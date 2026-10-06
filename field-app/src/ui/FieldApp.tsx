@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ActionResult, ActivityEntry, AppMessage, AppStore, ActionInput, AppState, OrderFilter } from "../app/index";
 import type { CaptureDraftContent } from "../ports/repository";
+import type { SyncItem } from "../ports";
 import { selectVisibleOrders } from "../app/index";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
@@ -397,8 +398,9 @@ function OperationalSummary({ state }: { state: AppState }) {
 function HomeSecondaryCards({ state, store }: { state: AppState; store: AppStore }) {
   const [syncOpen, setSyncOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
-  const pendingItems = state.syncItems.filter((item) => item.status !== "synced");
-  const recentActivity = activityOpen ? state.activity : state.activity.slice(0, 3);
+  const pendingItems = sortSyncItemsForDisplay(state.syncItems.filter((item) => item.status !== "synced"), state.activity);
+  const sortedActivity = sortActivityEntries(state.activity);
+  const recentActivity = activityOpen ? sortedActivity : sortedActivity.slice(0, 3);
   return (
     <section className="home-secondary-grid desktop-sync-activity-panel" aria-label="Actividad y sincronización">
       <CollapsibleCard open={syncOpen} onToggle={() => setSyncOpen((value) => !value)} icon={<IconRefresh />} title="Cola de sincronización" meta={`${pendingItems.length} pendientes`} hint={pendingItems.length ? "Operaciones guardadas en este dispositivo." : "No hay operaciones pendientes."}>
@@ -406,7 +408,7 @@ function HomeSecondaryCards({ state, store }: { state: AppState; store: AppStore
         {pendingItems.length ? <button type="button" className="home-secondary-link" onClick={() => { store.selectOrder(null); store.setTab("queue"); }}>Ver cola completa <span aria-hidden="true">→</span></button> : null}
       </CollapsibleCard>
       <CollapsibleCard open={activityOpen} onToggle={() => setActivityOpen((value) => !value)} icon={<IconClock />} title="Actividad reciente" meta={`${state.activity.length} eventos`} hint={state.activity.length ? "Últimos registros de este dispositivo." : "Sin actividad local registrada."}>
-        {recentActivity.length ? <div className="home-activity-list">{recentActivity.map((entry) => <button type="button" className="home-activity-item" key={entry.record.operationId} onClick={() => { store.setTab("orders"); store.selectOrder(entry.record.orderId); }}><i /><span><strong>{activityLabel(entry.record.kind)}</strong><small>{formatActivityTime(entry.record.recordedAt)}</small></span></button>)}</div> : <p>Sin actividad local registrada.</p>}
+        {recentActivity.length ? <div className="home-activity-list">{recentActivity.map((entry) => <button type="button" className="home-activity-item" key={entry.record.operationId} onClick={() => { store.setTab("orders"); store.selectOrder(entry.record.orderId); }}><i /><span><strong>{activityLabel(entry.record.kind)}</strong><small>{formatActivityTime(activityTimestamp(entry.record))}</small></span></button>)}</div> : <p>Sin actividad local registrada.</p>}
         <button type="button" className="home-secondary-link" onClick={() => setActivityOpen(true)}>Ver todas <span aria-hidden="true">→</span></button>
       </CollapsibleCard>
     </section>
@@ -535,10 +537,11 @@ function DesktopRightRail({
   onCloseFullscreen: () => void;
   isMapFullscreen: boolean;
 }) {
-  const pendingItems = state.syncItems.filter((item) => item.status !== "synced");
+  const pendingItems = sortSyncItemsForDisplay(state.syncItems.filter((item) => item.status !== "synced"), state.activity);
   const recentItems = pendingItems.slice(0, 3);
   const [showAllActivity, setShowAllActivity] = useState(false);
-  const recentActivity = showAllActivity ? state.activity : state.activity.slice(0, 5);
+  const sortedActivity = sortActivityEntries(state.activity);
+  const recentActivity = showAllActivity ? sortedActivity : sortedActivity.slice(0, 5);
 
   return (
     <aside className="desktop-right-rail" aria-label="Resumen operativo">
@@ -612,7 +615,7 @@ function DesktopRightRail({
                   <span className="desktop-activity-dot" aria-hidden="true" />
                   <span>
                     <strong>{activityLabel(entry.record.kind)}</strong>
-                    <small>{formatActivityTime(entry.record.recordedAt)}</small>
+                    <small>{formatActivityTime(activityTimestamp(entry.record))}</small>
                   </span>
                 </button>
               ))}
@@ -1607,13 +1610,12 @@ export function restoreEvidenceFile(value: File | Blob): File {
 export function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
   const [requestedPage, setRequestedPage] = useState(1);
   const [showFullDetails, setShowFullDetails] = useState(false);
-  const items = [...state.syncItems].sort(
-    (left, right) => Number(right.status !== "synced") - Number(left.status !== "synced")
-  );
+  const activityByOperation = activityTimestampsByOperation(state.activity);
+  const items = sortSyncItemsForDisplay(state.syncItems, state.activity);
   const canRunQueueSync = isUsable(state.mode) && state.busyAction !== "SYNC";
   const { page, pageCount, item: mobileItem } = queuePageItem(items, requestedPage);
   const renderItem = (item: import("../ports").SyncItem, mobile: boolean) => (
-    <QueueItem key={item.operationId} item={item} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} onViewFullDetails={() => setShowFullDetails(true)} canRetry={!mobile || canRunQueueSync} canVerify={canRunQueueSync} mobile={mobile} />
+    <QueueItem key={item.operationId} item={item} displayedAt={syncItemTimestamp(item, activityByOperation)} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} onViewFullDetails={() => setShowFullDetails(true)} canRetry={!mobile || canRunQueueSync} canVerify={canRunQueueSync} mobile={mobile} />
   );
   return (
     <section className="queue-panel panel" aria-label="Cola de sincronización">
@@ -1636,7 +1638,7 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
             {mobileItem.orderId ? <p><strong>Orden:</strong> {mobileItem.orderId}</p> : null}
             {state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName ? <p><strong>Cliente:</strong> {state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName}</p> : null}
             <p><strong>Estado:</strong> {syncStatusLabel(mobileItem.status)}</p>
-            <p><strong>Fecha:</strong> {formatDate(mobileItem.updatedAt)}</p>
+            <p><strong>Fecha:</strong> {formatDate(syncItemTimestamp(mobileItem, activityByOperation))}</p>
             <p><strong>Intentos:</strong> {mobileItem.attempts}</p>
             {mobileItem.errorCode ? <p className="queue-error"><strong>Error:</strong> {mobileItem.errorCode}</p> : null}
             {queueReviewMessage(mobileItem) ? <p className="queue-review">{queueReviewMessage(mobileItem)}</p> : null}
@@ -1659,7 +1661,7 @@ export function queuePageItem(items: import("../ports").SyncItem[], requestedPag
   return { page, pageCount, item: items[page - 1] };
 }
 
-function QueueItem({ item, order, onRetry, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: import("../ports").SyncItem; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
+function QueueItem({ item, displayedAt, order, onRetry, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: import("../ports").SyncItem; displayedAt?: string; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
   const manualReview = Boolean(item.manualReview);
   const uncertain = Boolean(item.uncertain);
   const protectedFromRetry = manualReview || uncertain;
@@ -1671,7 +1673,7 @@ function QueueItem({ item, order, onRetry, onViewOrder, onViewFullDetails, canRe
         <span className={`queue-status queue-status--${item.status}`}>{syncStatusLabel(item.status)}</span>
       </div>
       <div className="queue-item__meta">
-        <span>{formatDate(item.updatedAt)}</span>
+        <span>{formatDate(displayedAt)}</span>
         <span>{item.attempts} intento(s)</span>
         <span className="technical-id" title={item.operationId} aria-label={`Identificador completo de operación: ${item.operationId}`}>Operación {shortTechnicalId(item.operationId)}</span>
       </div>
@@ -1740,6 +1742,53 @@ function activityException(record: import("../ports").StoredRecord): string | un
 function shortHash(hash?: string): string {
   return hash ? `${hash.slice(0, 10)}…` : "disponible";
 }
+
+export function sortActivityEntries(entries: readonly ActivityEntry[]): ActivityEntry[] {
+  return [...entries].sort((left, right) =>
+    compareRecentTimestamps(activityTimestamp(left.record), activityTimestamp(right.record))
+    || left.record.operationId.localeCompare(right.record.operationId),
+  );
+}
+
+export function sortSyncItemsForDisplay(items: readonly SyncItem[], activity: readonly ActivityEntry[] = []): SyncItem[] {
+  const activityByOperation = activityTimestampsByOperation(activity);
+  return [...items].sort((left, right) =>
+    Number(right.status !== "synced") - Number(left.status !== "synced")
+    || compareRecentTimestamps(syncItemTimestamp(left, activityByOperation), syncItemTimestamp(right, activityByOperation))
+    || left.operationId.localeCompare(right.operationId),
+  );
+}
+
+function activityTimestampsByOperation(activity: readonly ActivityEntry[]): Map<string, string | undefined> {
+  return new Map(activity.map((entry) => [entry.record.operationId, activityTimestamp(entry.record)]));
+}
+
+function syncItemTimestamp(item: SyncItem, activityByOperation: ReadonlyMap<string, string | undefined>): string | undefined {
+  return isValidTimestamp(item.updatedAt) ? item.updatedAt : activityByOperation.get(item.operationId);
+}
+
+function activityTimestamp(record: ActivityEntry["record"]): string | undefined {
+  const effectiveAt = "effectiveAt" in record ? record.effectiveAt : undefined;
+  return isValidTimestamp(effectiveAt) ? effectiveAt : record.recordedAt;
+}
+
+function isValidTimestamp(value?: string): value is string {
+  return value !== undefined && Number.isFinite(Date.parse(value));
+}
+
+function compareRecentTimestamps(left?: string, right?: string): number {
+  const leftTimestamp = timestampValue(left);
+  const rightTimestamp = timestampValue(right);
+  if (leftTimestamp === rightTimestamp) return 0;
+  return rightTimestamp > leftTimestamp ? 1 : -1;
+}
+
+function timestampValue(value?: string): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
 export function sortOrdersForNext(orders: readonly WorkOrder[]): WorkOrder[] {
   return [...orders].sort((left, right) => orderPriority(left) - orderPriority(right));
 }

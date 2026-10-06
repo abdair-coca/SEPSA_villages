@@ -4,11 +4,11 @@ import { Children, isValidElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
 import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
-import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type AppStore } from "../app/index";
+import { createAppStore, createDemoPackage, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type ActivityEntry, type AppStore } from "../app/index";
 import type { WorkOrder, WorkPackage } from "../domain";
 import type { SyncItem } from "../ports";
 import { AppModal, type AppModalProps } from "./Modal";
-import { ActionCompletionDialog, adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, openOrderMap, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortOrdersForNext, syncThenRefreshAssigned } from "./FieldApp";
+import { ActionCompletionDialog, adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, openOrderMap, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -142,6 +142,107 @@ describe("capture wizard QA recovery", () => {
 function html(store: AppStore): string {
   return renderToStaticMarkup(<FieldApp store={store} />).toLocaleLowerCase();
 }
+
+function visitActivity(operationId: string, recordedAt: string): ActivityEntry {
+  return {
+    record: {
+      operationId,
+      kind: "VISIT",
+      orderId: "ORD-24017",
+      technicianId: DEMO_TECHNICIAN_ID,
+      deviceId: DEMO_DEVICE_ID,
+      action: "VISIT",
+      attemptedAction: "CUT",
+      execution: "NONE",
+      reason: operationId,
+      recordedAt,
+      evidenceRefs: [],
+      attempts: 0,
+      syncStatus: "pending",
+    },
+    evidence: [],
+  };
+}
+
+function cutActivity(operationId: string, recordedAt: string, effectiveAt: string): ActivityEntry {
+  return {
+    record: {
+      operationId,
+      kind: "CUT",
+      action: "CUT",
+      orderId: "ORD-24017",
+      technicianId: DEMO_TECHNICIAN_ID,
+      deviceId: DEMO_DEVICE_ID,
+      status: "CONFIRMED",
+      physicalStatus: "CONFIRMED",
+      syncStatus: "synced",
+      recordedAt,
+      effectiveAt,
+      updatedAt: recordedAt,
+      attempts: 1,
+      evidenceRefs: [],
+    },
+    evidence: [],
+  };
+}
+
+describe("chronological activity and queue ordering", () => {
+  it("sorts activity by physical occurrence when present, otherwise by record time", () => {
+    const activity = [
+      visitActivity("visit-old", "2026-09-12T08:00:00.000Z"),
+      cutActivity("cut-effective-new", "2026-09-12T07:00:00.000Z", "2026-09-12T12:00:00.000Z"),
+      visitActivity("visit-tie-z", "2026-09-12T11:00:00.000Z"),
+      visitActivity("visit-tie-a", "2026-09-12T11:00:00.000Z"),
+      visitActivity("visit-invalid", "not-a-date"),
+    ];
+
+    expect(sortActivityEntries(activity).map((entry) => entry.record.operationId)).toEqual([
+      "cut-effective-new",
+      "visit-tie-a",
+      "visit-tie-z",
+      "visit-old",
+      "visit-invalid",
+    ]);
+    expect(sortActivityEntries(activity).slice(0, 3).map((entry) => entry.record.operationId)).toEqual([
+      "cut-effective-new",
+      "visit-tie-a",
+      "visit-tie-z",
+    ]);
+    expect(activity.map((entry) => entry.record.operationId)).toEqual([
+      "visit-old",
+      "cut-effective-new",
+      "visit-tie-z",
+      "visit-tie-a",
+      "visit-invalid",
+    ]);
+  });
+
+  it("sorts the queue by latest update within sync priority and falls back to activity time", () => {
+    const activity = [visitActivity("pending-no-update", "2026-09-12T12:00:00.000Z")];
+    const items: SyncItem[] = [
+      { operationId: "synced-old", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T13:00:00.000Z" },
+      { operationId: "pending-old", action: "VISIT", status: "pending", attempts: 0, updatedAt: "2026-09-12T10:00:00.000Z" },
+      { operationId: "pending-no-update", action: "VISIT", status: "failed", attempts: 1 },
+      { operationId: "pending-new", action: "VISIT", status: "failed", attempts: 1, updatedAt: "2026-09-12T11:00:00.000Z" },
+      { operationId: "synced-new", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T14:00:00.000Z" },
+      { operationId: "missing-z", action: "VISIT", status: "pending", attempts: 0 },
+      { operationId: "missing-a", action: "VISIT", status: "pending", attempts: 0 },
+    ];
+    const original = items.map((item) => ({ ...item }));
+
+    expect(sortSyncItemsForDisplay(items, activity).map((item) => item.operationId)).toEqual([
+      "pending-no-update",
+      "pending-new",
+      "pending-old",
+      "missing-a",
+      "missing-z",
+      "synced-new",
+      "synced-old",
+    ]);
+    expect(items).toEqual(original);
+  });
+
+});
 
 describe("FieldApp SSR shell", () => {
   it.each([1, 2])("opens the map for journey order at index %i and keeps map as the final tab", async (index) => {
@@ -337,9 +438,9 @@ describe("FieldApp SSR shell", () => {
   it("pages through every queue state one operation at a time without mutating queue", async () => {
     const store = await readyStore("ui-queue-pages");
     const items: SyncItem[] = [
-      { operationId: "pending-operation-full-identifier-001", orderId: "ORD-24017", action: "VISIT", status: "pending", attempts: 0, updatedAt: "2026-09-12T10:00:00.000Z" },
-      { operationId: "syncing-002", orderId: "ORD-24017", action: "VISIT", status: "syncing", attempts: 1, updatedAt: "2026-09-12T10:01:00.000Z" },
-      { operationId: "failed-003", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 2, errorCode: "NETWORK_UNAVAILABLE", updatedAt: "2026-09-12T10:02:00.000Z" },
+      { operationId: "pending-operation-full-identifier-001", orderId: "ORD-24017", action: "VISIT", status: "pending", attempts: 0, updatedAt: "2026-09-12T10:03:00.000Z" },
+      { operationId: "syncing-002", orderId: "ORD-24017", action: "VISIT", status: "syncing", attempts: 1, updatedAt: "2026-09-12T10:02:00.000Z" },
+      { operationId: "failed-003", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 2, errorCode: "NETWORK_UNAVAILABLE", updatedAt: "2026-09-12T10:01:00.000Z" },
       { operationId: "synced-004", orderId: "ORD-24017", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T10:03:00.000Z" },
     ];
     const original = items.map((item) => ({ ...item }));
@@ -371,13 +472,35 @@ describe("FieldApp SSR shell", () => {
     expect(items).toEqual(original);
   });
 
+  it("renders newer pending operations first and keeps them ahead of synced work", async () => {
+    const store = await readyStore("ui-queue-recency-order");
+    const activity = [visitActivity("pending-fallback", "2026-09-12T12:00:00.000Z")];
+    const items: SyncItem[] = [
+      { operationId: "synced-old", orderId: "ORD-24017", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T13:00:00.000Z" },
+      { operationId: "pending-old", orderId: "ORD-24017", action: "VISIT", status: "pending", attempts: 0, updatedAt: "2026-09-12T10:00:00.000Z" },
+      { operationId: "pending-fallback", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 1 },
+      { operationId: "pending-new", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 1, updatedAt: "2026-09-12T11:00:00.000Z" },
+      { operationId: "synced-new", orderId: "ORD-24017", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T14:00:00.000Z" },
+    ];
+    const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items, activity }} store={store} />).toLocaleLowerCase();
+    const desktop = markup.split('class="queue-list queue-list--desktop"')[1]?.split('class="queue-list queue-list--mobile"')[0] ?? "";
+    const mobile = markup.split('class="queue-list queue-list--mobile"')[1]?.split('class="queue-pagination"')[0] ?? "";
+
+    expect(desktop.indexOf('title="pending-fallback"')).toBeLessThan(desktop.indexOf('title="pending-new"'));
+    expect(desktop.indexOf('title="pending-new"')).toBeLessThan(desktop.indexOf('title="pending-old"'));
+    expect(desktop.indexOf('title="pending-old"')).toBeLessThan(desktop.indexOf('title="synced-new"'));
+    expect(desktop.indexOf('title="synced-new"')).toBeLessThan(desktop.indexOf('title="synced-old"'));
+    expect(mobile).toContain('title="pending-fallback"');
+    expect(desktop.split('title="pending-fallback"')[1]).not.toContain("sin datos");
+  });
+
   it("shows review and errors, and withholds retry for uncertain or reviewed operations", async () => {
     const store = await readyStore("ui-queue-review-guards");
     const items: SyncItem[] = [
-      { operationId: "safe-001", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 2, errorCode: "NETWORK_UNAVAILABLE" },
-      { operationId: "review-002", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, manualReview: true, errorCode: "REMOTE_CONFLICT" },
-      { operationId: "uncertain-003", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, uncertain: true },
-      { operationId: "done-004", orderId: "ORD-24017", action: "VISIT", status: "synced", attempts: 1 },
+      { operationId: "safe-001", orderId: "ORD-24017", action: "VISIT", status: "failed", attempts: 2, errorCode: "NETWORK_UNAVAILABLE", updatedAt: "2026-09-12T13:00:00.000Z" },
+      { operationId: "review-002", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, manualReview: true, errorCode: "REMOTE_CONFLICT", updatedAt: "2026-09-12T12:00:00.000Z" },
+      { operationId: "uncertain-003", orderId: "ORD-24017", action: "CUT", status: "failed", attempts: 1, uncertain: true, updatedAt: "2026-09-12T11:00:00.000Z" },
+      { operationId: "done-004", orderId: "ORD-24017", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T14:00:00.000Z" },
     ];
     const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: items }} store={store} />).toLocaleLowerCase();
     const cards = markup.split('<article class="queue-item">').slice(1).map((part) => part.split("</article>")[0]);
