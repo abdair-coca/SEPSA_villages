@@ -119,6 +119,7 @@ function operationFromGrant(input: ReconnectionProcessInput, grant: EnablementGr
     authorizationVersion: grant.version,
     authorizationConsumption: "immediate",
     evidenceRefs: input.evidence ? [input.evidence.evidenceId] : [],
+    exceptionReason: input.exceptionReason,
   };
 }
 
