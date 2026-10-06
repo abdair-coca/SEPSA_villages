@@ -45,6 +45,71 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     expect((await client.switchRole(technician, "ADMIN")).permissions).toContain("CREATE_ORDER");
   });
 
+  it("waits for paginated admin reads to finish before switching roles", async () => {
+    const requests: string[] = [];
+    const debtorFirstStarted = deferred<void>();
+    const debtorSecondStarted = deferred<void>();
+    const auditFirstStarted = deferred<void>();
+    const auditSecondStarted = deferred<void>();
+    const debtorFirstPage = deferred<Response>();
+    const debtorSecondPage = deferred<Response>();
+    const auditFirstPage = deferred<Response>();
+    const auditSecondPage = deferred<Response>();
+    let roleSwitchSent = false;
+    let role = "ADMIN";
+    const client = new HttpPilotClient({
+      baseUrl: "http://localhost:8080",
+      fetchImpl: async (input, init = {}) => {
+        const url = new URL(String(input));
+        requests.push(`${url.pathname}${url.search}`);
+        if (url.pathname === "/v1/auth/login") return json({ session_id: "session-dual", expires_at: "2099-01-01T00:00:00.000Z", user: { user_id: "dual-user-fixture", username: "dual-role-fixture", display_name: "Dual Role Fixture", role, roles: ["ADMIN", "TECHNICIAN"] } });
+        if (url.pathname === "/v1/debtors") {
+          if (url.searchParams.has("cursor")) {
+            debtorSecondStarted.resolve(undefined);
+            return debtorSecondPage.promise;
+          }
+          debtorFirstStarted.resolve(undefined);
+          return debtorFirstPage.promise;
+        }
+        if (url.pathname === "/v1/audit") {
+          if (url.searchParams.has("cursor")) {
+            auditSecondStarted.resolve(undefined);
+            return auditSecondPage.promise;
+          }
+          auditFirstStarted.resolve(undefined);
+          return auditFirstPage.promise;
+        }
+        if (url.pathname === "/v1/auth/role") {
+          roleSwitchSent = true;
+          role = JSON.parse(String(init.body)).role;
+          return json({ session_id: "session-dual", expires_at: "2099-01-01T00:00:00.000Z", user: { user_id: "dual-user-fixture", username: "dual-role-fixture", display_name: "Dual Role Fixture", role, roles: ["ADMIN", "TECHNICIAN"] } });
+        }
+        throw new Error(`Unexpected request: ${url.pathname}`);
+      },
+    });
+    const admin = await client.authenticate({ username: "dual-role-fixture", password: "test-password" });
+    const debtorRead = client.findDebtors({ session: admin });
+    const auditRead = client.listAudit({ session: admin });
+    await Promise.all([debtorFirstStarted.promise, auditFirstStarted.promise]);
+
+    const roleSwitch = client.switchRole(admin, "TECHNICIAN");
+    expect(roleSwitchSent).toBe(false);
+
+    debtorFirstPage.resolve(json({ debtors: [], next_cursor: "100" }));
+    auditFirstPage.resolve(json({ audit: [], next_cursor: "100" }));
+    await Promise.all([debtorSecondStarted.promise, auditSecondStarted.promise]);
+    expect(roleSwitchSent).toBe(false);
+
+    debtorSecondPage.resolve(json({ debtors: [], next_cursor: null }));
+    await debtorRead;
+    expect(roleSwitchSent).toBe(false);
+
+    auditSecondPage.resolve(json({ audit: [], next_cursor: null }));
+    await Promise.all([auditRead, roleSwitch]);
+    expect(roleSwitchSent).toBe(true);
+    expect(requests.at(-1)).toBe("/v1/auth/role");
+  });
+
   it("keeps role unchanged after rejected switch, blocks offline switch, and restores authoritative role", async () => {
     let requestCount = 0;
     const client = new HttpPilotClient({ baseUrl: "http://localhost:8080", fetchImpl: async (input) => {
@@ -223,4 +288,10 @@ function debtorDto(index: number): Record<string, unknown> {
 
 function auditDto(index: number): Record<string, unknown> {
   return { audit_id: `audit-${index}`, actor_id: "admin-1", actor_role: "ADMIN", action: "SYNTHETIC", result: "accepted", occurred_at: "2026-09-01T00:00:00.000Z", source: "PILOT_PROVISIONAL" };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((yes) => { resolve = yes; });
+  return { promise, resolve };
 }

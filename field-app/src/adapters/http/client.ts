@@ -16,6 +16,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   private readonly fetchImpl: typeof fetch;
   private mode: ConnectivityMode = "online";
   private activeSession?: Session;
+  private readonly activeAdminReads = new Set<Promise<void>>();
 
   constructor(options: HttpClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
@@ -38,6 +39,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   }
 
   async switchRole(session: Session, role: Session["role"]): Promise<Session> {
+    await this.waitForAdminReads();
     const response = await this.request<PilotLoginResponseDto>("/v1/auth/role", { method: "POST", body: { role }, timeoutMs: 15_000 }, this.requireSession(session));
     return this.acceptSession(response, session);
   }
@@ -76,14 +78,17 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   }
 
   async findDebtors(query: DebtorQuery): Promise<DebtorRecord[]> {
-    const all: DebtorRecord[] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await this.findDebtorsPage(query, cursor);
-      all.push(...page.debtors);
-      cursor = page.nextCursor;
-    } while (cursor !== undefined);
-    return all;
+    const session = this.requireSession(query.session);
+    return this.trackAdminRead(session, async () => {
+      const all: DebtorRecord[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await this.findDebtorsPage(query, cursor);
+        all.push(...page.debtors);
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+      return all;
+    });
   }
 
   async findDebtorsPage(query: DebtorQuery, cursor?: string): Promise<{ debtors: DebtorRecord[]; nextCursor?: string; total?: number }> {
@@ -103,8 +108,10 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
 
   async listTechnicians(session: Session): Promise<TechnicianRecord[]> {
     const authorized = this.requireSession(session);
-    const response = await this.request<PilotTechnicianResponseDto>("/v1/technicians", { method: "GET" }, authorized);
-    return response.technicians.map(mapTechnician);
+    return this.trackAdminRead(authorized, async () => {
+      const response = await this.request<PilotTechnicianResponseDto>("/v1/technicians", { method: "GET" }, authorized);
+      return response.technicians.map(mapTechnician);
+    });
   }
 
   async createOrder(input: { operationId: string; debtorId: string; purpose: "CUT"; session?: Session }): Promise<WorkOrder> {
@@ -167,25 +174,30 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   }
 
   async listOrders(session: Session): Promise<WorkOrder[]> {
-    const response = await this.request<{ orders: unknown[] }>("/v1/orders", { method: "GET" }, this.requireSession(session));
-    return response.orders.map(mapOrder);
+    const authorized = this.requireSession(session);
+    return this.trackAdminRead(authorized, async () => {
+      const response = await this.request<{ orders: unknown[] }>("/v1/orders", { method: "GET" }, authorized);
+      return response.orders.map(mapOrder);
+    });
   }
 
   async listAudit(query: { orderId?: string; session?: Session } = {}): Promise<AuditEvent[]> {
     const session = this.requireSession(query.session);
-    const params = new URLSearchParams();
-    if (query.orderId) params.set("order_id", query.orderId);
-    params.set("limit", "100");
-    const all: AuditEvent[] = [];
-    let cursor: string | undefined;
-    do {
-      if (cursor !== undefined) params.set("cursor", cursor);
-      else params.delete("cursor");
-      const response = await this.request<PilotAuditResponseDto>(`/v1/audit?${params}`, { method: "GET" }, session);
-      all.push(...response.audit.map(mapAudit));
-      cursor = response.next_cursor ?? undefined;
-    } while (cursor !== undefined);
-    return all;
+    return this.trackAdminRead(session, async () => {
+      const params = new URLSearchParams();
+      if (query.orderId) params.set("order_id", query.orderId);
+      params.set("limit", "100");
+      const all: AuditEvent[] = [];
+      let cursor: string | undefined;
+      do {
+        if (cursor !== undefined) params.set("cursor", cursor);
+        else params.delete("cursor");
+        const response = await this.request<PilotAuditResponseDto>(`/v1/audit?${params}`, { method: "GET" }, session);
+        all.push(...response.audit.map(mapAudit));
+        cursor = response.next_cursor ?? undefined;
+      } while (cursor !== undefined);
+      return all;
+    });
   }
 
   async requestCut(input: AuthRequest): Promise<AuthResponse> {
@@ -291,6 +303,21 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     if (!session) throw new Error("Se requiere una sesión autenticada.");
     this.requireActiveSession(session);
     return session;
+  }
+
+  private trackAdminRead<T>(session: Session, read: () => Promise<T>): Promise<T> {
+    const operation = read();
+    if (session.role !== "ADMIN") return operation;
+    const settled = operation.then(() => undefined, () => undefined);
+    this.activeAdminReads.add(settled);
+    void settled.then(() => this.activeAdminReads.delete(settled));
+    return operation;
+  }
+
+  private async waitForAdminReads(): Promise<void> {
+    while (this.activeAdminReads.size > 0) {
+      await Promise.all([...this.activeAdminReads]);
+    }
   }
 
   private requireActiveSession(session = this.activeSession): Session {
