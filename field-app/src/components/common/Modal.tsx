@@ -1,3 +1,4 @@
+/** Diálogo modal accesible: atrapa el foco, cierra con Escape y devuelve el foco al disparador (`utils/dialog-lifecycle.ts`). */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { activateDialog, resolveDialogTheme, type DialogCloseOptions } from "../../utils/dialog-lifecycle";

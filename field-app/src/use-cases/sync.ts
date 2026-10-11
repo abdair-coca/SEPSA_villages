@@ -1,14 +1,28 @@
+/**
+ * Caso de uso: motor de sincronización de la cola local (`SyncEngine`).
+ *
+ * Recorre la cola y, para cada operación pendiente, toma un lease, sube la evidencia y la envía al backend.
+ * Reglas (ver `docs/features/synchronization.md`):
+ * - Solo un recibo que coincide campo a campo con la operación local (`receiptMatches`) la marca `synced`.
+ * - Respuesta perdida, `unknown`, conflicto o recibo distinto → `failed` + incierto; no se vuelve a enviar.
+ * - Un CUT solo se envía si su fase durable es `preparing` (el POST no empezó). Si quedó `send-started`,
+ *   es legado o está en `PHYSICAL_UNKNOWN`, solo se consulta su estado (`lookup`).
+ * - Antes del POST de un CUT se suben sus fotos y se marca `send-started` verificando el lease vigente.
+ * - Las operaciones en revisión manual se saltan.
+ */
 import { generateOperationId, type OperationRecord, type VisitRecord } from "../domain/types";
 import type { ConnectivityPort } from "../ports/connectivity";
 import type { LocalRepository, StoredRecord, SyncClaimResult } from "../ports/repository";
 import type { EvidenceUploadPort, SyncItem, SyncPayload, SyncTransport } from "../ports/sync";
 
+/** `owner` identifica a este motor en los leases; `leaseMilliseconds` es cuánto dura cada toma de un elemento. */
 export interface SyncEngineOptions {
   now?: () => string;
   owner?: string;
   leaseMilliseconds?: number;
 }
 
+/** Resumen de una pasada de sincronización. */
 export interface SyncReport {
   processed: number;
   synced: number;
@@ -35,10 +49,12 @@ export class SyncEngine {
     this.leaseMilliseconds = options.leaseMilliseconds ?? 30_000;
   }
 
+  /** Resuelve elementos que quedaron `syncing` tras un cierre inesperado (ver `LocalRepository.recoverInFlight`). */
   async recoverAfterRestart(): Promise<void> {
     await this.repository.recoverInFlight?.(this.now());
   }
 
+  /** Una pasada por toda la cola. Sin conexión útil no hace nada (la cola se conserva). */
   async syncOnce(): Promise<SyncReport> {
     await this.recoverAfterRestart();
     if (!this.connectivity.isUsable()) return { processed: 0, synced: 0, failed: 0, skipped: 0 };
@@ -76,6 +92,7 @@ export class SyncEngine {
     return this.repository.claimSync(item.operationId, this.owner, this.now(), this.leaseMilliseconds, { allowManualReview });
   }
 
+  /** Sincroniza un elemento ya tomado con lease. Devuelve el resultado para el reporte. */
   private async syncItem(item: SyncItem): Promise<"synced" | "failed" | "skipped"> {
     const record = await this.repository.getRecord(item.operationId);
     if (!record) {
@@ -83,6 +100,7 @@ export class SyncEngine {
       return "failed";
     }
 
+    // Rama de solo consulta: el envío pudo haber llegado al servidor, así que no se repite el POST.
     const cutLookupOnly = record.kind !== "VISIT" && record.action === "CUT" && (item.cutSendPhase !== "preparing" || record.physicalStatus === "PHYSICAL_UNKNOWN" || record.status === "PHYSICAL_UNKNOWN");
     const reconnectionLookupOnly = record.kind !== "VISIT" && record.action === "RECONNECTION" && (record.physicalStatus === "PHYSICAL_UNKNOWN" || record.status === "PHYSICAL_UNKNOWN");
     if (cutLookupOnly || reconnectionLookupOnly || (isPendingPhysicalOperation(record) && !hasDeferredAuthorization(record))) {
@@ -115,6 +133,7 @@ export class SyncEngine {
       return "failed";
     }
 
+    // Resultado previo incierto: también solo se consulta.
     if (item.uncertain) {
       let lookup;
       try {
@@ -143,6 +162,7 @@ export class SyncEngine {
       return "failed";
     }
 
+    // Rama de envío. `sendStarted` distingue fallos previos al POST (reintentables) de posteriores (inciertos).
     let sendStarted = false;
     try {
       if (record.kind !== "VISIT" && record.action === "CUT") {
@@ -172,6 +192,7 @@ export class SyncEngine {
         await this.fail(item, evidenceError, false);
         return "failed";
       }
+      // Punto de no retorno: desde aquí, una interrupción deja el CUT en solo consulta.
       if (record.kind !== "VISIT" && record.action === "CUT") {
         await this.repository.markCutSendStarted!(item.operationId, this.owner, leaseToken(item), this.now);
         if (!item.leaseExpiresAt || item.leaseExpiresAt <= this.now()) throw new Error("Sync lease fencing token is invalid.");
@@ -190,6 +211,7 @@ export class SyncEngine {
         await this.fail(item, "RESPONSE_RECEIPT_MISMATCH", true);
         return "failed";
       }
+      // Conflicto: se conserva local y remoto para revisión; no se elige ganador.
       if (response.status === "conflict") {
         await this.markPhysicalUnknown(item, "REMOTE_CONFLICT");
         const conflict = {
@@ -219,6 +241,10 @@ export class SyncEngine {
     await this.repository.updateEvidenceUploadState(evidenceId, state, code, { owner: this.owner, leaseToken: leaseToken(item), now: this.now() });
   }
 
+  /**
+   * Sube las fotos de la operación antes de enviarla. Verifica que cada foto esté ligada a la misma
+   * operación/orden/técnico/dispositivo. Devuelve un código de error si alguna falla (la operación no se envía).
+   */
   private async uploadOperationEvidence(item: SyncItem, record: StoredRecord): Promise<string | undefined> {
     if (record.kind === "VISIT" || record.evidenceRefs.length === 0) return undefined;
     if (!this.evidenceUpload || !this.repository.getEvidence || !this.repository.updateEvidenceUploadState) return "EVIDENCE_UPLOAD_UNAVAILABLE";
@@ -250,6 +276,7 @@ export class SyncEngine {
     await this.repository.updateSyncState(item.operationId, status, { ...options, owner: this.owner, leaseToken: leaseToken(item), now: this.now() });
   }
 
+  /** Marca el elemento `failed`. Si `uncertain`, además pasa la operación física a `PHYSICAL_UNKNOWN`. */
   private async fail(item: SyncItem, code: string, uncertain: boolean): Promise<void> {
     if (uncertain) await this.markPhysicalUnknown(item, code);
     await this.finish(item, "failed", { errorCode: code, uncertain });
@@ -266,6 +293,7 @@ export class SyncEngine {
   }
 }
 
+/** Payload estable de una operación: el mismo registro produce siempre el mismo payload. */
 function toPayload(record: OperationRecord | VisitRecord): SyncPayload {
   const visit = isVisitRecord(record);
   return {
@@ -293,12 +321,14 @@ function isVisitRecord(record: OperationRecord | VisitRecord): record is VisitRe
   return record.kind === "VISIT" && "reason" in record;
 }
 
+/** Versión autoritativa esperada tras el ACK: la versión autorizada + 1 (las visitas no cambian versión). */
 function acknowledgedVersion(record: StoredRecord): number | undefined {
   if (record.kind === "VISIT") return undefined;
   const expectedVersion = record.authorizationVersion;
   return expectedVersion === undefined ? undefined : expectedVersion + 1;
 }
 
+/** Corte/reconexión reclamado pero sin resultado confirmado. */
 function isPendingPhysicalOperation(record: StoredRecord): record is OperationRecord {
   return record.kind !== "VISIT" && (record.status === "INTENT_PERSISTED" || record.physicalStatus === "CLAIMED");
 }
@@ -311,6 +341,10 @@ function hasAuthorizationData(record: OperationRecord): boolean {
   return Boolean(record.authorizationId?.trim() && record.authorizationToken?.trim() && Number.isFinite(record.authorizationVersion));
 }
 
+/**
+ * Un CUT solo se envía en uno de los dos ciclos de autorización esperados: confirmado con consumo inmediato,
+ * o intención reclamada con consumo diferido (el backend la consume al aceptar).
+ */
 function isCutSendEligible(record: OperationRecord): boolean {
   return (
     (record.status === "CONFIRMED" && record.physicalStatus === "CONFIRMED" && record.authorizationConsumption !== "deferred") ||
@@ -328,10 +362,12 @@ function leaseToken(item: SyncItem): string {
   return item.leaseToken;
 }
 
+/** El lease pasó a otro dueño o venció: este motor debe dejar de escribir sobre el elemento. */
 function isLeaseFencingError(error: unknown): boolean {
   return error instanceof Error && /fencing token|lease belongs to another owner/i.test(error.message);
 }
 
+/** El recibo confirma solo si coincide en todos los campos que identifican la operación física. */
 function receiptMatches(receipt: unknown, payload: SyncPayload): boolean {
   if (!receipt || typeof receipt !== "object") return false;
   const value = receipt as Partial<SyncPayload> & { operationId?: string };
@@ -349,6 +385,7 @@ function receiptMatches(receipt: unknown, payload: SyncPayload): boolean {
     canonicalJson(value.fieldCapture) === canonicalJson(payload.fieldCapture);
 }
 
+/** JSON con claves ordenadas, para comparar objetos sin depender del orden de propiedades. */
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {

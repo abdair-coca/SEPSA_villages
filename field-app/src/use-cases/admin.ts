@@ -1,3 +1,9 @@
+/**
+ * Casos de uso del administrador: buscar morosos, listar técnicos, crear órdenes (una o en lote) y asignarlas.
+ *
+ * Cada función verifica el permiso de la sesión antes de llamar a la autoridad. La autoridad vuelve a
+ * validar rol, asignación y versión: esta verificación previa no la reemplaza.
+ */
 import type {
   AssignOrderCommand,
   CreateOrderCommand,
@@ -39,6 +45,7 @@ export async function assignOrder(authority: AdminAuthority, session: Session, i
   return authority.assignOrder({ ...input, session });
 }
 
+/** Agrupa los casos de uso del administrador ligados a una autoridad concreta. */
 export function createAdminCases(authority: AdminAuthority, identity: IdentityPort) {
   return {
     findDebtors: (session: Session, query: Omit<DebtorQuery, "session"> = {}) => findDebtors(authority, session, query),

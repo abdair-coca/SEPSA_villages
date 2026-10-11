@@ -1,3 +1,16 @@
+/**
+ * Caso de uso: reconexión (reposición SC08) de una orden con corte confirmado (`executeReconnection`).
+ *
+ * Mismo esquema de seguridad que el corte (ver `process.ts`), con la habilitación provisional del piloto:
+ * 1. Replay por `operationId`: se devuelve o se recupera consultando la habilitación (`lookupExisting`).
+ * 2. Exige orden EJECUTADO/CONFIRMED, DEMORA (`Sin demora` si no hubo) y evidencia o excepción.
+ * 3. Pide habilitación online; cualquier resultado no concluyente registra una visita (no reconecta).
+ * 4. Reclama atómicamente la operación y la orden, consume la habilitación (un solo uso) y, solo si se
+ *    consumió, deja la orden en `RECONEXIÓN`/`CONFIRMED`. Un resultado incierto queda en `PHYSICAL_UNKNOWN`.
+ *
+ * Conserva `effectiveAt`, el nombre histórico del técnico y `demora`, que no se modifican en reintentos.
+ * Contrato `PILOT_PROVISIONAL`: ver `docs/features/synchronization.md` → "Reposición SC08".
+ */
 import {
   assertReconnectionEligible,
   assertOperationId,
@@ -8,7 +21,7 @@ import {
 import { DomainError } from "../domain/errors";
 import type { EvidenceReference, OperationRecord, VisitRecord, WorkOrder } from "../domain/types";
 import type { EnablementAdapter, EnablementGrant, EnablementResponse } from "../ports/authorization";
-import type { AtomicOperationChange, ClaimResult, LocalRepository, StoredRecord } from "../ports/repository";
+import type { AtomicOperationChange, LocalRepository, StoredRecord } from "../ports/repository";
 
 export interface ReconnectionProcessInput {
   repository: LocalRepository;
@@ -24,6 +37,7 @@ export interface ReconnectionProcessInput {
   exceptionReason?: string;
 }
 
+/** Mismos resultados que el corte; ver `CutProcessResult` en `process.ts`. */
 export type ReconnectionResult =
   | { outcome: "visit_recorded"; visit: VisitRecord }
   | { outcome: "executed"; operation: OperationRecord }
@@ -32,6 +46,7 @@ export type ReconnectionResult =
   | { outcome: "blocked"; reason: "NOT_ENABLED" | "ENABLEMENT_UNKNOWN" | "ENABLEMENT_EXPIRED"; operation?: OperationRecord }
   | { outcome: "duplicate"; operation: OperationRecord };
 
+/** Timeout, red o respuesta perdida: no prueban nada y nunca habilitan. */
 function uncertainError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? error.code : undefined;
@@ -85,6 +100,7 @@ function operationChange(operation: OperationRecord, order?: WorkOrder, evidence
   };
 }
 
+/** DEMORA de SC08: obligatoria (o `Sin demora`), máximo 1000 caracteres en el piloto. */
 function reconnectionDelay(input: ReconnectionProcessInput): string {
   const value = input.demora;
   if (!value?.trim()) throw new DomainError("Ingrese una observación de demora o Sin demora.", "RECONNECTION_DEMORA_REQUIRED");
@@ -92,6 +108,7 @@ function reconnectionDelay(input: ReconnectionProcessInput): string {
   return value;
 }
 
+/** Intención de reconexión durable con la habilitación concedida y el nombre histórico del técnico. */
 function operationFromGrant(input: ReconnectionProcessInput, grant: EnablementGrant): OperationRecord {
   const technicianNameSnapshot = grant.technicianNameSnapshot?.trim() ? grant.technicianNameSnapshot : input.technicianNameSnapshot;
   if (!technicianNameSnapshot?.trim()) throw new DomainError("No se pudo conservar el nombre histórico del técnico.", "TECHNICIAN_NAME_REQUIRED");
@@ -135,10 +152,15 @@ function consumeInput(operation: OperationRecord): Parameters<EnablementAdapter[
   };
 }
 
+/** `already_consumed` para la misma operación cuenta como consumida (replay de la misma reconexión). */
 function isConsumed(status: string): boolean {
   return status === "consumed" || status === "already_consumed";
 }
 
+/**
+ * Cierra la reconexión tras consumir la habilitación: operación CONFIRMED y orden `RECONEXIÓN`.
+ * Si la orden local no está en el estado esperado, no se fuerza: queda `PHYSICAL_UNKNOWN` para revisión.
+ */
 async function completeReconnection(input: ReconnectionProcessInput, operation: OperationRecord): Promise<ReconnectionResult> {
   const currentOrder = await input.repository.getOrder(operation.orderId);
   if (!currentOrder || currentOrder.version === undefined || currentOrder.assignedTechnicianId !== operation.technicianId) {
@@ -200,6 +222,10 @@ function isVisitRecord(record: StoredRecord): record is VisitRecord {
   return record.kind === "VISIT" && "reason" in record;
 }
 
+/**
+ * Recupera una reconexión que quedó a medias consultando la habilitación por `operationId`.
+ * Solo completa si se demuestra el consumo; en cualquier otro caso queda incierta (sin reintento físico).
+ */
 async function lookupExisting(input: ReconnectionProcessInput, operation: OperationRecord): Promise<ReconnectionResult> {
   let lookup;
   try {
@@ -226,6 +252,7 @@ async function lookupExisting(input: ReconnectionProcessInput, operation: Operat
   return { outcome: "physical_unknown", operation: uncertain.operation, lookupStatus: lookup.status };
 }
 
+/** La habilitación debe ser para esta orden, técnico, dispositivo, operación y versión, y estar vigente. */
 function grantValid(grant: EnablementGrant, input: ReconnectionProcessInput): boolean {
   return (
     grant.orderId === input.order.orderId &&
@@ -241,6 +268,7 @@ function responseReason(response: EnablementResponse): "NOT_ENABLED" | "ENABLEME
   return response.status === "not_enabled" ? "NOT_ENABLED" : "ENABLEMENT_UNKNOWN";
 }
 
+/** Ejecuta el flujo completo de reconexión descrito al inicio del archivo. */
 export async function executeReconnection(input: ReconnectionProcessInput): Promise<ReconnectionResult> {
   if (!input.operationId.trim()) throw new DomainError("Operation identifier is required.", "OPERATION_ID_REQUIRED");
   assertOperationId(input.operationId);
@@ -330,6 +358,7 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
   return completeReconnection(input, intent);
 }
 
+/** Registra la visita que deja constancia de una reconexión no ejecutada. */
 async function persistVisit(input: ReconnectionProcessInput, visit: VisitRecord): Promise<ReconnectionResult> {
   const result = await input.repository.claimVisit(visitChange(visit, input.evidence));
   if (result.status === "existing") {
@@ -341,6 +370,7 @@ async function persistVisit(input: ReconnectionProcessInput, visit: VisitRecord)
   return { outcome: "visit_recorded", visit };
 }
 
+/** Deja la reconexión en `PHYSICAL_UNKNOWN`; solo toca la orden si está en el estado reclamado esperado. */
 async function persistUnknown(
   input: ReconnectionProcessInput,
   intent: OperationRecord,

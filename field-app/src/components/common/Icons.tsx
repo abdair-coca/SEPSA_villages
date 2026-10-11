@@ -1,3 +1,4 @@
+/** Iconos SVG en línea usados en toda la UI. */
 import type { SVGProps } from "react";
 
 export function IconRefresh({ className = "icon", ...props }: SVGProps<SVGSVGElement>) {

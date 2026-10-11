@@ -1,3 +1,9 @@
+/**
+ * Caso de uso: registrar una visita manual (presencia u observación sin ejecutar corte ni reconexión).
+ *
+ * Funciona sin conexión: valida localmente, guarda la visita y su elemento de cola en una transacción y
+ * la deja pendiente de sincronizar. Reutilizar el mismo `operationId` devuelve la visita existente.
+ */
 import { assertOperationId, assertVisitEligible, createVisit, validateEvidence } from "../domain/policies";
 import { DomainError } from "../domain/errors";
 import type { EvidenceReference, FieldCapture, VisitRecord, WorkOrder } from "../domain/types";
@@ -19,7 +25,7 @@ export interface OfflineVisitInput {
 
 export type OfflineVisitResult = { outcome: "visit_recorded"; visit: VisitRecord } | { outcome: "duplicate"; visit: VisitRecord };
 
-/** Persists a visit and its pending queue item in the repository's atomic transaction. */
+/** Guarda la visita y su elemento de cola pendiente en la transacción atómica del repositorio. */
 export async function executeOfflineVisit(input: OfflineVisitInput): Promise<OfflineVisitResult> {
   assertOperationId(input.operationId);
   assertVisitEligible(input.order, input.technicianId);
@@ -81,6 +87,7 @@ function isVisit(record: StoredRecord): record is VisitRecord {
   return record.kind === "VISIT" && "reason" in record;
 }
 
+/** Un `operationId` reutilizado debe pertenecer a la misma orden, técnico y dispositivo. */
 function assertVisitBinding(record: StoredRecord, input: OfflineVisitInput): void {
   if (record.orderId !== input.order.orderId || record.technicianId !== input.technicianId || record.deviceId !== input.deviceId) {
     throw new Error("Operation identifier is bound to a different visit context.");

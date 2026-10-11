@@ -1,3 +1,7 @@
+/**
+ * Cola de sincronización visible para el técnico: estado, intentos y errores de cada operación. Ofrece
+ * reintentar solo lo que es seguro reintentar; las operaciones inciertas o en revisión humana no se reenvían.
+ */
 import { useState } from "react";
 import type { AppState, AppStore } from "../state/store";
 import type { WorkOrder } from "../domain/types";

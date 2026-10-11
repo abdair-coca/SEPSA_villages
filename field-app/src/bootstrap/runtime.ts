@@ -1,3 +1,10 @@
+/**
+ * Construcción de stores del técnico con sus adaptadores (punto de composición del modo simulado).
+ * - `createDemoAppStore*`: todo simulado, con un paquete de demostración.
+ * - `createAuthenticatedTechnicianStore`: técnico autenticado; usa los adaptadores que recibe (p. ej. el
+ *   cliente HTTP del piloto) o, en modo simulado, autorizaciones respaldadas por la autoridad IndexedDB.
+ * - `SimulatedAuthoritySyncTransport`: "envía" las operaciones a la autoridad simulada.
+ */
 import { IndexedDbAuthorityRepository } from "../adapters/indexeddb/authority-repository";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/mock/authorization";
@@ -31,6 +38,7 @@ export interface DemoValidationAdapters {
   enablement: MockEnablementAdapter;
 }
 
+/** En modo demo, prepara la respuesta de autorización/habilitación que devolverán los adaptadores simulados. */
 export function prepareDemoExternalValidation(
   action: Exclude<ActionKind, "VISIT">,
   order: WorkOrder,
@@ -73,6 +81,7 @@ export function prepareDemoExternalValidation(
   }
 }
 
+/** Paquete de órdenes de demostración. */
 export function createDemoPackage(now = new Date().toISOString()): WorkPackage {
   return createDemoPackageFor(now, DEMO_TECHNICIAN_ID, DEMO_DEVICE_ID);
 }
@@ -118,6 +127,7 @@ export interface AuthenticatedStoreOptions {
   technicianName?: string;
 }
 
+/** Store del técnico autenticado; ver descripción al inicio del archivo. */
 export function createAuthenticatedTechnicianStore(technicianId: string, deviceId: string, options: AuthenticatedStoreOptions = {}): AppStore {
   const connectivity = new MockConnectivity("online");
   const authorizationDelegate = new MockAuthorizationAdapter({ mode: "online" });
@@ -141,6 +151,7 @@ function isEvidenceUploader(value: unknown): value is import("../ports/sync").Ev
   return typeof value === "object" && value !== null && "uploadEvidence" in value && typeof value.uploadEvidence === "function";
 }
 
+/** Transporte que registra las operaciones en la autoridad simulada, con sus mismas validaciones. */
 export class SimulatedAuthoritySyncTransport implements SyncTransport {
   private readonly transport = new MockSyncTransport({ mode: "online" });
   private mode: Parameters<MockSyncTransport["setMode"]>[0] = "online";

@@ -3,6 +3,10 @@
  */
 import type { AppStore } from "./store";
 
+/**
+ * Sincroniza la cola y solo después vuelve a descargar las órdenes asignadas. Si queda algo sin confirmar,
+ * no refresca y lanza un error explicando que los registros siguen guardados en el dispositivo.
+ */
 export async function syncThenRefreshAssigned(store: AppStore, refreshAssigned: () => Promise<void>): Promise<void> {
   const hasPending = store.getSnapshot().syncItems.some((item) => item.status !== "synced");
   if (hasPending) await store.sync();
@@ -16,6 +20,7 @@ export async function syncThenRefreshAssigned(store: AppStore, refreshAssigned: 
   await refreshAssigned();
 }
 
+/** Abre la pestaña de mapa con la orden indicada seleccionada. */
 export function openOrderMap(store: AppStore, orderId?: string): void {
   if (orderId) store.selectOrder(orderId);
   store.setTab("map");

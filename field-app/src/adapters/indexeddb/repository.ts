@@ -1,3 +1,13 @@
+/**
+ * Implementación IndexedDB de `LocalRepository`: el almacenamiento durable del técnico en el dispositivo.
+ *
+ * Cada instancia está limitada a un técnico y un dispositivo (`identityMatches`): las claves incluyen ambos y
+ * cualquier dato de otro alcance se rechaza. Garantías (ver `ports/repository.ts`):
+ * - Registro, orden, cola, evidencia e historial físico se escriben en una sola transacción.
+ * - Las órdenes se actualizan con compare-and-set: la versión esperada debe coincidir y avanzar en 1.
+ * - La identidad de una operación ya registrada no se modifica (`assertHistoricalOperationImmutable`).
+ * - Los cambios de la cola exigen el lease vigente (dueño + token + vencimiento).
+ */
 import type {
   EvidenceReference,
   OperationRecord,
@@ -43,6 +53,7 @@ export interface IndexedDbRepositoryOptions {
   deviceId: string;
 }
 
+/** Repositorio local del técnico. La base por defecto se nombra por técnico y dispositivo. */
 export class IndexedDbLocalRepository implements LocalRepository {
   readonly dbName: string;
   private readonly technicianId: string;
@@ -69,6 +80,12 @@ export class IndexedDbLocalRepository implements LocalRepository {
     await deleteFieldDatabase(this.dbName);
   }
 
+  /**
+   * Guarda un paquete descargado. Rechaza paquetes inválidos, de otro técnico/dispositivo o más viejos que el
+   * último guardado. Al fusionar, **no pisa** órdenes locales con trabajo en curso: versión local igual o
+   * mayor, estado físico distinto de `NONE` o una operación pendiente/en revisión en la cola. En un paquete
+   * más nuevo, borra solo las órdenes que ya no vienen y no tienen trabajo local.
+   */
   async savePackage(workPackage: WorkPackage | WorkPackageEnvelope): Promise<void> {
     const envelope = "package" in workPackage ? workPackage : createSimulatedPackageEnvelope(workPackage);
     if (!isValidSimulatedPackage(envelope)) {
@@ -162,6 +179,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return this.savePackage(workPackage);
   }
 
+  /** Paquete válido más reciente, con el estado local actual de cada orden. */
   async loadAssignedPackage(): Promise<WorkPackage> {
     const db = await this.dbPromise;
     const transaction = db.transaction(["package", "orders"], "readonly");
@@ -252,6 +270,12 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return this.claim(change, expectedOrderVersion);
   }
 
+  /**
+   * Reclamación atómica de un corte o reconexión. En una sola transacción: comprueba que el `operationId` no
+   * exista (si existe devuelve `existing`), que la orden siga en la versión esperada y asignada al técnico,
+   * y escribe registro + orden + cola + evidencia + transición física. Un CUT entra a la cola en
+   * `cutSendPhase: preparing`.
+   */
   private async claim(change: AtomicOperationChange, expectedOrderVersion: number): Promise<ClaimResult> {
     const record = change.operation ?? change.visit;
     if (!record || !change.order) throw new Error("Atomic claim requires record and order.");
@@ -306,6 +330,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return { status: "claimed", record, order: change.order };
   }
 
+  /** Reclamación atómica de una visita; solo actualiza la orden si se pasa con su versión esperada. */
   async claimVisit(change: AtomicOperationChange, expectedOrderVersion?: number): Promise<ClaimResult> {
     const record = change.visit;
     if (!record) throw new Error("Visit claim requires visit.");
@@ -360,6 +385,10 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return { status: "claimed", record, order: change.order };
   }
 
+  /**
+   * Actualiza registro (y opcionalmente orden) en una transacción. Conserva la `cutSendPhase` ya guardada y
+   * añade una transición física si cambió el estado físico.
+   */
   async updateOperationAndOrder(change: AtomicOperationChange, expectedOrderVersion?: number): Promise<void> {
     const record = change.operation ?? change.visit;
     if (!record) throw new Error("Update requires a record.");
@@ -422,6 +451,10 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return items.filter((item) => this.identityMatches(item));
   }
 
+  /**
+   * Toma un elemento de la cola: lo pasa a `syncing` con un lease nuevo (dueño, vencimiento y token aleatorio).
+   * Si otro dueño tiene un lease vigente devuelve `busy`; los sincronizados y los de revisión manual se saltan.
+   */
   async claimSync(operationId: string, owner: string, now: string, leaseMilliseconds: number, options: { allowManualReview?: boolean } = {}): Promise<SyncClaimResult> {
     const db = await this.dbPromise;
     const transaction = db.transaction(["sync", "operations", "visits"], "readwrite");
@@ -472,6 +505,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     const db = await this.dbPromise;
     const transaction = db.transaction(["operations", "visits", "orders", "sync", "physicalTransitions"], "readwrite");
     const syncStore = transaction.objectStore("sync");
+    // Solo el dueño del lease vigente puede cambiar el estado (evita que un proceso vencido pise a otro).
     const current = (await requestResult(syncStore.get(operationId))) as SyncItem | undefined;
     if (!current || !this.identityMatches(current)) {
       transaction.abort();
@@ -502,6 +536,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
         transaction.abort();
         throw new Error("Operation is outside this technician and device scope.");
       }
+      // Recibo remoto válido: confirma la operación física y avanza la orden una sola vez.
       if (options.remoteConfirmed && record.kind !== "VISIT") {
         const confirmedRecord: OperationRecord = { ...record, status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: status, errorCode: undefined, updatedAt: options.now };
         await this.putRecord(transaction, confirmedRecord);
@@ -526,6 +561,11 @@ export class IndexedDbLocalRepository implements LocalRepository {
     await transactionComplete(transaction);
   }
 
+  /**
+   * Último control antes del POST de un CUT, en una transacción: lease vigente, fase `preparing`, sin
+   * incertidumbre ni revisión, ciclo de autorización esperado y todas las fotos verificadas. Si todo se
+   * cumple guarda `send-started`; si no, lanza y el CUT no se envía.
+   */
   async markCutSendStarted(operationId: string, owner: string, leaseToken: string, now: () => string): Promise<void> {
     const db = await this.dbPromise;
     const transaction = db.transaction(["sync", "operations", "evidence"], "readwrite");
@@ -568,6 +608,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     await transactionComplete(transaction);
   }
 
+  /** Ver `LocalRepository.recoverInFlight`. */
   async recoverInFlight(now = new Date().toISOString()): Promise<void> {
     const items = await this.listSyncItems();
     for (const item of items) {
@@ -576,6 +617,10 @@ export class IndexedDbLocalRepository implements LocalRepository {
     }
   }
 
+  /**
+   * Resuelve una operación cuyo resultado no se puede demostrar. Con `lease` la llama el motor dueño; sin
+   * `lease` solo actúa sobre elementos `syncing` con lease vencido (recuperación tras reinicio).
+   */
   async recoverPhysicalUnknown(
     operationId: string,
     now: string,
@@ -605,7 +650,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
       transaction.abort();
       return undefined;
     }
-    // Only the durable pre-send marker proves an expired worker never started CUT.
+    // Solo la marca durable `preparing` prueba que un proceso vencido nunca empezó el POST del CUT: se puede reintentar.
     if (!lease && currentSync.cutSendPhase === "preparing" && !currentSync.uncertain && !currentSync.manualReview && record.kind !== "VISIT" && record.action === "CUT" && record.physicalStatus !== "PHYSICAL_UNKNOWN" && record.status !== "PHYSICAL_UNKNOWN" && (record.physicalStatus !== "CLAIMED" || record.authorizationConsumption === "deferred")) {
       syncStore.put({ ...currentSync, status: "pending", uncertain: false, errorCode: "EVIDENCE_PREPARATION_INTERRUPTED", leaseOwner: undefined, leaseExpiresAt: undefined, leaseToken: undefined, updatedAt: now });
       const nextRecord = { ...record, syncStatus: "pending", errorCode: "EVIDENCE_PREPARATION_INTERRUPTED" } as OperationRecord;
@@ -613,6 +658,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
       await transactionComplete(transaction);
       return nextRecord;
     }
+    // En cualquier otro caso el resultado es incierto; una acción física pendiente pasa a PHYSICAL_UNKNOWN.
     const pendingPhysical = record.kind !== "VISIT" && (record.status === "INTENT_PERSISTED" || record.physicalStatus === "CLAIMED");
     let nextRecord: StoredRecord = { ...record, syncStatus: "failed", errorCode: "RESPONSE_UNKNOWN" } as StoredRecord;
     let nextSync: SyncItem = { ...currentSync, status: "failed", uncertain: true, errorCode: "RESPONSE_UNKNOWN", updatedAt: now };
@@ -655,6 +701,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     await transactionComplete(transaction);
   }
 
+  /** Conserva el conflicto y deja la operación `failed` en revisión manual (no se reenvía). */
   async recordConflictAndFail(conflict: ConflictRecord, operationId: string, owner: string, leaseToken: string, now: string): Promise<void> {
     const db = await this.dbPromise;
     const transaction = db.transaction(["conflicts", "sync", "operations", "visits"], "readwrite");
@@ -684,6 +731,10 @@ export class IndexedDbLocalRepository implements LocalRepository {
     return evidence ? fromStoredEvidence(evidence) : undefined;
   }
 
+  /**
+   * Cambia el estado de subida de una foto. Una foto `verified` no vuelve atrás. Durante una sincronización,
+   * solo el dueño del lease puede cambiarla, y para un CUT solo mientras está en `preparing`.
+   */
   async updateEvidenceUploadState(evidenceId: string, state: NonNullable<EvidenceReference["uploadStatus"]>, errorCode?: string, lease?: { owner: string; leaseToken: string; now: string }): Promise<void> {
     const db = await this.dbPromise;
     const transaction = db.transaction(["evidence", "sync"], "readwrite");
@@ -716,6 +767,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     await transactionComplete(transaction);
   }
 
+  /** Guarda una foto nueva como `pending`. Reutilizar su id con otros datos es un error, no se sobrescribe. */
   private async putEvidence(transaction: IDBTransaction, evidence: EvidenceReference): Promise<void> {
     if (!this.identityMatches(evidence)) throw new Error("Evidence is outside this technician and device scope.");
     const store = transaction.objectStore("evidence");
@@ -727,6 +779,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     if (!current) store.put(toStoredEvidence({ uploadStatus: "pending", ...evidence }, key));
   }
 
+  /** Escribe un registro; para cortes/reconexiones verifica que su identidad histórica no cambie. */
   private async putRecord(transaction: IDBTransaction, record: StoredRecord): Promise<void> {
     const store = transaction.objectStore(record.kind === "VISIT" ? "visits" : "operations");
     if (record.kind !== "VISIT") {
@@ -736,6 +789,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     store.put(record);
   }
 
+  /** Añade una entrada al historial append-only de estados físicos (nunca se edita ni se borra). */
   private appendPhysicalTransition(
     transaction: IDBTransaction,
     record: OperationRecord,
@@ -762,6 +816,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     transaction.objectStore("physicalTransitions").add(transition);
   }
 
+  /** El dato pertenece al técnico y dispositivo de esta instancia. */
   private identityMatches(value: { technicianId?: string; deviceId?: string }): boolean {
     return value.technicianId === this.technicianId && value.deviceId === this.deviceId;
   }

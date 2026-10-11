@@ -1,3 +1,9 @@
+/**
+ * Pantalla del administrador: búsqueda de suministros morosos con filtros, selección (una o varias),
+ * creación y asignación de órdenes a un técnico, ficha de la orden y conteo de trazas de auditoría.
+ * Cada comando lleva un `operationId` único y la versión esperada de la orden; la autoridad
+ * (`ports/authority.ts`) valida permisos y conflictos, y la pantalla solo muestra el resultado.
+ */
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   generateOperationId,
@@ -525,7 +531,6 @@ export function AdminOrderDetail({ order, onAssign }: { order?: WorkOrder; onAss
   const [copiedReference, setCopiedReference] = useState(false);
   if (!order) return null;
   const context = order.context;
-  const customerName = context?.customerName ?? order.accountId ?? "Suministro";
   const reference = order.cuc ?? order.orderId;
   const assignedTechnician = order.assignedTechnicianName ?? (order.assignedTechnicianId ? "Técnico asignado" : "Sin asignar");
   const headerStatus = orderDomainStatusLabel(order.status);

@@ -1,3 +1,4 @@
+/** Controles anterior/siguiente con indicador "página X de Y". */
 export interface PaginationControlsProps {
   page: number;
   totalPages: number;

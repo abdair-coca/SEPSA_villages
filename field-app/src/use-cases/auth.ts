@@ -1,3 +1,4 @@
+/** Casos de uso de autenticación: iniciar sesión y verificar un permiso. */
 import type { AuthorizedAction, DemoCredentials, Session } from "../domain/types";
 import type { IdentityPort } from "../ports/identity";
 

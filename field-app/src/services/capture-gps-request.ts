@@ -1,4 +1,7 @@
-/** Owns the browser GPS request used by the capture wizard. */
+/**
+ * Petición de GPS del navegador para el asistente de captura. Cada nueva petición invalida la anterior,
+ * para que una respuesta tardía no sobrescriba una ubicación más reciente.
+ */
 export function createCaptureGpsRequest() {
   let generation = 0;
   let timeout: ReturnType<typeof setTimeout> | undefined;

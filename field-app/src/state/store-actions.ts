@@ -1,8 +1,12 @@
+/**
+ * Acciones de campo del store: registrar visita, ejecutar corte y reconexión, y borradores de captura.
+ * Prepara la evidencia, llama al caso de uso correspondiente y convierte su resultado para la UI.
+ * La confirmación al técnico solo se muestra después de que el caso de uso guardó todo localmente.
+ */
 import { executeCut as runCut, type CutProcessResult } from "../use-cases/process";
 import { executeOfflineVisit, type OfflineVisitResult } from "../use-cases/visit";
 import { executeReconnection as runReconnection, type ReconnectionResult } from "../use-cases/reconnection";
-import { generateOperationId, type FieldCapture, type WorkOrder } from "../domain/types";
-import type { CaptureDraftKey, StoredRecord } from "../ports/repository";
+import { generateOperationId, type WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
 import { prepareEvidence } from "./evidence";
 import type { ActionInput, ActionResult, AppState, AppStoreDependencies } from "./store";

@@ -1,3 +1,13 @@
+/**
+ * Esquema IndexedDB de la app de campo. Cada almacén guarda una entidad por su clave:
+ * - `package`: paquetes de trabajo descargados · `orders`: órdenes del paquete (con su versión local).
+ * - `operations` / `visits`: registros de cortes/reconexiones y de visitas, por `operationId`.
+ * - `evidence`: fotos (bytes + hash) · `sync`: cola de sincronización, por `operationId`.
+ * - `conflicts`: conflictos conservados · `drafts`: borradores de captura.
+ * - `physicalTransitions`: historial append-only de cambios de estado físico.
+ *
+ * Al subir `FIELD_DB_VERSION` solo se crean almacenes nuevos; nunca se borran datos existentes.
+ */
 export const FIELD_DB_VERSION = 3;
 export const FIELD_STORES = [
   "package",
@@ -13,6 +23,7 @@ export const FIELD_STORES = [
 
 export type FieldStoreName = (typeof FIELD_STORES)[number];
 
+/** Convierte una petición IndexedDB en promesa. */
 export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -20,6 +31,7 @@ export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+/** Resuelve cuando la transacción se confirma; rechaza si falla o se aborta (nada se escribe). */
 export function transactionComplete(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();

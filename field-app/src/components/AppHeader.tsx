@@ -1,3 +1,8 @@
+/**
+ * Encabezado común de Admin y Técnico: marca, estado (red/entorno), avatar y menú de cuenta con cambio de rol
+ * y cierre de sesión. Variante `standard` (inicio y admin) o `minimal` (pantallas secundarias del técnico).
+ * Solo presenta; no contiene reglas de autorización (ver `docs/ARCHITECTURE.md`).
+ */
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { BrandLockup } from "./common/BrandLockup";
 

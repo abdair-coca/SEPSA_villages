@@ -1,3 +1,7 @@
+/**
+ * Reintentos con timeout para los adaptadores simulados. Cada intento se aborta al vencer su timeout antes
+ * de empezar el siguiente, para no tener dos peticiones en vuelo a la vez.
+ */
 import { ResponseLostError, TimeoutError } from "../../ports/authorization";
 
 export interface RetryPolicy {

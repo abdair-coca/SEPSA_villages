@@ -1,3 +1,4 @@
+/** Aviso no intrusivo (éxito, información, advertencia o error) anunciado a lectores de pantalla. */
 import type { ReactNode } from "react";
 import { IconAlertTriangle, IconBan, IconCheckCircle, IconInfo } from "./Icons";
 

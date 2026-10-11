@@ -1,3 +1,7 @@
+/**
+ * Caso de uso: descargar el paquete de órdenes asignadas al técnico para su dispositivo.
+ * `knownVersion` permite al backend responder solo si hay una versión más nueva.
+ */
 import type { Session, WorkPackageEnvelope } from "../domain/types";
 import type { IdentityPort } from "../ports/identity";
 import type { OperationsAuthorityPort } from "../ports/authority";

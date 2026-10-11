@@ -1,3 +1,9 @@
+/**
+ * Pantalla del técnico (jornada de campo). Lee el estado del store (`state/store.ts`) y tiene cuatro
+ * pestañas: inicio (resumen y próxima orden), órdenes (búsqueda y filtros), mapa y cola de sincronización.
+ * Al abrir una orden muestra `OrderDetail`, desde donde se registran visita, corte o reconexión.
+ * No contiene reglas de negocio: elegibilidad y autorización viven en `domain/` y `use-cases/`.
+ */
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { AppMessage, AppStore, AppState, OrderFilter } from "../state/store";
 import { selectVisibleOrders } from "../state/store";

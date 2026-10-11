@@ -1,3 +1,7 @@
+/**
+ * Preparación de la foto de evidencia: la optimiza (≤ 5 MP, JPEG/PNG), calcula su SHA-256 y la liga a
+ * orden, operación, técnico y dispositivo. Si recibe una foto ya preparada, recalcula el hash y lo compara.
+ */
 import { DomainError } from "../domain/errors";
 import { generateOperationId, type EvidenceReference, type WorkOrder } from "../domain/types";
 

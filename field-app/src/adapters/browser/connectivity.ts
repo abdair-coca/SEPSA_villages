@@ -1,3 +1,8 @@
+/**
+ * Conectividad real del navegador. Combina `navigator.onLine` con una sonda periódica (HEAD a `probeUrl`):
+ * respuesta rápida → `online`; lenta (≥ `weakThresholdMs`) o error del servidor → `weak`; sin respuesta → `offline`.
+ * Las pantallas se suscriben para mostrar el estado de red; la conectividad nunca autoriza un corte.
+ */
 import type { ConnectivityMode } from "../../domain/types";
 import type { ConnectivityPort } from "../../ports/connectivity";
 

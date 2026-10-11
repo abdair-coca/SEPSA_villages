@@ -1,3 +1,4 @@
+/** Formas (DTO) de las respuestas del backend piloto, en snake_case tal como llegan por HTTP. */
 import type { BatchOrderSkip } from "../../domain/types";
 
 export interface PilotLoginResponseDto { session_id: string; expires_at: string; user: { user_id: string; username: string; display_name: string; role: "ADMIN" | "TECHNICIAN"; roles?: Array<"ADMIN" | "TECHNICIAN"> }; }

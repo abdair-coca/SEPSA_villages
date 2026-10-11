@@ -1,3 +1,13 @@
+/**
+ * Autoridad simulada en IndexedDB: hace de backend cuando la app corre sin `VITE_PILOT_BACKEND_URL`.
+ * Implementa `IdentityPort` y `OperationsAuthorityPort` con las mismas reglas que debe cumplir el backend:
+ * - Cada comando verifica la sesión y el permiso del rol (`requireAction`).
+ * - Los comandos son idempotentes por `operationId`: mismo id y mismos datos devuelven el resultado guardado;
+ *   mismo id con otros datos es `IDEMPOTENCY_CONFLICT`.
+ * - La asignación exige la versión esperada de la orden (sin last-write-wins) y queda auditada con antes/después.
+ * - La autorización técnica exige orden asignada, versión vigente, dispositivo vinculado al técnico y estado elegible.
+ * Los datos y credenciales son simulados; no es la fuente oficial de SEPSA.
+ */
 import { DomainError } from "../../domain/errors";
 import {
   assertCan,
@@ -82,6 +92,7 @@ export const SIMULATED_CREDENTIALS = {
   diego: { username: "diego.simulated", password: "SIMULATED-diego-003" },
 } as const satisfies Record<string, DemoCredentials>;
 
+/** Autoridad simulada; ver descripción al inicio del archivo. */
 export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAuthorityPort {
   readonly dbName: string;
   private readonly dbPromise: Promise<IDBDatabase>;
@@ -197,6 +208,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     return technicians.map((technician) => structuredClone(technician));
   }
 
+  /** Crea una orden GENERADO sin técnico. Rechaza si la cuenta ya tiene una orden no anulada del mismo propósito. */
   async createOrder(input: CreateOrderCommand): Promise<WorkOrder> {
     const session = await this.requireAction(input.session, "CREATE_ORDER");
     const db = await this.dbPromise;
@@ -287,6 +299,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     return structuredClone(result);
   }
 
+  /** Asigna una orden GENERADO a un técnico habilitado si la versión esperada coincide; avanza la versión en 1. */
   async assignOrder(input: AssignOrderCommand): Promise<WorkOrder> {
     const session = await this.requireAction(input.session, "ASSIGN_ORDER");
     if (!Number.isFinite(input.expectedOrderVersion)) throw new DomainError("Expected order version is required.", "ORDER_VERSION_REQUIRED");
@@ -475,6 +488,10 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     await transactionComplete(transaction);
   }
 
+  /**
+   * Reserva una autorización técnica (corte o reconexión) ligada a operación, orden, técnico, dispositivo y
+   * versión. Cualquier fallo inesperado devuelve `unknown`, que nunca autoriza.
+   */
   async authorizeTechnicalOrder(input: TechnicalOrderAuthorizationInput): Promise<TechnicalOrderAuthorizationResult> {
     if (!Number.isFinite(input.orderVersion)) return { status: "not_authorized", errorCode: "ORDER_VERSION_REQUIRED" };
     if (!input.deviceId.trim()) return { status: "not_authorized", errorCode: "DEVICE_ID_REQUIRED" };
@@ -559,7 +576,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
   }
 
   async listAudit(query: { orderId?: string; includeRejected?: boolean; session?: Session } = {}): Promise<AuditEvent[]> {
-    const session = await this.requireAction(query.session, "VIEW_AUDIT");
+    await this.requireAction(query.session, "VIEW_AUDIT");
     const db = await this.dbPromise;
     const transaction = db.transaction("audit", "readonly");
     const events = (await requestResult(transaction.objectStore("audit").getAll())) as AuditEvent[];

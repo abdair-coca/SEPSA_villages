@@ -1,3 +1,14 @@
+/**
+ * Raíz de la aplicación: decide el modo, la sesión y qué pantalla mostrar.
+ *
+ * Modos:
+ * - **Backend piloto** (hay URL de backend, ver `resolvePilotBackendUrl`): `HttpPilotClient` hace de autoridad,
+ *   autorización, habilitación y transporte (`ConnectedApp`).
+ * - **Simulado** (sin URL): `IndexedDbAuthorityRepository` hace de backend local con datos de demostración.
+ *
+ * Según el rol de la sesión muestra `OperationsApp` (ADMIN) o la jornada del técnico (`TechnicianRuntime`,
+ * que descarga el paquete y crea el store). En móvil, el botón atrás pide confirmación antes de salir.
+ */
 import { useEffect, useRef, useState } from "react";
 import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "./bootstrap/runtime";
 import { createUnavailableAppStore } from "./state/store";
@@ -28,6 +39,7 @@ interface MobileBackNavigationGuard {
   dispose: () => void;
 }
 
+/** Componente raíz. */
 export function App() {
   const [session, setSession] = useState<Session | undefined>(() => readStoredSession());
   const [isExitConfirmationOpen, setIsExitConfirmationOpen] = useState(false);
@@ -83,6 +95,10 @@ export function App() {
   </>;
 }
 
+/**
+ * En pantallas móviles, intercepta el botón atrás del navegador para pedir confirmación antes de salir
+ * (y no perder la jornada por un toque accidental). En escritorio no hace nada.
+ */
 export function installMobileBackNavigationGuard(target: Window, onRequestExit: () => void): MobileBackNavigationGuard | undefined {
   if (!target.matchMedia("(max-width: 760px)").matches) return undefined;
 
@@ -114,6 +130,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Modo backend piloto: valida la sesión guardada contra el backend y permite cambiar de rol. */
 function ConnectedApp({ authority, session, onAuthenticated, onLogout }: { authority: IdentityPort & OperationsAuthorityPort & HttpPilotClient; session?: Session; onAuthenticated: (session: Session) => void; onLogout: () => void }) {
   const [switching, setSwitching] = useState(false);
   const [checkingSession, setCheckingSession] = useState(Boolean(session));
@@ -176,6 +193,10 @@ function ConnectedApp({ authority, session, onAuthenticated, onLogout }: { autho
   return <TechnicianRuntime authority={authority} session={session} onLogout={logout} roleSwitch={roleSwitch} remote />;
 }
 
+/**
+ * Jornada del técnico: descarga el paquete asignado, crea el store con los adaptadores del modo actual y
+ * refresca las órdenes asignadas cada 30 s.
+ */
 function TechnicianRuntime({ authority, session, onLogout, roleSwitch, remote = false }: { authority: IdentityPort & OperationsAuthorityPort; session: Session; onLogout: () => void; roleSwitch?: AppHeaderRoleSwitch; remote?: boolean }) {
   const [store, setStore] = useState<ReturnType<typeof createAuthenticatedTechnicianStore>>();
   const [refreshAssigned, setRefreshAssigned] = useState<(() => Promise<void>)>();
@@ -229,6 +250,10 @@ function TechnicianRuntime({ authority, session, onLogout, roleSwitch, remote = 
   return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection onRefreshAssigned={refreshAssigned} onLogout={onLogout} roleSwitch={roleSwitch} />;
 }
 
+/**
+ * Descarga el paquete asignado y lo guarda. Si no hay red, abre el último paquete guardado en el dispositivo
+ * para poder trabajar sin conexión; cualquier otro error se muestra.
+ */
 async function loadPackage(authority: IdentityPort & OperationsAuthorityPort, session: Session, deviceId: string, repository: IndexedDbLocalRepository): Promise<WorkPackageEnvelope> {
   try {
     const knownVersion = await repository.latestPackageVersion();
@@ -245,6 +270,7 @@ async function loadPackage(authority: IdentityPort & OperationsAuthorityPort, se
   }
 }
 
+/** Identificador estable de este dispositivo, generado una vez y guardado en `localStorage`. */
 function getStableDeviceId(): string {
   const storageKey = "sepsa.simulated.device-id";
   if (typeof localStorage === "undefined") throw new Error("No se pudo identificar este dispositivo.");
@@ -262,6 +288,10 @@ function isValidFutureDate(value?: string): boolean {
   return Number.isFinite(timestamp) && timestamp > Date.now();
 }
 
+/**
+ * URL del backend piloto: `VITE_PILOT_BACKEND_URL` si está definida; en producción (fuera de localhost),
+ * el mismo origen de la página. En desarrollo sin variable, modo simulado.
+ */
 function resolvePilotBackendUrl(): string | undefined {
   const configured = import.meta.env.VITE_PILOT_BACKEND_URL?.trim();
   if (configured) return configured;

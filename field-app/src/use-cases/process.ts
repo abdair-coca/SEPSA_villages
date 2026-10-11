@@ -1,3 +1,18 @@
+/**
+ * Caso de uso: ejecutar un corte físico (`executeCut`).
+ *
+ * Flujo (ver `docs/features/cuts.md`):
+ * 1. Si el `operationId` ya existe, es un replay: se devuelve o se recupera el registro existente; nunca
+ *    se pide otra autorización ni se crea un segundo corte.
+ * 2. Valida evidencia y captura de campo. Si la captura está incompleta, registra una visita (no corta).
+ * 3. Pide autorización online inmediatamente antes de cortar. Timeout, respuesta perdida, `unknown`,
+ *    rechazo o autorización vencida/de otra operación → registra una visita bloqueada (no corta).
+ * 4. Reclama atómicamente la operación y la orden (`CLAIMED`) con compare-and-set de versión.
+ * 5. Consume la autorización (si es `immediate`). Solo `consumed` confirma el corte (`EJECUTADO`/`CONFIRMED`).
+ *    Una respuesta incierta deja la orden en `PHYSICAL_UNKNOWN` para revisión humana, sin reintento físico.
+ *
+ * Todo resultado queda guardado localmente y encolado antes de devolverse a la UI.
+ */
 import {
   assertCutEligible,
   assertOperationId,
@@ -36,6 +51,7 @@ export interface CutProcessInput {
   fieldCapture?: FieldCapture;
 }
 
+/** Motivo por el que un corte no se ejecutó; queda registrado en la visita resultante. */
 export type CutBlockReason =
   | "AUTHORIZATION_TIMEOUT"
   | "AUTHORIZATION_UNKNOWN"
@@ -46,6 +62,14 @@ export type CutBlockReason =
   | "ORDER_CLAIM_CONFLICT"
   | "FIELD_CAPTURE_INCOMPLETE";
 
+/**
+ * Resultado del intento de corte:
+ * - `visit_recorded`: no se cortó; quedó una visita con el motivo.
+ * - `executed`: corte confirmado (autorización consumida).
+ * - `pending_sync`: corte reclamado con autorización de consumo diferido; se confirma al sincronizar.
+ * - `physical_unknown` / `recovery_required`: resultado incierto; requiere revisión y no se repite.
+ * - `blocked`: la autorización se rechazó al consumirla. `duplicate`: el `operationId` ya estaba resuelto.
+ */
 export type CutProcessResult =
   | { outcome: "visit_recorded"; visit: VisitRecord; order?: WorkOrder }
   | { outcome: "executed"; operation: OperationRecord }
@@ -55,6 +79,7 @@ export type CutProcessResult =
   | { outcome: "blocked"; reason: CutBlockReason; operation?: OperationRecord }
   | { outcome: "duplicate"; operation: OperationRecord };
 
+/** Errores que no prueban ni éxito ni fracaso (timeout, red, respuesta perdida). Nunca autorizan. */
 function uncertainError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? error.code : undefined;
@@ -70,6 +95,7 @@ function uncertainError(error: unknown): boolean {
   );
 }
 
+/** Agrupa operación, orden, elemento de cola y evidencia para escribirlos en una sola transacción. */
 function operationChange(
   operation: OperationRecord,
   order: WorkOrder | undefined,
@@ -112,6 +138,7 @@ function visitChange(visit: VisitRecord, order?: WorkOrder, evidence?: EvidenceR
   };
 }
 
+/** Intención de corte durable (`CLAIMED`) con la autorización concedida, antes de consumirla. */
 function createIntent(
   input: CutProcessInput,
   grant: AuthorizationGrant,
@@ -141,6 +168,7 @@ function createIntent(
   };
 }
 
+/** Visita que deja constancia de un corte no ejecutado y su motivo. */
 function createVisitFor(
   input: CutProcessInput,
   reason: CutBlockReason,
@@ -170,6 +198,10 @@ function responseBlockReason(response: AuthResponse): CutBlockReason {
   }
 }
 
+/**
+ * La autorización debe ser exactamente para esta orden, técnico, dispositivo, operación y versión de la
+ * orden, y no estar vencida. Una autorización válida para otro contexto no sirve.
+ */
 function grantIsValid(grant: AuthorizationGrant, input: CutProcessInput): boolean {
   return (
     grant.orderId === input.order.orderId &&
@@ -181,6 +213,7 @@ function grantIsValid(grant: AuthorizationGrant, input: CutProcessInput): boolea
   );
 }
 
+/** Un `operationId` reutilizado debe pertenecer al mismo contexto de corte; si no, es un error de programación o un ataque. */
 function assertReplayBinding(existing: StoredRecord, input: CutProcessInput): void {
   const validKind = existing.kind === "CUT" || (isVisit(existing) && existing.attemptedAction === "CUT");
   if (
@@ -203,6 +236,7 @@ function requireOrderVersion(order: WorkOrder): number {
   return order.version;
 }
 
+/** Nueva versión de la orden con el estado indicado; la versión local avanza en 1 (compare-and-set). */
 function claimOrder(order: WorkOrder, status: WorkOrder["status"], physicalStatus: WorkOrder["physicalStatus"]): WorkOrder {
   const version = requireOrderVersion(order);
   return {
@@ -239,6 +273,11 @@ async function recordVisit(
   return claimedVisitResult(result, input);
 }
 
+/**
+ * Recupera un corte que quedó a medias (por ejemplo, la app se cerró tras reclamarlo). Como no se puede
+ * demostrar si el corte físico ocurrió, se marca `PHYSICAL_UNKNOWN` y se consulta el estado remoto;
+ * nunca se vuelve a pedir autorización ni a cortar.
+ */
 async function recoverExisting(
   input: CutProcessInput,
   existing: OperationRecord,
@@ -275,6 +314,7 @@ async function recoverExisting(
   return { outcome: "recovery_required", operation: existing, lookupStatus: lookup.status };
 }
 
+/** Deja operación y orden en `PHYSICAL_UNKNOWN` (revisión humana) y consulta el estado remoto. */
 async function recordPhysicalUnknown(
   input: CutProcessInput,
   intent: OperationRecord,
@@ -327,10 +367,12 @@ function isOrderVersionConflict(error: unknown): boolean {
   );
 }
 
+/** Ejecuta el flujo completo de corte descrito al inicio del archivo. */
 export async function executeCut(input: CutProcessInput): Promise<CutProcessResult> {
   if (!input.operationId.trim()) throw new DomainError("Operation identifier is required.", "OPERATION_ID_REQUIRED");
   assertOperationId(input.operationId);
 
+  // Replay: el mismo operationId nunca genera un segundo corte ni una segunda autorización.
   const existing = await input.repository.getRecord(input.operationId);
   if (existing) {
     assertReplayBinding(existing, input);
@@ -359,6 +401,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
   assertCutEligible(input.order, input.technicianId);
   const expectedOrderVersion = requireOrderVersion(input.order);
 
+  // Autorización online inmediatamente antes de cortar. Cualquier resultado no concluyente bloquea el corte.
   let authorizationResponse: AuthResponse;
   try {
     authorizationResponse = await input.authorization.requestCut({
@@ -403,6 +446,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     operationChange(intent, claimOrder(input.order, "GENERADO", "CLAIMED"), input.evidence),
     expectedOrderVersion,
   );
+  // La reclamación es atómica: si otra operación cambió la orden, no se corta.
   const claimState = handleClaimResult(claim, input);
   if (claimState.kind === "existing") {
     if (isVisit(claimState.record)) return { outcome: "visit_recorded", visit: claimState.record };
@@ -417,6 +461,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
   }
 
   const claimedOrder = claimState.order;
+  // Consumo diferido (backend piloto): la autorización se consume cuando el backend acepta la operación.
   if (authorizationResponse.grant.consumption === "deferred") {
     return { outcome: "pending_sync", operation: intent };
   }
@@ -470,6 +515,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     return { outcome: "blocked", reason: "NOT_AUTHORIZED", operation: blockedOperation };
   }
 
+  // Ya consumida: no se puede saber si fue por esta ejecución; se trata como incierto.
   if (consumeResponse.status === "already_consumed") {
     return recordPhysicalUnknown(
       input,

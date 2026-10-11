@@ -1,3 +1,7 @@
+/**
+ * Caché de teselas del mapa para trabajar sin conexión: calcula las teselas que cubren las órdenes de la ruta
+ * y las guarda en Cache Storage (`MAP_CACHE_NAME`).
+ */
 import type { WorkOrder } from "../domain/types";
 
 export const MAP_CACHE_NAME = "sepsa-map-tiles-v1";

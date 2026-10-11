@@ -1,3 +1,8 @@
+/**
+ * Sincronización desde el store. Evita dos sincronizaciones simultáneas (`syncInFlight`), no hace nada sin
+ * conexión útil (la cola se conserva) y antes de sincronizar intenta recuperar reconexiones que quedaron a
+ * medias. Un fallo nunca borra operaciones: solo deja un aviso.
+ */
 import { executeReconnection as runReconnection } from "../use-cases/reconnection";
 import { SyncEngine } from "../use-cases/sync";
 import type { AppState, AppStoreDependencies } from "./store";
@@ -80,7 +85,7 @@ export function createSyncCoordinator(context: SyncCoordinatorContext): SyncCoor
           exceptionReason: record.exceptionReason,
         });
       } catch {
-        // Keep the operation durable and uncertain; recovery never invents success.
+        // La operación sigue guardada e incierta; la recuperación nunca inventa un éxito.
       }
     }
   }

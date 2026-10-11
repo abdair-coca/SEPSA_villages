@@ -3,6 +3,7 @@ import type { RemoteResult } from "../../ports/authorization";
 import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
 import { NetworkUnknownError, type RetryPolicy, withRetries } from "./retry";
 
+/** Transporte de sincronización simulado: registra lo enviado y devuelve respuestas configurables. */
 export class MockSyncTransport implements SyncTransport {
   readonly simulation = "DEMO_ONLY_NO_SEPSA_ENDPOINT" as const;
   readonly sent: SyncPayload[] = [];

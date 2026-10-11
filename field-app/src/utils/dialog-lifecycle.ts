@@ -1,3 +1,7 @@
+/**
+ * Manejo de foco y teclado de diálogos: controles enfocables, Tab cíclico, Escape para cerrar y retorno del foco.
+ * Incluye las variantes del mapa a pantalla completa.
+ */
 export interface DialogCloseOptions {
   onClose: () => void;
   closeDisabled?: boolean;

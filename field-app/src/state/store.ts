@@ -1,3 +1,17 @@
+/**
+ * Store de la app de campo del técnico (`createAppStore`): estado que leen las pantallas y acciones que
+ * disparan los casos de uso. Se usa con `useSyncExternalStore` (subscribe / getSnapshot).
+ *
+ * Está repartido en archivos por responsabilidad:
+ * - `store.ts`: tipos del estado, carga/refresco del paquete local y selección/filtros.
+ * - `store-actions.ts`: visita, corte y reconexión (llama a `use-cases/` y guarda borradores).
+ * - `store-sync.ts`: sincronización de la cola y recuperación de reconexiones pendientes.
+ * - `store-results.ts`: traduce resultados de los casos de uso a resultados y mensajes para la UI.
+ * - `evidence.ts`: prepara la foto (optimización y SHA-256) antes de guardarla.
+ *
+ * Flujo de una acción: pantalla → `store.executeCut` → `use-cases/process.ts` (guarda local y encola)
+ * → `store-results` arma el mensaje → si hay conexión, `store-sync` intenta sincronizar.
+ */
 import { DomainError } from "../domain/errors";
 import type {
   EvidenceReference,
@@ -14,9 +28,7 @@ import type { SyncItem, EvidenceUploadPort } from "../ports/sync";
 import { metadataOnlyEvidence, type EvidenceDraft } from "./evidence";
 import { createActionCoordinator } from "./store-actions";
 import { createSyncCoordinator } from "./store-sync";
-import { formatSyncMessage, readableError } from "./store-results";
-
-export { formatSyncMessage } from "./store-results";
+import { readableError } from "./store-results";
 
 export type { EvidenceDraft } from "./evidence";
 
@@ -25,9 +37,11 @@ export const DEMO_DEVICE_ID = "device-rugged-01";
 export const DEMO_PACKAGE_ID = "demo-field-package-v1";
 export const DEMO_SIMULATION_LABEL = "Simulación, sin conexión a SEPSA";
 
+/** Filtro de la lista de órdenes; `REVIEW` muestra las que están en `PHYSICAL_UNKNOWN`. */
 export type OrderFilter = "ALL" | WorkOrder["status"] | "REVIEW";
 export type AppTab = "home" | "orders" | "map" | "queue";
 
+/** Datos que la pantalla de captura entrega al store para registrar una acción. */
 export interface ActionInput {
   evidence?: EvidenceDraft;
   file?: File;
@@ -44,6 +58,7 @@ export interface AppMessage {
   transient?: boolean;
 }
 
+/** Resultado para la UI: `confirmed` por el servidor, `saved` solo local, `blocked` (no se ejecutó) o `review`. */
 export type ActionResultOutcome = "confirmed" | "saved" | "blocked" | "review";
 
 export interface ActionResult {
@@ -57,6 +72,7 @@ export interface ActionResult {
   reason?: string;
 }
 
+/** Estado completo que leen las pantallas del técnico. */
 export interface AppState {
   status: "loading" | "ready" | "error";
   error?: string;
@@ -74,11 +90,13 @@ export interface AppState {
   lastRefreshAt?: string;
 }
 
+/** Registro local de una orden con sus fotos, para mostrar la actividad. */
 export interface ActivityEntry {
   record: StoredRecord;
   evidence: EvidenceReference[];
 }
 
+/** Adaptadores que necesita el store; `bootstrap/runtime.ts` los arma según el modo (simulado o piloto). */
 export interface AppStoreDependencies {
   repository: LocalRepository;
   authorization: AuthorizationAdapter;
@@ -96,6 +114,7 @@ export interface AppStoreDependencies {
 
 export type PrepareExternalValidation = (action: Exclude<ActionKind, "VISIT">, order: WorkOrder, operationId: string, now: string) => void;
 
+/** API del store que usan las pantallas. */
 export interface AppStore {
   subscribe(listener: () => void): () => void;
   getSnapshot(): AppState;
@@ -119,6 +138,7 @@ interface SeedableRepository extends LocalRepository {
   savePackage(workPackage: WorkPackage): Promise<void>;
 }
 
+/** Crea el store del técnico; `init()` carga el paquete local antes de permitir acciones. */
 export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   const now = dependencies.now ?? (() => new Date().toISOString());
   const technicianId = dependencies.technicianId ?? DEMO_TECHNICIAN_ID;
@@ -353,6 +373,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   return store;
 }
 
+/** Store de reemplazo cuando no hay IndexedDB: muestra el error y no permite registrar nada. */
 export function createUnavailableAppStore(): AppStore {
   const snapshot: AppState = { status: "error", error: "IndexedDB no está disponible en este dispositivo.", orders: [], syncItems: [], activity: [], selectedOrderId: null, query: "", filter: "ALL", tab: "home", mode: "offline" };
   return {
@@ -375,6 +396,7 @@ export function createUnavailableAppStore(): AppStore {
   };
 }
 
+/** Órdenes que coinciden con la búsqueda (cuenta, medidor, cliente, ruta…) y el filtro activos. */
 export function selectVisibleOrders(state: AppState): WorkOrder[] {
   const query = state.query.trim().toLocaleLowerCase();
   return state.orders.filter((order) => {
@@ -397,6 +419,7 @@ export function selectVisibleOrders(state: AppState): WorkOrder[] {
   });
 }
 
+/** El paquete local debe ser de este técnico y dispositivo y contener solo órdenes asignadas a él. */
 function assertPackageScope(workPackage: WorkPackage, dependencies: AppStoreDependencies): void {
   if (workPackage.technicianId !== (dependencies.technicianId ?? DEMO_TECHNICIAN_ID) || workPackage.deviceId !== (dependencies.deviceId ?? DEMO_DEVICE_ID)) throw new Error("El paquete local pertenece a otra identidad.");
   if (!Number.isFinite(workPackage.version) || workPackage.version < 1) throw new Error("El paquete local no tiene una versión válida.");

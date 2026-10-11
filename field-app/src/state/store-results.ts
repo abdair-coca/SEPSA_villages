@@ -1,6 +1,10 @@
+/**
+ * Traduce los resultados de los casos de uso (visita, corte, reconexión) a `ActionResult` y mensajes en
+ * español para la UI. Distingue guardado local, confirmado, bloqueado e incierto; nunca presenta un
+ * resultado local como confirmado por el servidor.
+ */
 import { DomainError } from "../domain/errors";
-import type { ConnectivityMode, WorkOrder } from "../domain/types";
-import type { SyncItem } from "../ports/sync";
+import type { ConnectivityMode } from "../domain/types";
 import type { CutProcessResult } from "../use-cases/process";
 import type { OfflineVisitResult } from "../use-cases/visit";
 import type { ReconnectionResult } from "../use-cases/reconnection";

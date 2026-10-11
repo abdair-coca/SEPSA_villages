@@ -1,8 +1,8 @@
 import type { WorkPackage, WorkPackageEnvelope } from "../../domain/types";
 
 /**
- * Demonstration-only trust marker. This is not cryptographic authenticity.
- * Replace with SEPSA signature/checksum contract when that contract exists.
+ * Marca de confianza solo para demostración: no es autenticidad criptográfica.
+ * Reemplazar por el contrato de firma/checksum de SEPSA cuando exista.
  */
 export function simulatedPackageChecksum(workPackage: WorkPackage): string {
   const canonical = JSON.stringify({
@@ -21,6 +21,7 @@ export function simulatedPackageChecksum(workPackage: WorkPackage): string {
   return `SIMULATED-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
+/** Envuelve un paquete simulado con su checksum para que `savePackage` pueda validarlo. */
 export function createSimulatedPackageEnvelope(workPackage: WorkPackage): WorkPackageEnvelope {
   return {
     packageId: workPackage.packageId,
@@ -32,6 +33,7 @@ export function createSimulatedPackageEnvelope(workPackage: WorkPackage): WorkPa
   };
 }
 
+/** El paquete está marcado como simulado válido y su checksum coincide con el contenido. */
 export function isValidSimulatedPackage(envelope: WorkPackageEnvelope): boolean {
   if (!envelope || !envelope.package || !Array.isArray(envelope.package.orders)) return false;
   return (

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { assignOrder, createOrder, createOrdersBatch, findDebtors } from "../../use-cases/admin";
 import { downloadAssigned } from "../../use-cases/download";
 import { login } from "../../use-cases/auth";
-import type { AssignOrderCommand, CreateOrderCommand, OperationRecord, WorkOrder } from "../../domain/types";
+import type { AssignOrderCommand, CreateOrderCommand, OperationRecord } from "../../domain/types";
 import { IndexedDbAuthorityRepository } from "./authority-repository";
 import { deleteAuthorityDatabase, openAuthorityDatabase } from "./authority-database";
 import { requestResult, transactionComplete } from "./database";

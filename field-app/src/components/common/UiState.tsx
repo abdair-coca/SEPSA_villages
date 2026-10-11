@@ -1,3 +1,4 @@
+/** Tarjetas de estado (cargando, vacío, error) con acción opcional. */
 import type { ComponentPropsWithoutRef } from "react";
 
 type StateTone = "loading" | "error" | "empty";

@@ -1,3 +1,8 @@
+/**
+ * Mapa de órdenes (Leaflet, carga diferida) con la ubicación del técnico por GPS, modo pantalla completa y
+ * teselas satelitales que pueden quedar en caché para usarse sin conexión (`services/map-cache.ts`).
+ * Las órdenes sin coordenadas catastrales válidas no se dibujan; nunca se inventa una ubicación.
+ */
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type * as Leaflet from "leaflet";
 import type { ConnectivityMode, WorkOrder } from "../domain/types";

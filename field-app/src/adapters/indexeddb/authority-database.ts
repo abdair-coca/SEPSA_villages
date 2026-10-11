@@ -1,3 +1,8 @@
+/**
+ * Esquema IndexedDB de la autoridad simulada (modo sin backend): usuarios, sesiones, morosos, órdenes,
+ * comandos idempotentes, auditoría y vínculos de dispositivo. La migración a la versión 3 convierte los
+ * vínculos antiguos a uno por dispositivo y marca `CONFLICT` si un dispositivo tenía varios dueños.
+ */
 const AUTHORITY_DB_VERSION = 3;
 const AUTHORITY_STORES = ["users", "sessions", "debtors", "orders", "operations", "audit", "device-bindings"] as const;
 

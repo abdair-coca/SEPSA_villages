@@ -1,3 +1,8 @@
+/**
+ * Asistente de captura de una acción de campo (visita, corte o reconexión), paso a paso: lectura, tipo de
+ * corte, GPS (o excepción justificada), foto (o excepción) y revisión. Guarda un borrador en cada cambio para
+ * no perder datos si la app se cierra. Los pasos y la recuperación del borrador están en `utils/capture-wizard.ts`.
+ */
 import { useEffect, useRef, useState } from "react";
 import type { ActionInput, AppStore } from "../state/store";
 import type { CutType, FieldCapture, WorkOrder, ActionKind } from "../domain/types";

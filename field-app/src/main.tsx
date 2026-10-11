@@ -1,3 +1,4 @@
+/** Punto de entrada: monta React, carga los estilos y, en producción, registra el Service Worker de la PWA. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";

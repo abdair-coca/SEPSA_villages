@@ -1,8 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react";
-import type { ActionInput, ActionResult, ActivityEntry, AppState, AppStore } from "../state/store";
+/**
+ * Ficha de una orden para el técnico: datos del cliente y suministro, deuda y kardex, mapa, actividad local y
+ * las acciones permitidas (visita, corte, reconexión). Abre `CaptureForm` para registrar una acción y muestra
+ * el resultado distinguiendo confirmado, guardado localmente, bloqueado e incierto.
+ */
+import { useEffect, useState } from "react";
+import type { ActionResult, ActivityEntry, AppState, AppStore } from "../state/store";
 import type { ConnectivityMode, WorkOrder, ActionKind } from "../domain/types";
 import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconCheckCircle, IconDocument, IconExpand, IconMap, IconPin, IconRoute, IconScissors, IconUser } from "./common/Icons";
+import { IconAlertTriangle, IconCheckCircle, IconMap, IconPin, IconScissors } from "./common/Icons";
 import { AppModal } from "./common/Modal";
 import { CaptureForm } from "./CaptureForm";
 import { isManualVisitAllowed, hasCadastralCoordinates } from "../domain/policies";

@@ -1,3 +1,4 @@
+/** Confirmación antes de salir de la app con el botón atrás en móvil. */
 import { AppModal } from "./Modal";
 
 export function ExitConfirmationModal({ onStay, onExit }: { onStay: () => void; onExit: () => void }) {

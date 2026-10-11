@@ -1,3 +1,4 @@
+/** Campo de búsqueda con icono y etiqueta accesible. */
 import { IconSearch } from "./Icons";
 
 export interface SearchFieldProps {

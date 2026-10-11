@@ -1,3 +1,7 @@
+/**
+ * Persistencia de la sesión en `localStorage` para sobrevivir a recargas. Nunca guarda el token de sesión
+ * (se elimina al leer y al escribir) y descarta sesiones vencidas. También recuerda el último usuario usado.
+ */
 import type { Session } from "../../domain/types";
 
 export const SESSION_STORAGE_KEY = "sepsa.authenticated-session";

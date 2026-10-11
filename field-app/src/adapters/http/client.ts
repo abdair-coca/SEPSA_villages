@@ -1,3 +1,15 @@
+/**
+ * Cliente del backend piloto (`PILOT_PROVISIONAL`, no API oficial de SEPSA). Implementa todos los puertos
+ * remotos en un solo objeto: identidad, autoridad de operaciones, autorización de corte, habilitación de
+ * reconexión, transporte de sincronización y subida de evidencia.
+ *
+ * Traducción de errores:
+ * - Fallo de red, modo offline o timeout → error `NETWORK_UNKNOWN`: resultado desconocido, nunca éxito.
+ * - Respuesta HTTP no OK → `HttpPilotError` con el `code` del backend.
+ * - 409 en sync → `conflict` (se conserva); 409 en habilitación → `not_enabled`.
+ * La sesión vive solo en memoria y se envía por cookie (`credentials: "include"`).
+ * Contrato HTTP: `docs/api/pilot-contract.md`.
+ */
 import { assertCan, permissionsForRole } from "../../domain/policies";
 import type {
   AuditEvent,
@@ -30,7 +42,7 @@ interface HttpClientOptions {
   fetchImpl?: typeof fetch;
 }
 
-interface ApiErrorBody { code?: string; message?: string; }
+/** Cliente HTTP del piloto; ver descripción al inicio del archivo. */
 export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, AuthorizationAdapter, EnablementAdapter, SyncTransport, EvidenceUploadPort {
   readonly simulation = "PILOT_PROVISIONAL" as const;
   private readonly baseUrl: string;
@@ -59,12 +71,14 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     return this.acceptSession(response, session);
   }
 
+  /** Cambia el rol activo de la sesión; espera a que terminen las lecturas de admin en curso para no mezclar respuestas. */
   async switchRole(session: Session, role: Session["role"]): Promise<Session> {
     await this.waitForAdminReads();
     const response = await this.request<PilotLoginResponseDto>("/v1/auth/role", { method: "POST", body: { role }, timeoutMs: 15_000 }, this.requireSession(session));
     return this.acceptSession(response, session);
   }
 
+  /** Convierte la respuesta de sesión; si cambió la identidad respecto de la sesión previa, obliga a reingresar. */
   private acceptSession(response: PilotLoginResponseDto, previous?: Session): Session {
     if (previous && (response.session_id !== previous.sessionId || response.user.user_id !== previous.userId)) throw new Error("La identidad de sesión cambió. Ingrese nuevamente.");
     const session: Session = {
@@ -221,12 +235,14 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     });
   }
 
+  /** Pide autorización de corte. En el piloto el consumo es `deferred`: el backend la consume al aceptar el sync. */
   async requestCut(input: AuthRequest): Promise<AuthResponse> {
     const session = this.requireActiveSession();
     const response = await this.request<PilotAuthorizationResponseDto>("/v1/authorizations/cut", { method: "POST", body: { operation_id: input.operationId, order_id: input.orderId, device_id: input.deviceId, order_version: input.orderVersion } }, session);
     return { operationId: response.operation_id, status: "authorized", grant: { authorizationId: response.authorization_id, token: response.token, orderId: response.order_id, technicianId: response.technician_id, technicianNameSnapshot: response.technician_name_snapshot, deviceId: response.device_id, operationId: response.operation_id, version: response.version, issuedAt: response.issued_at, expiresAt: response.expires_at, consumption: "deferred" } };
   }
 
+  /** No se consume desde el cliente en el piloto; devolver `unknown` asegura que nunca se tome como consumida. */
   async consumeCut(input: ConsumeRequest): Promise<ConsumeResponse> {
     return { operationId: input.operationId, status: "unknown", errorCode: "SERVER_SIDE_CONSUMPTION_REQUIRED" };
   }
@@ -286,6 +302,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     return { status: response.status, operationId: response.operation_id, errorCode: response.error_code };
   }
 
+  /** Envía una operación; un 409 se devuelve como `conflict` con el cuerpo remoto para conservarlo. */
   async send(payload: SyncPayload, session = this.requireActiveSession()): Promise<SyncTransportResponse> {
     try {
       const response = await this.request<PilotSyncResponseDto>("/v1/sync/operations", { method: "POST", body: toWirePayload(payload) }, session);
@@ -296,6 +313,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     }
   }
 
+  /** Sube los bytes de una foto (base64) y exige que el recibo devuelva el mismo id y SHA-256. */
   async uploadEvidence(evidence: import("../../domain/types").EvidenceReference): Promise<"verified"> {
     if (!evidence.content || !evidence.contentHash) throw new Error("Evidence bytes and SHA-256 hash are required.");
     const bytes = new Uint8Array(await evidence.content.arrayBuffer());
@@ -310,6 +328,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     return "verified";
   }
 
+  /** Consulta una operación. Un `confirmed` con recibo incompleto se degrada a `unknown`: no confirma. */
   async lookup(operationId: string): Promise<RemoteResult> {
     const response = await this.request<PilotLookupResponseDto>(`/v1/sync/operations/${encodeURIComponent(operationId)}`, { method: "GET" }, this.requireActiveSession());
     if (response.status !== "confirmed") return { status: response.status, operationId: response.operation_id, errorCode: response.error_code };
@@ -326,6 +345,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     return session;
   }
 
+  /** Registra lecturas de admin en curso para que `switchRole` espere a que terminen. */
   private trackAdminRead<T>(session: Session, read: () => Promise<T>): Promise<T> {
     const operation = read();
     if (session.role !== "ADMIN") return operation;
@@ -348,6 +368,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     return session;
   }
 
+  /** Hace la petición HTTP y traduce fallos de red y respuestas de error (ver descripción del archivo). */
   private async request<T>(path: string, init: { method: "GET" | "POST"; body?: unknown; timeoutMs?: number }, session?: Session): Promise<T> {
     if (this.mode === "offline") throw networkUnknown();
     const headers: Record<string, string> = { accept: "application/json" };
@@ -372,6 +393,7 @@ class HttpPilotError extends Error {
   constructor(readonly status: number, readonly code: string, message: string, readonly body: unknown) { super(message); }
 }
 
+/** Payload de sync en el formato snake_case del backend. */
 function toWirePayload(payload: SyncPayload): Record<string, unknown> {
   return {
     operation_id: payload.operationId,
@@ -417,6 +439,7 @@ function toSyncPayload(record: OperationRecord | VisitRecord): SyncPayload {
   };
 }
 
+/** Mapeadores de respuestas del backend a tipos del dominio; campos ausentes quedan ausentes. */
 function mapDebtor(value: unknown): DebtorRecord {
   const raw = asRecord(value);
   const debtCents = requiredNonNegativeInteger(raw.debt_cents, "debt_cents");
@@ -488,7 +511,6 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function stringOr(value: unknown, fallback = ""): string { return typeof value === "string" ? value : fallback; }
 function optionalString(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
-function numberOr(value: unknown, fallback = 0): number { const parsed = optionalNumber(value); return parsed ?? fallback; }
 function requiredNonNegativeInteger(value: unknown, field: string): number {
   const parsed = optionalNumber(value);
   if (parsed === undefined || !Number.isInteger(parsed) || parsed < 0) throw new Error(`REMOTE_FINANCIAL_DATA_INVALID:${field}`);

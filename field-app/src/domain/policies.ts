@@ -1,3 +1,10 @@
+/**
+ * Reglas de negocio puras: permisos por rol, elegibilidad de visita/corte/reconexión, validación de la captura
+ * de campo y de la evidencia, transiciones de estado de la orden e inmutabilidad del historial.
+ *
+ * Todas lanzan `DomainError` con un código estable cuando la regla no se cumple. Las usan los casos de uso
+ * (`use-cases/`) y los adaptadores que actúan como autoridad simulada. No importan nada fuera de `domain/`.
+ */
 import { DomainError } from "./errors";
 import type {
   ConnectivityMode,
@@ -13,6 +20,7 @@ import type {
   WorkOrder,
 } from "./types";
 
+/** Permisos que cada rol puede llegar a tener. La sesión debe además incluirlos (ver `assertCan`). */
 const ROLE_PERMISSIONS: Record<Role, AuthorizedAction[]> = {
   ADMIN: ["FIND_DEBTORS", "CREATE_ORDER", "ASSIGN_ORDER", "VIEW_TECHNICIANS", "VIEW_ORDERS", "VIEW_AUDIT"],
   TECHNICIAN: ["DOWNLOAD_ASSIGNED", "SYNC_OPERATION"],
@@ -28,6 +36,10 @@ export function assertRecognizedRole(role: string): asserts role is Role {
   }
 }
 
+/**
+ * Exige que el rol permita la acción **y** que la sesión la tenga concedida. Las dos condiciones son
+ * necesarias: una sesión con permisos de más no amplía lo que el rol permite.
+ */
 export function assertCan(session: Session, action: AuthorizedAction): void {
   assertRecognizedRole(session.role);
   if (!ROLE_PERMISSIONS[session.role].includes(action) || !session.permissions.includes(action)) {
@@ -35,12 +47,14 @@ export function assertCan(session: Session, action: AuthorizedAction): void {
   }
 }
 
+/** Un técnico solo opera órdenes asignadas a él. */
 export function assertAssignedOrder(order: WorkOrder, technicianId: string): void {
   if (order.assignedTechnicianId !== technicianId) {
     throw new DomainError("Order is not assigned to this technician.", "ORDER_NOT_ASSIGNED");
   }
 }
 
+/** La visita manual solo aplica a órdenes sin ejecución física ni revisión pendiente. */
 export function assertVisitEligible(order: WorkOrder, technicianId: string): void {
   assertAssignedOrder(order, technicianId);
   if (order.status !== "GENERADO" || order.physicalStatus !== "NONE") {
@@ -48,6 +62,11 @@ export function assertVisitEligible(order: WorkOrder, technicianId: string): voi
   }
 }
 
+/**
+ * Elegibilidad local para intentar un corte. No autoriza el corte: la autorización online, vigente y de un
+ * solo uso se pide después (`use-cases/process.ts`). `physicalStatus !== "NONE"` impide un segundo corte
+ * sobre una orden ya reclamada o en revisión.
+ */
 export function assertCutEligible(order: WorkOrder, technicianId: string): void {
   assertAssignedOrder(order, technicianId);
   if (order.status !== "GENERADO") {
@@ -58,6 +77,13 @@ export function assertCutEligible(order: WorkOrder, technicianId: string): void 
   }
 }
 
+/**
+ * Valida la captura de un corte antes de guardarla. Reglas no negociables:
+ * - Lectura final real, en kWh y del medidor esperado; no se acepta una lectura ausente o inventada.
+ * - GPS capturado con coordenadas y precisión válidas, o excepción `BYPASSED` con motivo auditable.
+ * - Tipo de corte del catálogo confirmado e indicación explícita de medidores cercanos.
+ * Umbrales de precisión GPS: `TODO: VALIDAR CON SEPSA`.
+ */
 export function validateFieldCapture(capture: FieldCapture | undefined, expectedMeterId?: string): void {
   if (!capture) {
     throw new DomainError("La captura de campo es obligatoria para confirmar el corte.", "FIELD_CAPTURE_REQUIRED");
@@ -88,7 +114,7 @@ export function validateFieldCapture(capture: FieldCapture | undefined, expected
       throw new DomainError("La precisión GPS no es válida.", "GPS_ACCURACY_INVALID");
     }
   } else if (capture.location.status === "BYPASSED" && capture.location.exceptionReason?.trim()) {
-    // GPS bypass is explicit and auditable; precision thresholds remain pending validation with SEPSA.
+    // La excepción de GPS es explícita y auditable; los umbrales de precisión siguen pendientes de validar con SEPSA.
   } else {
     throw new DomainError("Capture GPS o registre una excepción justificada.", "GPS_REQUIRED");
   }
@@ -101,6 +127,7 @@ export function validateFieldCapture(capture: FieldCapture | undefined, expected
   }
 }
 
+/** Solo se reconecta una orden ejecutada cuyo corte físico está confirmado. */
 export function assertReconnectionEligible(order: WorkOrder, technicianId: string): void {
   assertAssignedOrder(order, technicianId);
   if (order.status !== "EJECUTADO") {
@@ -111,6 +138,11 @@ export function assertReconnectionEligible(order: WorkOrder, technicianId: strin
   }
 }
 
+/**
+ * Valida una foto de evidencia o, si no hay foto, exige una excepción con motivo.
+ * La foto debe estar ligada a la misma orden/operación/técnico/dispositivo (`binding`), ser JPEG o PNG,
+ * venir ya optimizada (≤ 5 MP) y, si trae bytes, traer también su SHA-256 para verificación en el backend.
+ */
 export function validateEvidence(
   evidence: EvidenceReference | undefined,
   exceptionReason?: string,
@@ -169,6 +201,10 @@ export function validateEvidence(
   };
 }
 
+/**
+ * Transiciones permitidas del estado administrativo: GENERADO → EJECUTADO | ANULADO, EJECUTADO → RECONEXIÓN.
+ * RECONEXIÓN y ANULADO son finales.
+ */
 export function nextOrderState(
   current: WorkOrder["status"],
   next: WorkOrder["status"],
@@ -185,6 +221,10 @@ export function nextOrderState(
   return next;
 }
 
+/**
+ * La identidad de una operación ya registrada (quién, dónde, cuándo, qué) no se reescribe. Solo pueden
+ * avanzar campos de sincronización; así una corrección nunca borra el hecho físico original.
+ */
 export function assertHistoricalOperationImmutable(
   previous: OperationRecord,
   replacement: OperationRecord,
@@ -208,6 +248,7 @@ export function assertHistoricalOperationImmutable(
   }
 }
 
+/** Construye una visita pendiente de sincronizar; `execution` siempre es `NONE` (no afirma corte físico). */
 export function createVisit(input: {
   operationId: string;
   orderId: string;
@@ -245,6 +286,7 @@ export function createVisit(input: {
   };
 }
 
+/** Formato de `generateOperationId`: prefijo + UUID. */
 const OPERATION_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function assertOperationId(operationId: string): void {
@@ -261,7 +303,7 @@ export function copyOrderWithPhysicalStatus(
   return { ...order, status, physicalStatus };
 }
 
-/** Current operational projection; stored snapshots keep their original history. */
+/** Copia del contexto operativo vigente; los snapshots guardados conservan su historia original. */
 export function copyOperationalContext(context: OperationalContext): OperationalContext {
   return {
     debtorId: context.debtorId, accountId: context.accountId, supplyId: context.supplyId,
@@ -282,16 +324,19 @@ export function copyOperationalContext(context: OperationalContext): Operational
   };
 }
 
+/** Copia profunda de la orden para uso operativo, sin datos de anulación internos. */
 export function copyOrderForOperationalUse(order: WorkOrder): WorkOrder {
   const projected = structuredClone(order) as WorkOrder & { cancellation?: unknown };
   delete projected.cancellation;
   return { ...projected, context: order.context ? copyOperationalContext(order.context) : undefined };
 }
 
+/** Misma condición que `assertVisitEligible`, sin lanzar error; la UI la usa para mostrar u ocultar la acción. */
 export function isManualVisitAllowed(order: WorkOrder): boolean {
   return order.status === "GENERADO" && order.physicalStatus === "NONE";
 }
 
+/** La orden tiene coordenadas catastrales numéricas y finitas para ubicarla en el mapa. */
 export function hasCadastralCoordinates(context?: WorkOrder["context"]): boolean {
   return typeof context?.cadastralLatitude === "number"
     && Number.isFinite(context.cadastralLatitude)
@@ -299,18 +344,25 @@ export function hasCadastralCoordinates(context?: WorkOrder["context"]): boolean
     && Number.isFinite(context.cadastralLongitude);
 }
 
+/** Hay algún tipo de conexión (aunque sea débil) para intentar operaciones remotas. */
 export function isUsable(mode: ConnectivityMode): boolean {
   return mode !== "offline";
 }
 
+/**
+ * Resultado de un corte para mostrar al técnico: confirmado solo si la orden ya figura EJECUTADO/CONFIRMED;
+ * `review` si el resultado físico es incierto; `pending` si quedó guardado localmente pero sin confirmar.
+ */
 export function cutCompletionOutcome(durable: boolean, order?: WorkOrder): "confirmed" | "pending" | "review" | undefined {
   if (order?.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED") return "confirmed";
   if (order?.physicalStatus === "PHYSICAL_UNKNOWN") return "review";
   return durable ? "pending" : undefined;
 }
 
+/** Una orden está activa mientras sigue GENERADO (todavía no ejecutada ni anulada). */
 function isActiveOrder(order: WorkOrder): boolean { return order.status === "GENERADO"; }
 
+/** Orden activa del suministro, buscada por deudor o por cuenta. Evita crear una segunda orden activa. */
 export function findActiveOrderForSupply(orders: readonly WorkOrder[], debtorId: string, accountId?: string): WorkOrder | undefined {
   return orders.find((order) => isActiveOrder(order) && (order.debtorId === debtorId || (Boolean(accountId) && order.accountId === accountId)));
 }

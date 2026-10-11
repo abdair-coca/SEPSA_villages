@@ -1,3 +1,8 @@
+/**
+ * Autorización y habilitación simuladas para el modo demo y los tests. Sus respuestas se configuran desde
+ * fuera (`requestResponse`, etc.) y respetan el modo de conectividad: sin conexión fallan con
+ * `NETWORK_UNKNOWN` tras los reintentos de `retry.ts`. No contienen ningún contrato de SEPSA.
+ */
 import type {
   AuthorizationAdapter,
   AuthRequest,

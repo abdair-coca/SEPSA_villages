@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { executeCut } from "./process";
-import { DomainError } from "../domain/errors";
 import type { OperationRecord, WorkOrder, WorkPackage } from "../domain/types";
 import { ResponseLostError, TimeoutError } from "../ports/authorization";
 import type {

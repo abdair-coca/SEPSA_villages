@@ -1,3 +1,11 @@
+/**
+ * Puertos de autorización online para acciones físicas: corte (`AuthorizationAdapter`) y habilitación de
+ * reconexión (`EnablementAdapter`).
+ *
+ * Regla central: una autorización es online, concluyente, vigente, de un solo uso y está ligada a orden,
+ * técnico, dispositivo, operación y versión. `unknown`, timeout o respuesta perdida **nunca** autorizan;
+ * en esos casos se consulta el estado con el mismo `operationId` (`lookup`) en vez de pedir otra.
+ */
 export type AuthorizationStatus = "authorized" | "not_authorized" | "unknown";
 export type ConsumeStatus =
   | "consumed"
@@ -15,6 +23,7 @@ export interface AuthRequest {
   signal?: AbortSignal;
 }
 
+/** Autorización de corte concedida. `token` es de un solo uso y vence en `expiresAt`. */
 export interface AuthorizationGrant {
   authorizationId: string;
   token: string;
@@ -26,7 +35,10 @@ export interface AuthorizationGrant {
   version: number;
   issuedAt: string;
   expiresAt: string;
-  /** HTTP pilot consumes grant during operation synchronization. */
+  /**
+   * `immediate`: se consume (`consumeCut`) justo antes de registrar el corte. `deferred`: el backend piloto
+   * la consume al aceptar la operación sincronizada.
+   */
   consumption?: "immediate" | "deferred";
 }
 
@@ -54,11 +66,16 @@ export interface ConsumeResponse {
   errorCode?: string;
 }
 
+/**
+ * Resultado de consultar una operación en el servidor. Solo `confirmed` con recibo completo confirma;
+ * `not_found` o `unknown` dejan la operación en revisión y no habilitan reenviarla.
+ */
 export type RemoteResult =
   | ({ status: "confirmed"; operationId?: string } & Partial<RemoteOperationReceipt>)
   | { status: "not_found"; operationId?: string }
   | { status: "unknown"; operationId?: string; errorCode?: string };
 
+/** Recibo del servidor: debe coincidir con la operación local (orden, técnico, dispositivo, acción…) para confirmarla. */
 export interface RemoteOperationReceipt {
   orderId: string;
   technicianId: string;
@@ -74,8 +91,11 @@ export interface RemoteOperationReceipt {
 }
 
 export interface AuthorizationAdapter {
+  /** Pide autorización para cortar. Puede lanzar `TimeoutError` o `ResponseLostError`: ninguno autoriza. */
   requestCut(input: AuthRequest): Promise<AuthResponse>;
+  /** Consume la autorización (un solo uso). `already_consumed` con la misma operación es un replay, no un segundo corte. */
   consumeCut(input: ConsumeRequest): Promise<ConsumeResponse>;
+  /** Consulta el estado de una operación de corte por su id. */
   lookup(operationId: string): Promise<RemoteResult>;
 }
 
@@ -140,7 +160,10 @@ export interface EnablementLookupResult {
   errorCode?: string;
 }
 
-/** Provisional seam for external reconnection habilitation. */
+/**
+ * Habilitación de reconexión (contrato provisional del piloto, no oficial de SEPSA). Mismo esquema que el
+ * corte: reservar, consumir una vez y consultar por `operationId` si la respuesta se pierde.
+ */
 export interface EnablementAdapter {
   requestReconnection(input: EnablementRequest): Promise<EnablementResponse>;
   consumeReconnection(input: ConsumeEnablementRequest): Promise<ConsumeEnablementResponse>;
@@ -148,6 +171,7 @@ export interface EnablementAdapter {
   lookup(operationId: string): Promise<RemoteResult>;
 }
 
+/** La autorización no respondió a tiempo. Se trata como resultado desconocido, nunca como autorización. */
 export class TimeoutError extends Error {
   readonly code = "TIMEOUT";
 
@@ -157,6 +181,7 @@ export class TimeoutError extends Error {
   }
 }
 
+/** La petición pudo llegar pero la respuesta se perdió. Hay que consultar estado; no se reintenta a ciegas. */
 export class ResponseLostError extends Error {
   readonly code = "RESPONSE_LOST";
 
