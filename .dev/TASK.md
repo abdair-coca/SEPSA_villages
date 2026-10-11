@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **7**
+Fase en curso: ninguna. Todas las fases están hechas; el cierre del plan queda pendiente de decidir dónde van los hallazgos abiertos.
 
 ---
 
@@ -192,7 +192,7 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 - [x] Separar seeds (`002_seed`, `004_e2e_seed`, `005_definitive_seed`, `006_replace-…`) en `backend/sql/seeds/` y actualizar referencias
 - [x] Unificar o documentar la relación entre `backend/sql/` y `backend/migrations/*.mjs` (documentada en `backend/sql/README.md`; no unificada)
 - [x] `docs/`: archivar o enlazar `constitution.md`, el `.docx` (`ROLE_Actúa como…`) y `guia-tecnico-campo-piloto.pdf`
-- [ ] `boceto-mvp/`: mover a `docs/archive/` o eliminar, previa confirmación del usuario. **Pendiente:** requiere la respuesta del usuario.
+- [x] `boceto-mvp/`: movido a `docs/archive/legacy/boceto-mvp/` por decisión del usuario.
 - [x] **Validación:** suite completa de backend (incluida integración y E2E) en verde; commit; estado actualizado en `PLAN.md`
 
 ## Cierre del plan
@@ -208,26 +208,14 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 
 Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de una fase de limpieza.
 
-- Fase 0: los smokes `smoke:ui`/`smoke:pwa` exigen `VITE_PILOT_BACKEND_URL=""` en el entorno (como en CI); sin esa variable fallan antes de empezar. Añadirlo a la validación estándar de `PLAN.md`.
 - Fase 1: `screens/FieldApp.tsx` importa `adapters/browser/connectivity` y `screens/LoginScreen.tsx` importa `adapters/browser/session-persistence`. Las pantallas deberían recibir esos puertos desde `App.tsx`/`bootstrap/`. Registradas como excepciones en `src/architecture.test.ts`; corregir en una tarea aparte (cambia props de pantallas).
-- Fase 1→2: `utils/` importaba tipos de `state/`. Resuelto para `ActionKind` (ahora en `domain/types.ts`). `ActivityEntry` sigue en `state/store.ts` porque es un modelo de vista del store; `utils/format.ts` y `utils/sorting.ts` lo importan solo como tipo.
 - Fase 2: `screens/OperationsApp.tsx` tiene etiquetas privadas propias del admin (`orderDomainStatusLabel`, `orderStatusLabel`, `statusTone`, `formatRelativeDate`) con textos distintos a los de `utils/labels.ts` (p. ej. "Generada" vs "Por ejecutar"). Moverlas a `utils/labels.ts` con nombres `admin*` en la fase 4; unificar textos es decisión de producto.
-- Fase 2: `FieldMap.tsx` tiene `orderCoordinates()` que repite la validación de `hasCadastralCoordinates` (`domain/policies.ts`). Unificar en la fase 4.
-- Fase 2→3: imports sin usar preexistentes. Resuelto en la fase 3 (incluida la reexportación sin uso de `formatSyncMessage` en `state/store.ts`).
-- Fase 3: los mensajes de error del backend y de `DomainError` están en inglés y algunos llegan a la UI (p. ej. "Order is not assigned to this technician."). Traducirlos cambia textos visibles: decisión de producto, fuera de esta limpieza.
-- Fase 3: `HttpPilotClient.requestCut` relanza un `HttpError` del backend (p. ej. 409 `VERSION_CONFLICT`) y `use-cases/process.ts` solo convierte en visita los errores inciertos; un rechazo explícito del backend llega a la UI como error en vez de registrarse como visita bloqueada. Revisar si es el comportamiento deseado.
-- Fase 1: `main.tsx` importa `adapters/browser/service-worker`; se considera punto de composición junto con `App.tsx` y `bootstrap/`.
 - Fase 0: `npm run build` avisa de un chunk de ~507 kB (>500 kB). No bloquea; evaluar code-splitting fuera de este plan.
 - Fase 4: `screens/OperationsApp.tsx` (425) y `components/FieldMap.tsx` (416) siguen sobre ~300 líneas: lo restante es estado, handlers y efectos de una sola pieza (peticiones con propiedad de sesión en la pantalla; GPS/Leaflet en el mapa) que no se separan sin cambiar el flujo de datos. Revisar con un hook propio en una tarea aparte.
-- Fase 4: `adapters/indexeddb/repository.ts` (940) y `authority-repository.ts` (797) se mantienen: son una sola clase por puerto (`LocalRepository`, `IdentityPort`/`OperationsAuthorityPort`) cuyos métodos comparten la base, las transacciones atómicas y helpers privados; no hay corte limpio por agregado sin cambiar transacciones. Corte opcional barato: los datos de demostración de `authority-repository.ts` (`simulatedDebtors`, `createExtraSimulatedDebtor`, ~90 líneas) a un archivo `simulated-data.ts`.
 - Fase 4: `OperationsApp.requests.test.tsx` recorre el árbol de elementos sin expandir componentes; al extraer `DebtorSearchPanel` (antes JSX en línea) el helper `elements()` lo expande explícitamente. Cualquier otro panel en línea que se extraiga requerirá lo mismo.
 - Fase 4: `npm run smoke:pwa` falló una vez (exit 1) justo después de `smoke:ui` en la misma shell y pasó en el reintento sin cambios (posible condición de carrera de puerto/servidor); revisar su robustez.
-- Fase 5: `services/command-idempotency.service.ts` mezcla regla (replay/conflicto/"en curso" con `HttpError`) y lectura de `command_operations`; el SQL está en `repositories/commands.repository.ts` pero el servicio lo ejecuta dentro de la transacción del comando. No se separó más para no alterar el orden `INSERT ... ON CONFLICT` → `SELECT ... FOR UPDATE`.
-- Fase 5: `debtors` y `audit` no tienen servicio (controlador + repositorio): son una consulta paginada sin reglas más allá del rol. Si aparecen reglas de negocio, crear `*.service.ts`.
-- Fase 5: `lookupOperation` (sync) decide la forma de la respuesta (`confirmed`/`unknown`/`not_found`) en el servicio y devuelve un objeto JSON ya armado; es presentación de contrato mezclada con la regla "recibo completo". Separarlo cambiaría el contrato del servicio sin ganancia hoy.
 - Fase 5: `parseSyncPayload`/`validateSyncPayload` (forma + reglas de captura de CUT) viven juntos en `services/sync-payload-validation.service.ts` y el controlador los invoca; mezclan validación de forma (400) con reglas de dominio (lectura final real, GPS o excepción). Separar la forma del dominio sería un cambio de diseño aparte.
 - Fase 5: `/healthz` pasó a ser una ruta pública de la tabla; antes se respondía antes de `validateOrigin`. Es equivalente porque `validateOrigin` ignora los GET, pero queda anotado. `POST /v1/auth/logout` figura como pública en la tabla (valida la sesión dentro del controlador) aunque el OpenAPI declare seguridad; el test lo documenta.
-- Fase 5: la tabla de rutas hace que una ruta desconocida sin sesión responda 401 (no 404), igual que antes: la sesión se exige antes de buscar rutas protegidas. Conservado a propósito.
 - Fase 5: `tsc --noUnusedLocals` en backend baja de 10 a 9 errores (se quitó un import sin usar en `mappers/debtor.mapper.ts`); los 9 restantes son de `test/application.test.ts` y `test/reconnection.test.ts` (preexistentes, fuera del alcance).
 - Fase 6: `app.css` no se puede repartir por pantalla o componente sin cambiar la cascada. Tenía 1.497 bloques intercalados entre dueños (525 tramos contiguos); reordenarlos por dueño produjo 59.372 diferencias de elementos y 138 PNG. Los dueños forman un ciclo porque las secciones sobrescriben clases compartidas (`.panel`, `.panel-heading`, `.primary-action`, `.app-header`…). Agrupar por componente exige consolidar esos overrides en una tarea aparte, con su propia verificación.
 - Fase 6: la lista de órdenes del técnico (`tech-orders*`, 1024 y 1280 px) no es reproducible entre ejecuciones: la altura de la página cambia en saltos de 56 px (593/649, 909/965, 1137/1193). Esperar a que el layout se estabilice no lo resolvió. Esos estados se verifican sin propiedades de color.
@@ -235,16 +223,15 @@ Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de u
 - Fase 6: `tokens.css` redefine nueve tokens dentro de `.field-app` y `[data-ui-theme="field"]`; un literal solo se sustituye por `var(--token)` si el token vale lo mismo en ambos ámbitos.
 - Fase 6: al borrar reglas sin uso, las clases dentro de `:is()`, `:where()`, `:has()` y `:not()` no cuentan como muertas: una alternativa viva mantiene el selector.
 - Fase 6: el orden de las subtareas cambió. Las reglas sin uso y la deduplicación se hicieron antes del reparto, porque el reparto solo era verificable sobre el CSS ya limpio. La deduplicación fue una pasada global y solo elimina declaraciones que una regla posterior idéntica (mismo selector, propiedad e importancia) siempre sobrescribe.
-- Fase 6: `shared-shell.css` pasa a `shell.css`, como indica el plan. `docs/ARCHITECTURE.md` y `docs/design.md` se actualizaron.
 - Fase 6: intento de reparto por componente (23 archivos; las 408 reglas que compiten, dentro del mismo componente o entre componentes, en `cascade-overrides.css` y el resto por componente). Se revirtió. `smoke:ui` falló en la notificación móvil de 360 px: el texto medía 58 px en vez de ≥180 px. Las capturas no lo detectaron porque esa configuración de DOM no se captura, y el análisis de conflictos se apoya en el DOM capturado. El reordenado por componente no es verificable con el método actual. Para hacerlo hay que consolidar los overrides de selectores compartidos y ampliar el inventario de estados (notificaciones, banners, errores, modales) antes de verificar. Copia del intento fuera del repo.
 - Fase 6: algunos estados muestran identificadores técnicos (p. ej. `…0073` frente a `…0077`) que cambian entre ejecuciones porque la captura parchea `randomUUID` con un contador. Los píxeles distintos de esos estados están en esos textos; estilos calculados y geometría coinciden en los estados verificados.
 - Fase 6 (cierre): el usuario dio la fase por finalizada sin el reparto por componente. Queda como tarea aparte, con las condiciones de las entradas anteriores de esta fase.
 - Fase 7 (decisión): los nombres de los SQL no cambian. El piloto está en uso y el arranque, el bootstrap y el runbook identifican cada migración por su archivo. El orden real y los números repetidos están en `backend/sql/README.md`.
 - Fase 7 (decisión): los seeds pasan a `backend/sql/seeds/` sin editar su contenido. Cambian solo las rutas de `bootstrap-pilot.mjs`, `docker-compose.yml` y `docs/DOMAIN.md`. En Compose el destino dentro del contenedor no cambia, así que tampoco el orden de carga. El bootstrap imprime ahora `Applied seeds/…`: es texto de consola, no de la UI.
 - Fase 7 (decisión): `constitution.md` era un stub de compatibilidad y pasa a `docs/archive/legacy/constitution-redirect.md` con los enlaces corregidos. El `.docx` cuyo nombre es un prompt pasa a `docs/archive/legacy/`. La guía PDF pasa a `docs/operations/` y se enlaza desde el runbook, porque sigue describiendo el uso en campo.
-- Fase 7: `seeds/006_replace-betanzos-…` (3,6 MB, 948 registros) no lo referencia ningún script ni documento, y su cabecera dice que no se conectó a ninguna base. Su estado en el piloto no se puede verificar desde el repo: `TODO: VALIDAR CON SEPSA`. Decidir si se documenta, se archiva o se elimina.
-- Fase 7: `003_payment_observations.sql` no lo ejecuta ningún script, a propósito (`backend/README.md`). Estado en el piloto: `TODO: VALIDAR CON SEPSA`.
 - Fase 7: `008_reconnection_schema.sql` se reejecuta en cada arranque: hace DROP y ADD de constraints en `orders` y `sync_operations`, con bloqueo exclusivo durante la revalidación. Es idempotente, pero conviene revisarlo antes de aumentar el tráfico del piloto (tarea aparte).
-- Fase 7: las cuatro listas de archivos (bootstrap, Compose, arranque y base de pruebas) difieren a propósito; ver `backend/sql/README.md`. Unificarlas cambiaría la herramienta de despliegue, así que queda fuera de esta fase.
-- Fase 7: `seeds/004_e2e_seed.sql` cita en un comentario la ruta anterior de `005`. No se edita porque es SQL aplicado. Los documentos de `docs/archive/` citan rutas antiguas; tampoco se editan.
 - Fase 7: cinco archivos de las especificaciones 007 y 008 (`docs/archive/legacy/specs/`) enlazan `../../design.md`, que no existe en el archivo (el original está en `docs/design.md`). Enlaces rotos previos, en material histórico; no se corrigen.
+- Corte: `uncertainError` (`use-cases/process.ts`) decide por palabras del mensaje (`/timeout|network|offline|unknown/`). Es frágil: conviene basarlo solo en códigos.
+
+- Mensajes: los conflictos guardados antes del cambio a español conservan su texto anterior; no se reescriben.
+- Mensajes: siguen en inglés los errores internos de IndexedDB (`adapters/indexeddb/repository.ts`, `database.ts`, `authority-database.ts`), los identificadores técnicos y las invariantes de sincronización (`use-cases/sync.ts`). No son textos de flujo; si alguno llega a pantalla, se traduce.

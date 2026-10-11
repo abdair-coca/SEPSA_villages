@@ -1,6 +1,6 @@
 # Archivo histórico
 
-`archive/legacy/` conserva la documentación anterior a la consolidación de 2026-09-27, además del `.docx` de especificación previa (su nombre es un prompt, `ROLE_Actúa como…`) y del redirect `constitution-redirect.md`, que apuntaba a `RULES.md`.
+`archive/legacy/` conserva la documentación anterior a la consolidación de 2026-09-27, además del `.docx` de especificación previa (su nombre es un prompt, `ROLE_Actúa como…`) y del redirect `constitution-redirect.md`, que apuntaba a `RULES.md`. También guarda el prototipo `boceto-mvp/`, que no es documentación vigente.
 
 No leer este directorio para una tarea normal. Consultarlo solo cuando se necesite:
 

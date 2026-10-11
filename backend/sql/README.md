@@ -54,7 +54,7 @@ Los `.mjs` existen porque su decisión depende del estado de la base (checksum o
 
 ## Pendiente de validar
 
-- Estado en el piloto de `003_payment_observations.sql` y `seeds/006_…`: `TODO: VALIDAR CON SEPSA` (depende del historial de cada entorno). El primero no lo ejecuta ningún script a propósito; [backend/README.md](../README.md) lo documenta.
+- `003_payment_observations.sql` y `seeds/006_…` se dejan como están: ningún script los ejecuta y no afectan a ningún flujo. Su estado en cada base no se ha verificado.
 - `003_reference_fields.sql` no lo aplica el arranque. Un entorno creado antes de esa migración debe revisarse con su historial.
 - `008_reconnection_schema.sql` vuelve a crear `orders_status_check` y `sync_operations_action_check` en cada arranque. El resultado es el mismo, pero cada despliegue toma un bloqueo exclusivo sobre esas tablas mientras revalida las filas.
 - `seeds/004_e2e_seed.sql` comenta la ruta anterior `backend/sql/005_definitive_seed.sql`. No se edita porque es SQL aplicado.

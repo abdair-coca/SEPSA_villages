@@ -67,3 +67,33 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** `WorkOrder.version` sigue siendo la revisión CAS local usada por IndexedDB; `WorkOrder.authoritativeVersion` conserva la última versión conocida del servidor. Solicitudes de CUT/RECONNECTION usan la versión autoritativa recibida al habilitar; las transiciones locales no la sustituyen.
 **Consecuencia:** Un ACK físico válido avanza `authoritativeVersion` una vez (`order_version + 1`) sin repetir la transición ni aumentar de nuevo la revisión local. Así la orden sigue operable antes del siguiente paquete remoto, y los dos contadores no se comparan ni intercambian.
+
+## D012 — Rutas desconocidas sin sesión responden 401
+
+**Estado:** vigente
+**Decisión:** La tabla de rutas resuelve primero las rutas públicas y exige sesión antes de buscar en las protegidas. Una ruta desconocida sin sesión responde 401, no 404.
+**Consecuencia:** Responder 404 sin sesión, o cambiar ese orden, altera el contrato HTTP; requiere decisión explícita del equipo.
+
+## D013 — Forma de la respuesta de consulta de operación
+
+**Estado:** vigente
+**Decisión:** `lookupOperation` (sincronización) decide en el servicio si la respuesta es `confirmed`, `unknown` o `not_found`, porque el contrato HTTP la expone tal cual.
+**Consecuencia:** Separar esa forma en un presentador no aporta nada mientras la regla del recibo completo siga en el mismo punto. Un cambio de contrato se hace en el servicio y en `openapi/pilot-provisional.openapi.json` a la vez.
+
+## D014 — Repositorios locales de una clase por puerto
+
+**Estado:** vigente
+**Decisión:** `LocalRepository` (`adapters/indexeddb/repository.ts`) y `authority-repository.ts` se mantienen como una clase por puerto: sus métodos comparten transacciones atómicas y helpers privados.
+**Consecuencia:** Dividirlos por agregado exige rediseñar esas transacciones antes. No se dividen solo por tamaño.
+
+## D015 — Resultados no concluyentes de autorización se guardan para revisión
+
+**Estado:** vigente
+**Decisión:** Al pedir autorización de corte o de reconexión, un 401 y un rechazo definitivo del backend se guardan como negativa. Un 5xx, un replay de operación (`AUTHORIZATION_OPERATION_REPLAY`, `ENABLEMENT_OPERATION_REPLAY`) o un conflicto de identificador (`IDEMPOTENCY_CONFLICT`) se guardan como resultado incierto para revisión, igual que un timeout.
+**Consecuencia:** Ninguno de esos casos autoriza el corte ni la reconexión. El registro queda local, con el código del backend y pendiente de sincronizar; la acción física no se repite.
+
+## D016 — Mensajes de error en español; códigos en inglés
+
+**Estado:** vigente
+**Decisión:** Los mensajes de error que ve el técnico o el administrador, tanto del backend como de `DomainError`, están en español. Los `code` siguen en inglés: son el contrato.
+**Consecuencia:** Las pruebas comparan códigos; un texto puede cambiar sin cambiar el contrato. Los errores internos de IndexedDB y los identificadores técnicos siguen en inglés.
