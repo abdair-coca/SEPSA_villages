@@ -1,6 +1,5 @@
-import type { FieldCapture, SyncStatus } from "../domain";
+import type { FieldCapture, SyncStatus, EvidenceReference } from "../domain/types";
 import type { RemoteOperationReceipt } from "./authorization";
-import type { EvidenceReference } from "../domain";
 
 export interface SyncItem {
   operationId: string;

@@ -1,8 +1,9 @@
-import { DomainError, type EvidenceReference, type ConnectivityMode, type FieldCapture, type WorkOrder, type WorkPackage } from "../domain";
+import { DomainError } from "../domain/errors";
+import type { EvidenceReference, ConnectivityMode, FieldCapture, WorkOrder, WorkPackage } from "../domain/types";
 import type { AuthorizationAdapter, EnablementAdapter } from "../ports/authorization";
-import type { CaptureDraftContent, CaptureDraftKey, ConnectivityPort, LocalRepository, StoredRecord } from "../ports";
-import type { SyncItem } from "../ports/sync";
-import type { EvidenceUploadPort } from "../ports/sync";
+import type { CaptureDraftContent, CaptureDraftKey, LocalRepository, StoredRecord } from "../ports/repository";
+import type { ConnectivityPort } from "../ports/connectivity";
+import type { SyncItem, EvidenceUploadPort } from "../ports/sync";
 import { metadataOnlyEvidence, type EvidenceDraft } from "./evidence";
 import { createActionCoordinator } from "./store-actions";
 import { createSyncCoordinator } from "./store-sync";
@@ -77,7 +78,7 @@ export interface AppStoreDependencies {
   authorization: AuthorizationAdapter;
   enablement: EnablementAdapter;
   connectivity: ConnectivityPort;
-  transport: import("../ports").SyncTransport;
+  transport: import("../ports/sync").SyncTransport;
   evidenceUploader?: EvidenceUploadPort;
   seedPackage?: WorkPackage;
   prepareExternalValidation?: PrepareExternalValidation;

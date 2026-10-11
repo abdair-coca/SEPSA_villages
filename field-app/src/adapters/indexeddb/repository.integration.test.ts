@@ -1,9 +1,11 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { createVisit } from "../../domain";
-import type { EvidenceReference, OperationRecord, WorkOrder, WorkPackage } from "../../domain";
-import { FIELD_DB_VERSION, FIELD_STORES, IndexedDbLocalRepository, createSimulatedPackageEnvelope, deleteFieldDatabase, openFieldDatabase } from ".";
-import type { AtomicOperationChange, CaptureDraft, CaptureDraftKey } from "../../ports";
+import { createVisit } from "../../domain/policies";
+import type { EvidenceReference, OperationRecord, WorkOrder, WorkPackage } from "../../domain/types";
+import { FIELD_DB_VERSION, FIELD_STORES, deleteFieldDatabase, openFieldDatabase } from "./database";
+import { IndexedDbLocalRepository } from "./repository";
+import { createSimulatedPackageEnvelope } from "./package-validation";
+import type { AtomicOperationChange, CaptureDraft, CaptureDraftKey } from "../../ports/repository";
 
 const dbNames: string[] = [];
 const repositories: IndexedDbLocalRepository[] = [];

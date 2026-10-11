@@ -70,7 +70,7 @@ export interface RemoteOperationReceipt {
   technicianNameSnapshot?: string;
   demora?: string;
   evidenceRefs: string[];
-  fieldCapture?: import("../domain").FieldCapture;
+  fieldCapture?: import("../domain/types").FieldCapture;
 }
 
 export interface AuthorizationAdapter {

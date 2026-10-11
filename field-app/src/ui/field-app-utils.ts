@@ -1,6 +1,7 @@
-import type { ConnectivityMode, SyncStatus, WorkOrder } from "../domain";
-import type { ActivityEntry, ActionKind } from "../app/index";
-import type { StoredRecord, SyncItem } from "../ports";
+import type { ConnectivityMode, SyncStatus, WorkOrder } from "../domain/types";
+import type { ActivityEntry, ActionKind } from "../app/store";
+import type { StoredRecord } from "../ports/repository";
+import type { SyncItem } from "../ports/sync";
 
 export function actionLabel(action: ActionKind): string {
   return action === "VISIT" ? "Visita" : action === "CUT" ? "Corte" : "Reconexión";

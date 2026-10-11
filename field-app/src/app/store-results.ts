@@ -1,6 +1,9 @@
-import { DomainError, type ConnectivityMode, type WorkOrder } from "../domain";
+import { DomainError } from "../domain/errors";
+import type { ConnectivityMode, WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
-import type { CutProcessResult, OfflineVisitResult, ReconnectionResult } from "../application";
+import type { CutProcessResult } from "../application/process";
+import type { OfflineVisitResult } from "../application/visit";
+import type { ReconnectionResult } from "../application/reconnection";
 import type { ActionKind, ActionResult, ActionResultOutcome, AppMessage, AppState } from "./store";
 
 export function formatSyncMessage(synced: number): string {

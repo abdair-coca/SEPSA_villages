@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { ActionInput, ActionResult, ActionKind, ActivityEntry, AppState, AppStore } from "../app/index";
-import type { ConnectivityMode, WorkOrder } from "../domain";
+import type { ActionInput, ActionResult, ActionKind, ActivityEntry, AppState, AppStore } from "../app/store";
+import type { ConnectivityMode, WorkOrder } from "../domain/types";
 import { FieldMap } from "./FieldMap";
 import { IconAlertTriangle, IconCheckCircle, IconDocument, IconExpand, IconMap, IconPin, IconRoute, IconScissors, IconUser } from "./Icons";
 import { AppModal } from "./Modal";

@@ -3,15 +3,11 @@ import {
   assertOperationId,
   copyOrderWithPhysicalStatus,
   createVisit,
-  DomainError,
   validateFieldCapture,
   validateEvidence,
-  type EvidenceReference,
-  type FieldCapture,
-  type OperationRecord,
-  type VisitRecord,
-  type WorkOrder,
-} from "../domain";
+} from "../domain/policies";
+import { DomainError } from "../domain/errors";
+import type { EvidenceReference, FieldCapture, OperationRecord, VisitRecord, WorkOrder } from "../domain/types";
 import type {
   AuthorizationAdapter,
   AuthorizationGrant,

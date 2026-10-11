@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import { LoginScreen } from "./LoginScreen";
-import type { Session } from "../domain";
-import type { IdentityPort } from "../ports";
+import type { Session } from "../domain/types";
+import type { IdentityPort } from "../ports/identity";
 import { REMEMBERED_USERNAME_STORAGE_KEY } from "../application/session-persistence";
 
 // Exercise component callbacks without a DOM dependency. A render explicitly flushes state;

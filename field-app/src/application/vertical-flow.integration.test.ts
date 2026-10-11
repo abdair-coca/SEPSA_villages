@@ -1,11 +1,14 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "../app/index";
-import { IndexedDbAuthorityRepository, IndexedDbLocalRepository, deleteAuthorityDatabase, deleteFieldDatabase } from "../adapters/indexeddb";
+import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "../app/runtime";
+import { IndexedDbAuthorityRepository } from "../adapters/indexeddb/authority-repository";
+import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
+import { deleteAuthorityDatabase } from "../adapters/indexeddb/authority-database";
+import { deleteFieldDatabase } from "../adapters/indexeddb/database";
 import { assignOrder, createOrder, findDebtors } from "./admin";
 import { downloadAssigned } from "./download";
 import { login } from "./auth";
-import type { FieldCapture } from "../domain";
+import type { FieldCapture } from "../domain/types";
 
 const authorityDatabases: string[] = [];
 const fieldDatabases: string[] = [];

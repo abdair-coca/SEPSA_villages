@@ -1,5 +1,6 @@
-import type { Session, WorkPackageEnvelope } from "../domain";
-import type { IdentityPort, OperationsAuthorityPort } from "../ports";
+import type { Session, WorkPackageEnvelope } from "../domain/types";
+import type { IdentityPort } from "../ports/identity";
+import type { OperationsAuthorityPort } from "../ports/authority";
 
 type DownloadAuthority = OperationsAuthorityPort & IdentityPort;
 

@@ -3,10 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { executeCut } from "./process";
 import { executeOfflineVisit } from "./visit";
 import { LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON, SyncEngine, toPayload } from "./sync";
-import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
-import { MockAuthorizationAdapter, MockConnectivity, MockSyncTransport } from "../adapters/mock";
+import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
+import { deleteFieldDatabase } from "../adapters/indexeddb/database";
+import { MockAuthorizationAdapter } from "../adapters/mock/authorization";
+import { MockConnectivity } from "../adapters/mock/connectivity";
+import { MockSyncTransport } from "../adapters/mock/transport";
 import { ResponseLostError } from "../ports/authorization";
-import type { EvidenceReference, OperationRecord, WorkOrder, WorkPackage } from "../domain";
+import type { EvidenceReference, OperationRecord, WorkOrder, WorkPackage } from "../domain/types";
 
 const databases: string[] = [];
 const repositories: IndexedDbLocalRepository[] = [];

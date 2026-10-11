@@ -1,5 +1,6 @@
-import type { ConnectivityMode } from "../../domain";
-import type { RemoteResult, SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports";
+import type { ConnectivityMode } from "../../domain/types";
+import type { RemoteResult } from "../../ports/authorization";
+import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
 import { NetworkUnknownError, type RetryPolicy, withRetries } from "./retry";
 
 export class MockSyncTransport implements SyncTransport {

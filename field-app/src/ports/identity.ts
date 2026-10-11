@@ -1,4 +1,4 @@
-import type { AuthorizedAction, DemoCredentials, Session } from "../domain";
+import type { AuthorizedAction, DemoCredentials, Session } from "../domain/types";
 
 export interface IdentityPort {
   authenticate(input: DemoCredentials): Promise<Session>;

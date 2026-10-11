@@ -9,7 +9,7 @@ import {
   type RouteBoundingBox,
 } from "./map-cache";
 import { createDemoPackage } from "./runtime";
-import type { WorkOrder } from "../domain";
+import type { WorkOrder } from "../domain/types";
 
 afterEach(() => {
   vi.unstubAllGlobals();

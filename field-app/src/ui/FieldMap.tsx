@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type * as Leaflet from "leaflet";
-import type { ConnectivityMode, WorkOrder } from "../domain";
+import type { ConnectivityMode, WorkOrder } from "../domain/types";
 import { MAP_CACHE_NAME, SATELLITE_TILE_URL_TEMPLATE } from "../app/map-cache";
 import {
   IconCrosshair,

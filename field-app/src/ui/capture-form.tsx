@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { ActionInput, ActionKind, AppStore } from "../app/index";
-import type { CutType, FieldCapture, WorkOrder } from "../domain";
+import type { ActionInput, ActionKind, AppStore } from "../app/store";
+import type { CutType, FieldCapture, WorkOrder } from "../domain/types";
 import type { CaptureDraftContent } from "../ports/repository";
 import { createCaptureGpsRequest } from "./capture-gps-request";
 import { actionLabel } from "./field-app-utils";

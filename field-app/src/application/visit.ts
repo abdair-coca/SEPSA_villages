@@ -1,4 +1,6 @@
-import { assertOperationId, assertVisitEligible, createVisit, DomainError, validateEvidence, type EvidenceReference, type FieldCapture, type VisitRecord, type WorkOrder } from "../domain";
+import { assertOperationId, assertVisitEligible, createVisit, validateEvidence } from "../domain/policies";
+import { DomainError } from "../domain/errors";
+import type { EvidenceReference, FieldCapture, VisitRecord, WorkOrder } from "../domain/types";
 import type { AtomicOperationChange, LocalRepository, StoredRecord } from "../ports/repository";
 
 export interface OfflineVisitInput {

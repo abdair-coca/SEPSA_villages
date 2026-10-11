@@ -7,8 +7,9 @@ import type {
   WorkOrder,
   WorkPackage,
   WorkPackageEnvelope,
-} from "../../domain";
-import { assertHistoricalOperationImmutable, copyOrderForOperationalUse, generateOperationId } from "../../domain";
+} from "../../domain/types";
+import { assertHistoricalOperationImmutable, copyOrderForOperationalUse } from "../../domain/policies";
+import { generateOperationId } from "../../domain/types";
 import type {
   AtomicOperationChange,
   CaptureDraft,

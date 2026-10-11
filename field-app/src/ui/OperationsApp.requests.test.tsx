@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import type { DebtorRecord, Session, TechnicianRecord } from "../domain";
-import type { OperationsAuthorityPort } from "../ports";
+import type { DebtorRecord, Session, TechnicianRecord } from "../domain/types";
+import type { OperationsAuthorityPort } from "../ports/authority";
 import { OperationsApp } from "./OperationsApp";
-import { createDemoPackage } from "../app/index";
+import { createDemoPackage } from "../app/runtime";
 
 // Minimal hook scheduler: callbacks run from the actual component, effects retain
 // dependencies/cleanup, and renders explicitly flush state. No browser dependency.

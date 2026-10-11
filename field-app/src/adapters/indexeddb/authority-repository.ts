@@ -1,5 +1,35 @@
-import { DomainError, assertCan, copyOperationalContext, copyOrderForOperationalUse, permissionsForRole, type AssignOrderCommand, type AuditEvent, type BatchOrderSkip, type CreateOrderCommand, type CreateOrdersBatchCommand, type CreateOrdersBatchResult, type DebtorQuery, type DebtorRecord, type DemoCredentials, type OperationRecord, type Session, type SimulatedUser, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackage, type WorkPackageEnvelope } from "../../domain";
-import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
+import { DomainError } from "../../domain/errors";
+import {
+  assertCan,
+  copyOperationalContext,
+  copyOrderForOperationalUse,
+  permissionsForRole,
+} from "../../domain/policies";
+import type {
+  AssignOrderCommand,
+  AuditEvent,
+  BatchOrderSkip,
+  CreateOrderCommand,
+  CreateOrdersBatchCommand,
+  CreateOrdersBatchResult,
+  DebtorQuery,
+  DebtorRecord,
+  DemoCredentials,
+  OperationRecord,
+  Session,
+  SimulatedUser,
+  TechnicianRecord,
+  VisitRecord,
+  WorkOrder,
+  WorkPackage,
+  WorkPackageEnvelope,
+} from "../../domain/types";
+import type { IdentityPort } from "../../ports/identity";
+import type {
+  OperationsAuthorityPort,
+  TechnicalOrderAuthorizationInput,
+  TechnicalOrderAuthorizationResult,
+} from "../../ports/authority";
 import type { RemoteResult } from "../../ports/authorization";
 import { createSimulatedPackageEnvelope } from "./package-validation";
 import { deleteAuthorityDatabase, openAuthorityDatabase } from "./authority-database";

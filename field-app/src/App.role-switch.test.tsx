@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import type { Session } from "./domain";
+import type { Session } from "./domain/types";
 import type { AppHeaderRoleSwitch } from "./ui/AppHeader";
 
 // Exercise actual App callbacks with the same effect scheduler used by request tests.
@@ -23,7 +23,7 @@ vi.mock("react", async (original) => ({
     }
   },
 }));
-vi.mock("./adapters/http", () => ({ HttpPilotClient: class { constructor() { return runtime.client; } } }));
+vi.mock("./adapters/http/client", () => ({ HttpPilotClient: class { constructor() { return runtime.client; } } }));
 vi.mock("./application/session-persistence", () => ({ readStoredSession: () => runtime.session, persistSession: vi.fn(), clearStoredSession: vi.fn() }));
 
 const admin: Session = { sessionId: "session-dual", userId: "dual-user-fixture", username: "dual-role-fixture", displayName: "Dual Role Fixture", role: "ADMIN", roles: ["ADMIN", "TECHNICIAN"], permissions: ["CREATE_ORDER"], issuedAt: "2026-10-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", authenticity: "PILOT_PROVISIONAL" };

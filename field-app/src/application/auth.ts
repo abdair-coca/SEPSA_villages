@@ -1,5 +1,5 @@
-import type { AuthorizedAction, DemoCredentials, Session } from "../domain";
-import type { IdentityPort } from "../ports";
+import type { AuthorizedAction, DemoCredentials, Session } from "../domain/types";
+import type { IdentityPort } from "../ports/identity";
 
 export function login(identity: IdentityPort, credentials: DemoCredentials): Promise<Session> {
   return identity.authenticate(credentials);

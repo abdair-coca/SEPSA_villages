@@ -2,9 +2,12 @@ import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
 import { executeReconnection } from "./reconnection";
 import { SyncEngine } from "./sync";
-import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
-import { MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
-import type { OperationRecord, WorkOrder, WorkPackage } from "../domain";
+import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
+import { deleteFieldDatabase } from "../adapters/indexeddb/database";
+import { MockConnectivity } from "../adapters/mock/connectivity";
+import { MockEnablementAdapter } from "../adapters/mock/authorization";
+import { MockSyncTransport } from "../adapters/mock/transport";
+import type { OperationRecord, WorkOrder, WorkPackage } from "../domain/types";
 
 const databases: string[] = [];
 const repositories: IndexedDbLocalRepository[] = [];

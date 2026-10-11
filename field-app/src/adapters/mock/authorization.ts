@@ -13,10 +13,10 @@ import type {
   EnablementResponse,
   AuthorizationGrant,
   RemoteResult,
-} from "../../ports";
+} from "../../ports/authorization";
 import { ResponseLostError } from "../../ports/authorization";
 import { NetworkUnknownError, type RetryPolicy, withRetries } from "./retry";
-import type { ConnectivityMode } from "../../domain";
+import type { ConnectivityMode } from "../../domain/types";
 
 export interface MockAdapterOptions {
   mode?: ConnectivityMode;

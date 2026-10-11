@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { createAuthenticatedTechnicianStore, createUnavailableAppStore, SimulatedAuthoritySyncTransport } from "./app/index";
-import { IndexedDbAuthorityRepository, IndexedDbLocalRepository, createSimulatedPackageEnvelope } from "./adapters/indexeddb";
-import { HttpPilotClient } from "./adapters/http";
-import { downloadAssigned } from "./application";
-import { AppStateCard, ExitConfirmationModal, FieldApp, LoginScreen, OperationsApp } from "./ui";
-import type { Session, WorkPackageEnvelope } from "./domain";
-import type { IdentityPort, OperationsAuthorityPort } from "./ports";
+import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "./app/runtime";
+import { createUnavailableAppStore } from "./app/store";
+import { IndexedDbAuthorityRepository } from "./adapters/indexeddb/authority-repository";
+import { IndexedDbLocalRepository } from "./adapters/indexeddb/repository";
+import { createSimulatedPackageEnvelope } from "./adapters/indexeddb/package-validation";
+import { HttpPilotClient } from "./adapters/http/client";
+import { downloadAssigned } from "./application/download";
+import { AppStateCard } from "./ui/UiState";
+import { ExitConfirmationModal } from "./ui/ExitConfirmationModal";
+import { FieldApp } from "./ui/FieldApp";
+import { LoginScreen } from "./ui/LoginScreen";
+import { OperationsApp } from "./ui/OperationsApp";
+import type { Session, WorkPackageEnvelope } from "./domain/types";
+import type { IdentityPort } from "./ports/identity";
+import type { OperationsAuthorityPort } from "./ports/authority";
 import { clearStoredSession, persistSession, readStoredSession } from "./application/session-persistence";
 import { AppHeader, type AppHeaderRoleSwitch } from "./ui/AppHeader";
 

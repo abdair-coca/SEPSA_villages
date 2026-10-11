@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { AppState, AppStore } from "../app/index";
-import type { WorkOrder } from "../domain";
-import type { SyncItem } from "../ports";
+import type { AppState, AppStore } from "../app/store";
+import type { WorkOrder } from "../domain/types";
+import type { SyncItem } from "../ports/sync";
 import { PaginationControls } from "./PaginationControls";
 import { AppStateCard } from "./UiState";
 import { activityTimestampsByOperation, formatDate, isUsable, queueActionLabel, queueReviewMessage, shortTechnicalId, sortSyncItemsForDisplay, syncItemTimestamp, syncStatusLabel } from "./field-app-utils";

@@ -12,7 +12,7 @@ import type {
   TechnicianRecord,
   WorkOrder,
   WorkPackageEnvelope,
-} from "../domain";
+} from "../domain/types";
 import type { RemoteResult } from "./authorization";
 
 export interface TechnicalOrderAuthorizationInput {

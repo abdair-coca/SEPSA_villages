@@ -1,11 +1,29 @@
-import { IndexedDbAuthorityRepository, IndexedDbLocalRepository } from "../adapters/indexeddb";
-import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
+import { IndexedDbAuthorityRepository } from "../adapters/indexeddb/authority-repository";
+import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
+import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/mock/authorization";
+import { MockConnectivity } from "../adapters/mock/connectivity";
+import { MockSyncTransport } from "../adapters/mock/transport";
 import type { ActionKind, AppStore, PrepareExternalValidation } from "./store";
 import { createAppStore, DEMO_DEVICE_ID, DEMO_PACKAGE_ID, DEMO_TECHNICIAN_ID } from "./store";
-import type { AuthorizationAdapter, AuthorizationGrant, AuthRequest, AuthResponse, ConsumeEnablementRequest, ConsumeEnablementResponse, ConsumeRequest, ConsumeResponse, EnablementAdapter, EnablementGrant, EnablementLookupResult, EnablementRequest, EnablementResponse, RemoteResult, OperationsAuthorityPort } from "../ports";
-import type { WorkOrder, WorkPackage } from "../domain";
-import type { Session } from "../domain";
-import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../ports";
+import type {
+  AuthorizationAdapter,
+  AuthorizationGrant,
+  AuthRequest,
+  AuthResponse,
+  ConsumeEnablementRequest,
+  ConsumeEnablementResponse,
+  ConsumeRequest,
+  ConsumeResponse,
+  EnablementAdapter,
+  EnablementGrant,
+  EnablementLookupResult,
+  EnablementRequest,
+  EnablementResponse,
+  RemoteResult,
+} from "../ports/authorization";
+import type { OperationsAuthorityPort } from "../ports/authority";
+import type { WorkOrder, WorkPackage, Session } from "../domain/types";
+import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../ports/sync";
 import { NetworkUnknownError, withRetries } from "../adapters/mock/retry";
 
 export interface DemoValidationAdapters {
@@ -119,7 +137,7 @@ export function createAuthenticatedTechnicianStore(technicianId: string, deviceI
   return createAppStore({ repository, authorization, enablement, connectivity, transport, evidenceUploader: isEvidenceUploader(transport) ? transport : undefined, technicianId, technicianName: options.technicianName, deviceId, seedPackage: options.seedPackage, prepareExternalValidation });
 }
 
-function isEvidenceUploader(value: unknown): value is import("../ports").EvidenceUploadPort {
+function isEvidenceUploader(value: unknown): value is import("../ports/sync").EvidenceUploadPort {
   return typeof value === "object" && value !== null && "uploadEvidence" in value && typeof value.uploadEvidence === "function";
 }
 

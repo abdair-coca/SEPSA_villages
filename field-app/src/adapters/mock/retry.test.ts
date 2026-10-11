@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockAuthorizationAdapter } from ".";
+import { MockAuthorizationAdapter } from "./authorization";
 import { withRetries } from "./retry";
 
 describe("mock connectivity retry policy", () => {

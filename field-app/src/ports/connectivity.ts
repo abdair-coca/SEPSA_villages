@@ -1,4 +1,4 @@
-import type { ConnectivityMode } from "../domain";
+import type { ConnectivityMode } from "../domain/types";
 
 export interface ConnectivityPort {
   getMode(): ConnectivityMode;

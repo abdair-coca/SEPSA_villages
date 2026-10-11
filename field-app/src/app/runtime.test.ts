@@ -1,9 +1,14 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { assignOrder, createOrder, downloadAssigned, findDebtors, login } from "../application";
-import { IndexedDbAuthorityRepository, IndexedDbLocalRepository, deleteFieldDatabase, deleteAuthorityDatabase } from "../adapters/indexeddb";
-import { MockConnectivity } from "../adapters/mock";
-import type { OperationRecord, WorkOrder } from "../domain";
+import { assignOrder, createOrder, findDebtors } from "../application/admin";
+import { downloadAssigned } from "../application/download";
+import { login } from "../application/auth";
+import { IndexedDbAuthorityRepository } from "../adapters/indexeddb/authority-repository";
+import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
+import { deleteFieldDatabase } from "../adapters/indexeddb/database";
+import { deleteAuthorityDatabase } from "../adapters/indexeddb/authority-database";
+import { MockConnectivity } from "../adapters/mock/connectivity";
+import type { OperationRecord, WorkOrder } from "../domain/types";
 import { SyncEngine } from "../application/sync";
 import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "./runtime";
 

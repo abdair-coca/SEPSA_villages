@@ -1,5 +1,5 @@
-import type { ConnectivityMode } from "../../domain";
-import type { ConnectivityPort } from "../../ports";
+import type { ConnectivityMode } from "../../domain/types";
+import type { ConnectivityPort } from "../../ports/connectivity";
 
 export interface BrowserConnectivityOptions {
   probeUrl?: string;

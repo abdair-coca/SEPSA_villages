@@ -3,13 +3,10 @@ import {
   assertOperationId,
   copyOrderWithPhysicalStatus,
   createVisit,
-  DomainError,
   validateEvidence,
-  type EvidenceReference,
-  type OperationRecord,
-  type VisitRecord,
-  type WorkOrder,
-} from "../domain";
+} from "../domain/policies";
+import { DomainError } from "../domain/errors";
+import type { EvidenceReference, OperationRecord, VisitRecord, WorkOrder } from "../domain/types";
 import type { EnablementAdapter, EnablementGrant, EnablementResponse } from "../ports/authorization";
 import type { AtomicOperationChange, ClaimResult, LocalRepository, StoredRecord } from "../ports/repository";
 

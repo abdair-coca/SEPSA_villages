@@ -6,7 +6,7 @@ import type {
   VisitRecord,
   WorkPackage,
   WorkOrder,
-} from "../domain";
+} from "../domain/types";
 import type { SyncItem } from "./sync";
 
 export type StoredRecord = OperationRecord | VisitRecord;

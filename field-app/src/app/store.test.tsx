@@ -1,11 +1,22 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createAppStore, createDemoPackage, createUnavailableAppStore, formatSyncMessage, selectVisibleOrders, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, prepareDemoExternalValidation } from "./index";
-import { IndexedDbLocalRepository, deleteFieldDatabase } from "../adapters/indexeddb";
-import { MockAuthorizationAdapter, MockConnectivity, MockEnablementAdapter, MockSyncTransport } from "../adapters/mock";
-import type { AppStore } from "./index";
-import { FieldApp } from "../ui";
+import {
+  createAppStore,
+  createUnavailableAppStore,
+  selectVisibleOrders,
+  DEMO_DEVICE_ID,
+  DEMO_TECHNICIAN_ID,
+} from "./store";
+import { createDemoPackage, prepareDemoExternalValidation } from "./runtime";
+import { formatSyncMessage } from "./store-results";
+import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
+import { deleteFieldDatabase } from "../adapters/indexeddb/database";
+import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/mock/authorization";
+import { MockConnectivity } from "../adapters/mock/connectivity";
+import { MockSyncTransport } from "../adapters/mock/transport";
+import type { AppStore } from "./store";
+import { FieldApp } from "../ui/FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];

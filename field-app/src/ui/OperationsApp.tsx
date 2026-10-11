@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { generateOperationId, type AuditEvent, type DebtorRecord, type Session, type TechnicianRecord, type WorkOrder } from "../domain";
-import type { OperationsAuthorityPort } from "../ports";
+import {
+  generateOperationId,
+  type AuditEvent,
+  type DebtorRecord,
+  type Session,
+  type TechnicianRecord,
+  type WorkOrder,
+} from "../domain/types";
+import type { OperationsAuthorityPort } from "../ports/authority";
 import { AppHeader, type AppHeaderRoleSwitch } from "./AppHeader";
 import { IconAlertTriangle, IconCheck, IconDocument } from "./Icons";
 import { AppModal } from "./Modal";

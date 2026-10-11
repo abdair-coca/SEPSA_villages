@@ -1,4 +1,5 @@
-import { DomainError, generateOperationId, type EvidenceReference, type WorkOrder } from "../domain";
+import { DomainError } from "../domain/errors";
+import { generateOperationId, type EvidenceReference, type WorkOrder } from "../domain/types";
 
 export interface EvidenceDraft {
   mimeType: "image/jpeg" | "image/png";

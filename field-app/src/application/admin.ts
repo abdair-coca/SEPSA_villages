@@ -1,5 +1,16 @@
-import type { AssignOrderCommand, CreateOrderCommand, CreateOrdersBatchCommand, CreateOrdersBatchResult, DebtorQuery, DebtorRecord, Session, TechnicianRecord, WorkOrder } from "../domain";
-import type { IdentityPort, OperationsAuthorityPort } from "../ports";
+import type {
+  AssignOrderCommand,
+  CreateOrderCommand,
+  CreateOrdersBatchCommand,
+  CreateOrdersBatchResult,
+  DebtorQuery,
+  DebtorRecord,
+  Session,
+  TechnicianRecord,
+  WorkOrder,
+} from "../domain/types";
+import type { IdentityPort } from "../ports/identity";
+import type { OperationsAuthorityPort } from "../ports/authority";
 
 type AdminAuthority = OperationsAuthorityPort & IdentityPort;
 

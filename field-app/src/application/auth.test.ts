@@ -1,6 +1,8 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { IndexedDbAuthorityRepository, deleteAuthorityDatabase, openAuthorityDatabase, requestResult, transactionComplete } from "../adapters/indexeddb";
+import { IndexedDbAuthorityRepository } from "../adapters/indexeddb/authority-repository";
+import { deleteAuthorityDatabase, openAuthorityDatabase } from "../adapters/indexeddb/authority-database";
+import { requestResult, transactionComplete } from "../adapters/indexeddb/database";
 import { login } from "./auth";
 
 const databases: string[] = [];

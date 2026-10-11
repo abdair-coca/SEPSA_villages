@@ -1,5 +1,26 @@
-import { assertCan, permissionsForRole, type AuditEvent, type ConnectivityMode, type CreateOrdersBatchResult, type DataSource, type DebtorQuery, type DebtorRecord, type DemoCredentials, type KardexEntry, type OperationRecord, type Session, type TechnicianRecord, type VisitRecord, type WorkOrder, type WorkPackageEnvelope } from "../../domain";
-import type { IdentityPort, OperationsAuthorityPort, TechnicalOrderAuthorizationInput, TechnicalOrderAuthorizationResult } from "../../ports";
+import { assertCan, permissionsForRole } from "../../domain/policies";
+import type {
+  AuditEvent,
+  ConnectivityMode,
+  CreateOrdersBatchResult,
+  DataSource,
+  DebtorQuery,
+  DebtorRecord,
+  DemoCredentials,
+  KardexEntry,
+  OperationRecord,
+  Session,
+  TechnicianRecord,
+  VisitRecord,
+  WorkOrder,
+  WorkPackageEnvelope,
+} from "../../domain/types";
+import type { IdentityPort } from "../../ports/identity";
+import type {
+  OperationsAuthorityPort,
+  TechnicalOrderAuthorizationInput,
+  TechnicalOrderAuthorizationResult,
+} from "../../ports/authority";
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, ConsumeEnablementRequest, ConsumeEnablementResponse, EnablementAdapter, EnablementLookupResult, EnablementRequest, EnablementResponse, RemoteResult } from "../../ports/authorization";
 import type { EvidenceUploadPort, SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
 import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotReconnectionConsumeResponseDto, PilotReconnectionEnablementLookupDto, PilotReconnectionEnablementResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
@@ -275,7 +296,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     }
   }
 
-  async uploadEvidence(evidence: import("../../domain").EvidenceReference): Promise<"verified"> {
+  async uploadEvidence(evidence: import("../../domain/types").EvidenceReference): Promise<"verified"> {
     if (!evidence.content || !evidence.contentHash) throw new Error("Evidence bytes and SHA-256 hash are required.");
     const bytes = new Uint8Array(await evidence.content.arrayBuffer());
     let binary = "";

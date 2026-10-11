@@ -1,4 +1,4 @@
-import type { WorkOrder } from "../domain";
+import type { WorkOrder } from "../domain/types";
 
 export const MAP_CACHE_NAME = "sepsa-map-tiles-v1";
 export const SATELLITE_TILE_URL_TEMPLATE =

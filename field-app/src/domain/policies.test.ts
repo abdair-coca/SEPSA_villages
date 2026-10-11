@@ -7,12 +7,12 @@ import {
   assertOperationId,
   assertReconnectionEligible,
   assertVisitEligible,
-  DomainError,
   nextOrderState,
   validateEvidence,
   validateFieldCapture,
-} from "./index";
-import type { FieldCapture, OperationRecord, Session, WorkOrder } from "./index";
+} from "./policies";
+import { DomainError } from "./errors";
+import type { FieldCapture, OperationRecord, Session, WorkOrder } from "./types";
 
 const generatedOrder: WorkOrder = {
   orderId: "order-1",

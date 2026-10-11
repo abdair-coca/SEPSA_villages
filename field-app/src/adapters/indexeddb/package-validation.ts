@@ -1,4 +1,4 @@
-import type { WorkPackage, WorkPackageEnvelope } from "../../domain";
+import type { WorkPackage, WorkPackageEnvelope } from "../../domain/types";
 
 /**
  * Demonstration-only trust marker. This is not cryptographic authenticity.

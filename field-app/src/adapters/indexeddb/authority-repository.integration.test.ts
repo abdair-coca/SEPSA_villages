@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { assignOrder, createOrder, createOrdersBatch, findDebtors } from "../../application/admin";
 import { downloadAssigned } from "../../application/download";
 import { login } from "../../application/auth";
-import type { AssignOrderCommand, CreateOrderCommand, OperationRecord, WorkOrder } from "../../domain";
-import { IndexedDbAuthorityRepository, deleteAuthorityDatabase, openAuthorityDatabase, requestResult, transactionComplete } from ".";
+import type { AssignOrderCommand, CreateOrderCommand, OperationRecord, WorkOrder } from "../../domain/types";
+import { IndexedDbAuthorityRepository } from "./authority-repository";
+import { deleteAuthorityDatabase, openAuthorityDatabase } from "./authority-database";
+import { requestResult, transactionComplete } from "./database";
 
 const databases: string[] = [];
 const repositories: IndexedDbAuthorityRepository[] = [];

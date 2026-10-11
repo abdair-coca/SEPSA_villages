@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { ActionKind, AppMessage, AppStore, AppState, OrderFilter } from "../app/index";
-import { selectVisibleOrders } from "../app/index";
+import type { ActionKind, AppMessage, AppStore, AppState, OrderFilter } from "../app/store";
+import { selectVisibleOrders } from "../app/store";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
-import type { ConnectivityMode, WorkOrder } from "../domain";
+import type { ConnectivityMode, WorkOrder } from "../domain/types";
 import { AppHeader, type AppHeaderRoleSwitch } from "./AppHeader";
 import { FieldMap } from "./FieldMap";
 import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconUser } from "./Icons";

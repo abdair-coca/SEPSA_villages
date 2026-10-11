@@ -1,6 +1,6 @@
-import { generateOperationId, type OperationRecord, type VisitRecord } from "../domain";
-import type { ConnectivityPort, LocalRepository, StoredRecord } from "../ports";
-import type { SyncClaimResult } from "../ports/repository";
+import { generateOperationId, type OperationRecord, type VisitRecord } from "../domain/types";
+import type { ConnectivityPort } from "../ports/connectivity";
+import type { LocalRepository, StoredRecord, SyncClaimResult } from "../ports/repository";
 import type { EvidenceUploadPort, SyncItem, SyncPayload, SyncTransport } from "../ports/sync";
 
 export interface SyncEngineOptions {
