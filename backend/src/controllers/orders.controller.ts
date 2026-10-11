@@ -53,16 +53,16 @@ export function createOrderHandlers(context: ApplicationContext): OrderHandlers 
     const batchId = requiredString(body.batch_id, "batch_id");
     const purpose = requiredString(body.purpose, "purpose");
     const rawDebtorIds = body.debtor_ids;
-    if (!Array.isArray(rawDebtorIds) || rawDebtorIds.some((value) => typeof value !== "string")) throw new HttpError(400, "INVALID_REQUEST", "debtor_ids must be an array of strings.");
+    if (!Array.isArray(rawDebtorIds) || rawDebtorIds.some((value) => typeof value !== "string")) throw new HttpError(400, "INVALID_REQUEST", "debtor_ids debe ser una lista de textos.");
     const debtorIds = [...new Set(rawDebtorIds.map((value) => value.trim()).filter(Boolean))];
-    if (!debtorIds.length || debtorIds.length > 500) throw new HttpError(400, "INVALID_REQUEST", "debtor_ids must contain between 1 and 500 items.");
+    if (!debtorIds.length || debtorIds.length > 500) throw new HttpError(400, "INVALID_REQUEST", "debtor_ids debe contener entre 1 y 500 elementos.");
     const result = await service.createOrdersBatch(user, { batchId, debtorIds, purpose });
     sendJson(response, 201, result);
   }
 
   async function assignOrder(request: IncomingMessage, response: ServerResponse, user: SessionUser, orderId: string | undefined): Promise<void> {
     requireRole(user, "ADMIN");
-    if (!orderId) throw new HttpError(400, "INVALID_REQUEST", "order_id is required.");
+    if (!orderId) throw new HttpError(400, "INVALID_REQUEST", "order_id es obligatorio.");
     const body = await parseJsonBody(request, context.config.maxBodyBytes);
     const operationId = requiredString(body.operation_id, "operation_id");
     const technicianId = requiredString(body.technician_id, "technician_id");

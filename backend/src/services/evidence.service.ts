@@ -43,20 +43,20 @@ export function createEvidenceService(context: ServiceContext): EvidenceService 
   async function uploadEvidence(user: SessionUser, input: UploadEvidenceInput): Promise<UploadEvidenceResult> {
     const { evidenceId, orderId, operationId, deviceId, mimeType, declaredHash, bytes } = input;
     const computedHash = createHash("sha256").update(bytes).digest("hex");
-    if (computedHash !== declaredHash) throw new HttpError(422, "EVIDENCE_HASH_MISMATCH", "Evidence content does not match declared SHA-256 hash.");
+    if (computedHash !== declaredHash) throw new HttpError(422, "EVIDENCE_HASH_MISMATCH", "El contenido de la evidencia no coincide con el hash SHA-256 declarado.");
     const orderScope = await findOrderAssignment(context.pool, orderId);
-    if (!orderScope || orderScope.assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
+    if (!orderScope || orderScope.assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "No se encontraron la orden ni el técnico asignado.");
     await validateEvidenceImage(bytes, mimeType);
     return withTransaction(context.pool, async (client) => {
       const order = await findOrderAssignmentForUpdate(client, orderId);
-      if (!order || order.assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
+      if (!order || order.assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "No se encontraron la orden ni el técnico asignado.");
       let prior = await findEvidenceAssetForUpdate(client, evidenceId);
-      if (prior && !sameEvidenceBinding(prior, orderId, operationId, user.userId, deviceId, mimeType, computedHash)) throw new HttpError(409, "EVIDENCE_BINDING_CONFLICT", "Evidence identifier is already bound to different content or operation.");
+      if (prior && !sameEvidenceBinding(prior, orderId, operationId, user.userId, deviceId, mimeType, computedHash)) throw new HttpError(409, "EVIDENCE_BINDING_CONFLICT", "El identificador de la evidencia ya está ligado a otro contenido u operación.");
       if (!prior) {
         const insertedCount = await insertEvidenceAsset(client, { evidenceId, orderId, operationId, technicianId: user.userId, deviceId, mimeType, contentHash: computedHash, content: bytes });
         if (insertedCount !== 1) {
           prior = await findEvidenceAssetForUpdate(client, evidenceId);
-          if (!prior || !sameEvidenceBinding(prior, orderId, operationId, user.userId, deviceId, mimeType, computedHash)) throw new HttpError(409, "EVIDENCE_BINDING_CONFLICT", "Evidence identifier is already bound to different content or operation.");
+          if (!prior || !sameEvidenceBinding(prior, orderId, operationId, user.userId, deviceId, mimeType, computedHash)) throw new HttpError(409, "EVIDENCE_BINDING_CONFLICT", "El identificador de la evidencia ya está ligado a otro contenido u operación.");
         }
       }
       await insertAudit(client, {

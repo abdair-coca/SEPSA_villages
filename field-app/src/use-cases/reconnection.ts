@@ -55,7 +55,7 @@ function uncertainError(error: unknown): boolean {
 }
 
 function versionOf(order: WorkOrder): number {
-  if (order.version === undefined) throw new DomainError("Order version is required for atomic claims.", "ORDER_VERSION_REQUIRED");
+  if (order.version === undefined) throw new DomainError("Se requiere la versión de la orden para reclamar de forma atómica.", "ORDER_VERSION_REQUIRED");
   return order.version;
 }
 
@@ -214,7 +214,7 @@ function assertBinding(record: StoredRecord, input: ReconnectionProcessInput): v
     record.deviceId !== input.deviceId ||
     (record.kind !== "RECONNECTION" && !(isVisitRecord(record) && record.attemptedAction === "RECONNECTION"))
   ) {
-    throw new DomainError("Operation identifier is bound to a different reconnection context.", "OPERATION_BINDING_MISMATCH");
+    throw new DomainError("El identificador de la operación está ligado a otro contexto de reconexión.", "OPERATION_BINDING_MISMATCH");
   }
 }
 
@@ -270,7 +270,7 @@ function responseReason(response: EnablementResponse): "NOT_ENABLED" | "ENABLEME
 
 /** Ejecuta el flujo completo de reconexión descrito al inicio del archivo. */
 export async function executeReconnection(input: ReconnectionProcessInput): Promise<ReconnectionResult> {
-  if (!input.operationId.trim()) throw new DomainError("Operation identifier is required.", "OPERATION_ID_REQUIRED");
+  if (!input.operationId.trim()) throw new DomainError("Se requiere el identificador de la operación.", "OPERATION_ID_REQUIRED");
   assertOperationId(input.operationId);
   const existing = await input.repository.getRecord(input.operationId);
   if (existing) {
@@ -364,9 +364,9 @@ async function persistVisit(input: ReconnectionProcessInput, visit: VisitRecord)
   if (result.status === "existing") {
     assertBinding(result.record, input);
     if (isVisitRecord(result.record)) return { outcome: "visit_recorded", visit: result.record };
-    throw new DomainError("Operation identifier is already used by a reconnection.", "OPERATION_BINDING_MISMATCH");
+    throw new DomainError("El identificador de la operación ya lo usa una reconexión.", "OPERATION_BINDING_MISMATCH");
   }
-  if (result.status !== "claimed") throw new DomainError("Visit could not be persisted.", "VISIT_CLAIM_REJECTED");
+  if (result.status !== "claimed") throw new DomainError("No se pudo guardar la visita.", "VISIT_CLAIM_REJECTED");
   return { outcome: "visit_recorded", visit };
 }
 

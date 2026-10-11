@@ -18,7 +18,7 @@ export function pageRequest(url: URL): PageRequest {
   const offsetText = url.searchParams.get("offset");
   const cursor = url.searchParams.get("cursor");
   if (offsetText !== null && cursor !== null) {
-    throw new HttpError(400, "INVALID_REQUEST", "Use either offset or cursor, not both.");
+    throw new HttpError(400, "INVALID_REQUEST", "Use offset o cursor, no ambos.");
   }
 
   const limit = limitText === null ? DEFAULT_PAGE_SIZE : parseNonNegativeInteger(limitText, "limit");
@@ -30,7 +30,7 @@ export function pageRequest(url: URL): PageRequest {
     throw new HttpError(400, "INVALID_REQUEST", `limit must be between 1 and ${MAX_PAGE_SIZE}.`);
   }
   if (offset < 0 || offset > MAX_OFFSET) {
-    throw new HttpError(400, "INVALID_REQUEST", "offset must be between 0 and 1000000000.");
+    throw new HttpError(400, "INVALID_REQUEST", "offset debe estar entre 0 y 1000000000.");
   }
   return { limit, offset };
 }

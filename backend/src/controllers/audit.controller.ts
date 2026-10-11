@@ -19,7 +19,7 @@ export function createAuditHandlers(context: ApplicationContext): AuditHandlers 
   async function listAudit(response: ServerResponse, user: SessionUser, url: URL): Promise<void> {
     requireRole(user, "ADMIN");
     const orderId = url.searchParams.get("order_id");
-    if (orderId && !isUuid(orderId)) throw new HttpError(400, "INVALID_REQUEST", "order_id must be a UUID.");
+    if (orderId && !isUuid(orderId)) throw new HttpError(400, "INVALID_REQUEST", "order_id debe ser un UUID.");
     const page = pageRequest(url);
     const audit = await listAuditEvents(context.pool, orderId, page);
     const total = await countAuditEvents(context.pool, orderId);

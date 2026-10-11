@@ -30,7 +30,7 @@ export function createSyncHandlers(context: ApplicationContext): SyncHandlers {
     const body = await parseJsonBody(request, context.config.maxBodyBytes);
     const payload = parseSyncPayload(body);
     validateSyncPayload(payload);
-    if (payload.technician_id && payload.technician_id !== user.userId) throw new HttpError(403, "TECHNICIAN_SCOPE", "Payload technician does not match session.");
+    if (payload.technician_id && payload.technician_id !== user.userId) throw new HttpError(403, "TECHNICIAN_SCOPE", "El técnico del envío no coincide con la sesión.");
     payload.technician_id = user.userId;
     const result = await service.syncOperation(user, payload);
     if (result.status === "conflict") {
@@ -43,8 +43,8 @@ export function createSyncHandlers(context: ApplicationContext): SyncHandlers {
   }
 
   async function lookupOperation(response: ServerResponse, user: SessionUser, operationId: string | undefined): Promise<void> {
-    if (user.role !== "TECHNICIAN" && user.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "Role is not allowed.");
-    if (!operationId) throw new HttpError(400, "INVALID_REQUEST", "operation_id is required.");
+    if (user.role !== "TECHNICIAN" && user.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "El rol no está permitido.");
+    if (!operationId) throw new HttpError(400, "INVALID_REQUEST", "operation_id es obligatorio.");
     const result = await service.lookupOperation(user, operationId);
     sendJson(response, 200, result);
   }
@@ -57,7 +57,7 @@ export function createSyncHandlers(context: ApplicationContext): SyncHandlers {
     const deviceId = requiredString(body.device_id, "device_id");
     const expectedVersion = requiredInteger(body.expected_version, "expected_version");
     const reason = requiredString(body.reason, "reason").trim();
-    if (!reason || reason.length > 1000) throw new HttpError(400, "INVALID_REVIEW_REASON", "reason must contain 1 to 1000 non-whitespace characters.");
+    if (!reason || reason.length > 1000) throw new HttpError(400, "INVALID_REVIEW_REASON", "reason debe tener entre 1 y 1000 caracteres que no sean espacios.");
     const result = await service.recordHumanReview(user, { operationId, orderId, technicianId, deviceId, expectedVersion, reason });
     sendJson(response, 200, { ...result, source: PROVISIONAL_SOURCE });
   }

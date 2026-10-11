@@ -62,7 +62,7 @@ export class Application {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
       if (request.headers.origin === this.config.corsOrigin) setCorsHeaders(response, this.config.corsOrigin);
       if (request.method === "OPTIONS") {
-        if (request.headers.origin !== this.config.corsOrigin) throw new HttpError(403, "CORS_ORIGIN_REJECTED", "Request origin is not allowed.");
+        if (request.headers.origin !== this.config.corsOrigin) throw new HttpError(403, "CORS_ORIGIN_REJECTED", "El origen de la solicitud no está permitido.");
         return sendNoContent(response);
       }
       validateOrigin(request, this.config.corsOrigin);
@@ -91,7 +91,7 @@ export class Application {
       const context: SessionRouteContext = { request, response, url, user, params: sessionRoute.params };
       return await sessionRoute.route.handler(context);
     }
-    throw new HttpError(404, "NOT_FOUND", "Endpoint not found.");
+    throw new HttpError(404, "NOT_FOUND", "No se encontró el endpoint.");
   }
 
   private async health(response: ServerResponse): Promise<void> {

@@ -15,14 +15,14 @@ export async function claimCommand(client: PoolClient, operationId: string, oper
   const insertedCount = await insertPendingCommand(client, operationId, operationType, actorId, requestHash);
   if (insertedCount === 1) return { claimed: true };
   const replay = await commandReplay(client, operationId, operationType, actorId, requestHash);
-  if (replay === undefined) throw new HttpError(409, "OPERATION_IN_PROGRESS", "Operation is already in progress.");
+  if (replay === undefined) throw new HttpError(409, "OPERATION_IN_PROGRESS", "La operación ya está en curso.");
   return { claimed: false, replay };
 }
 
 async function commandReplay(client: PoolClient, operationId: string, operationType: string, actorId: string, requestHash: string): Promise<unknown | undefined> {
   const row = await findCommandForUpdate(client, operationId);
   if (!row) return undefined;
-  if (row.operation_type !== operationType || row.actor_id !== actorId || row.request_hash !== requestHash) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Operation identifier is already bound to another command.");
-  if (row.response === null || row.response === undefined) throw new HttpError(409, "OPERATION_IN_PROGRESS", "Operation is already in progress.");
+  if (row.operation_type !== operationType || row.actor_id !== actorId || row.request_hash !== requestHash) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "El identificador de la operación ya está ligado a otro comando.");
+  if (row.response === null || row.response === undefined) throw new HttpError(409, "OPERATION_IN_PROGRESS", "La operación ya está en curso.");
   return projectCommandResponse(row.response);
 }

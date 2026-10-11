@@ -34,10 +34,10 @@ export function validateOrigin(request: IncomingMessage, allowedOrigin: string):
   const missingCookieOrigin = !origin && usesCookieAuthentication;
 
   if (hasUnexpectedOrigin || missingCookieOrigin) {
-    throw new HttpError(403, "CSRF_ORIGIN_REJECTED", "Request origin is not allowed.");
+    throw new HttpError(403, "CSRF_ORIGIN_REJECTED", "El origen de la solicitud no está permitido.");
   }
   if (request.headers["sec-fetch-site"] === "cross-site") {
-    throw new HttpError(403, "CSRF_FETCH_METADATA_REJECTED", "Cross-site request is not allowed.");
+    throw new HttpError(403, "CSRF_FETCH_METADATA_REJECTED", "No se permiten solicitudes de otro sitio.");
   }
 }
 

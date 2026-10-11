@@ -32,7 +32,7 @@ export function permissionsForRole(role: Role): AuthorizedAction[] {
 
 export function assertRecognizedRole(role: string): asserts role is Role {
   if (role !== "ADMIN" && role !== "TECHNICIAN") {
-    throw new DomainError("User role is not recognized.", "ROLE_NOT_RECOGNIZED");
+    throw new DomainError("El rol del usuario no es reconocido.", "ROLE_NOT_RECOGNIZED");
   }
 }
 
@@ -43,14 +43,14 @@ export function assertRecognizedRole(role: string): asserts role is Role {
 export function assertCan(session: Session, action: AuthorizedAction): void {
   assertRecognizedRole(session.role);
   if (!ROLE_PERMISSIONS[session.role].includes(action) || !session.permissions.includes(action)) {
-    throw new DomainError("This role cannot perform the requested action.", "FORBIDDEN");
+    throw new DomainError("Este rol no puede realizar la acción solicitada.", "FORBIDDEN");
   }
 }
 
 /** Un técnico solo opera órdenes asignadas a él. */
 export function assertAssignedOrder(order: WorkOrder, technicianId: string): void {
   if (order.assignedTechnicianId !== technicianId) {
-    throw new DomainError("Order is not assigned to this technician.", "ORDER_NOT_ASSIGNED");
+    throw new DomainError("La orden no está asignada a este técnico.", "ORDER_NOT_ASSIGNED");
   }
 }
 
@@ -58,7 +58,7 @@ export function assertAssignedOrder(order: WorkOrder, technicianId: string): voi
 export function assertVisitEligible(order: WorkOrder, technicianId: string): void {
   assertAssignedOrder(order, technicianId);
   if (order.status !== "GENERADO" || order.physicalStatus !== "NONE") {
-    throw new DomainError("This order already has a cut execution or review.", "VISIT_NOT_ALLOWED_AFTER_CUT");
+    throw new DomainError("Esta orden ya tiene una ejecución de corte o una revisión.", "VISIT_NOT_ALLOWED_AFTER_CUT");
   }
 }
 
@@ -70,10 +70,10 @@ export function assertVisitEligible(order: WorkOrder, technicianId: string): voi
 export function assertCutEligible(order: WorkOrder, technicianId: string): void {
   assertAssignedOrder(order, technicianId);
   if (order.status !== "GENERADO") {
-    throw new DomainError("Order is not ready for a cut.", "ORDER_STATUS_INVALID");
+    throw new DomainError("La orden no está lista para un corte.", "ORDER_STATUS_INVALID");
   }
   if (order.physicalStatus !== "NONE") {
-    throw new DomainError("Order already has a physical cut claim.", "CUT_ALREADY_CLAIMED");
+    throw new DomainError("La orden ya tiene un reclamo de corte físico.", "CUT_ALREADY_CLAIMED");
   }
 }
 
@@ -131,10 +131,10 @@ export function validateFieldCapture(capture: FieldCapture | undefined, expected
 export function assertReconnectionEligible(order: WorkOrder, technicianId: string): void {
   assertAssignedOrder(order, technicianId);
   if (order.status !== "EJECUTADO") {
-    throw new DomainError("Order is not ready for reconnection.", "ORDER_NOT_EXECUTED");
+    throw new DomainError("La orden no está lista para la reconexión.", "ORDER_NOT_EXECUTED");
   }
   if (order.physicalStatus !== "CONFIRMED") {
-    throw new DomainError("Cut physical status is not confirmed.", "CUT_STATUS_INVALID");
+    throw new DomainError("El estado físico del corte no está confirmado.", "CUT_STATUS_INVALID");
   }
 }
 
@@ -150,19 +150,19 @@ export function validateEvidence(
 ): { valid: true; requiresOptimization: boolean } {
   if (!evidence) {
     if (!exceptionReason?.trim()) {
-      throw new DomainError("Photo evidence or a justified exception is required.", "EVIDENCE_REQUIRED");
+      throw new DomainError("Se requiere evidencia fotográfica o una excepción justificada.", "EVIDENCE_REQUIRED");
     }
     return { valid: true, requiresOptimization: false };
   }
 
   if (!Number.isFinite(evidence.width) || !Number.isFinite(evidence.height)) {
-    throw new DomainError("Evidence dimensions must be finite.", "EVIDENCE_DIMENSIONS_INVALID");
+    throw new DomainError("Las dimensiones de la evidencia deben ser finitas.", "EVIDENCE_DIMENSIONS_INVALID");
   }
   if (evidence.width <= 0 || evidence.height <= 0) {
-    throw new DomainError("Evidence dimensions must be positive.", "EVIDENCE_DIMENSIONS_INVALID");
+    throw new DomainError("Las dimensiones de la evidencia deben ser positivas.", "EVIDENCE_DIMENSIONS_INVALID");
   }
   if (typeof evidence.evidenceId !== "string" || !evidence.evidenceId.trim()) {
-    throw new DomainError("Evidence identifier is required.", "EVIDENCE_ID_REQUIRED");
+    throw new DomainError("Se requiere el identificador de la evidencia.", "EVIDENCE_ID_REQUIRED");
   }
   if (
     !binding ||
@@ -171,28 +171,28 @@ export function validateEvidence(
     (binding.technicianId !== undefined && evidence.technicianId !== binding.technicianId) ||
     (binding.deviceId !== undefined && evidence.deviceId !== binding.deviceId)
   ) {
-    throw new DomainError("Evidence is bound to a different operation.", "EVIDENCE_BINDING_MISMATCH");
+    throw new DomainError("La evidencia está ligada a otra operación.", "EVIDENCE_BINDING_MISMATCH");
   }
   if (evidence.mimeType !== "image/jpeg" && evidence.mimeType !== "image/png") {
-    throw new DomainError("Evidence must be a JPEG or PNG image.", "EVIDENCE_FORMAT_INVALID");
+    throw new DomainError("La evidencia debe ser una imagen JPEG o PNG.", "EVIDENCE_FORMAT_INVALID");
   }
   if (evidence.content !== undefined && (typeof Blob === "undefined" || !(evidence.content instanceof Blob))) {
-    throw new DomainError("Evidence content must be a Blob.", "EVIDENCE_CONTENT_INVALID");
+    throw new DomainError("El contenido de la evidencia debe ser un Blob.", "EVIDENCE_CONTENT_INVALID");
   }
   if (evidence.contentHash !== undefined && !/^[a-f0-9]{64}$/i.test(evidence.contentHash)) {
-    throw new DomainError("Evidence content hash must be SHA-256.", "EVIDENCE_HASH_INVALID");
+    throw new DomainError("El hash del contenido de la evidencia debe ser SHA-256.", "EVIDENCE_HASH_INVALID");
   }
   if (evidence.contentHash !== undefined && evidence.content === undefined) {
-    throw new DomainError("Evidence content is required with its hash.", "EVIDENCE_CONTENT_REQUIRED");
+    throw new DomainError("Se requiere el contenido de la evidencia junto con su hash.", "EVIDENCE_CONTENT_REQUIRED");
   }
   if (evidence.content !== undefined && !evidence.contentHash) {
-    throw new DomainError("Evidence content hash is required for stored content.", "EVIDENCE_HASH_REQUIRED");
+    throw new DomainError("Se requiere el hash del contenido guardado de la evidencia.", "EVIDENCE_HASH_REQUIRED");
   }
   if (evidence.content && evidence.content.type && evidence.content.type !== evidence.mimeType) {
-    throw new DomainError("Evidence content type does not match its metadata.", "EVIDENCE_CONTENT_TYPE_INVALID");
+    throw new DomainError("El tipo del contenido de la evidencia no coincide con sus metadatos.", "EVIDENCE_CONTENT_TYPE_INVALID");
   }
   if (evidence.optimized !== true || evidence.width * evidence.height > 5_000_000) {
-    throw new DomainError("Evidence must already be optimized to five megapixels or less.", "EVIDENCE_NOT_OPTIMIZED");
+    throw new DomainError("La evidencia debe estar optimizada a cinco megapíxeles o menos.", "EVIDENCE_NOT_OPTIMIZED");
   }
 
   return {
@@ -243,7 +243,7 @@ export function assertHistoricalOperationImmutable(
   ];
   for (const field of immutableFields) {
     if (previous[field] !== replacement[field]) {
-      throw new DomainError("Historical operation identity cannot be changed.", "OPERATION_IMMUTABLE");
+      throw new DomainError("La identidad de una operación histórica no puede cambiarse.", "OPERATION_IMMUTABLE");
     }
   }
 }
@@ -264,7 +264,7 @@ export function createVisit(input: {
   fieldCapture?: FieldCapture;
 }): VisitRecord {
   if (!input.operationId.trim()) {
-    throw new DomainError("Operation identifier is required.", "OPERATION_ID_REQUIRED");
+    throw new DomainError("Se requiere el identificador de la operación.", "OPERATION_ID_REQUIRED");
   }
   return {
     operationId: input.operationId,
@@ -291,7 +291,7 @@ const OPERATION_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-[0-9a-f]{8}-[0-9a-f
 
 export function assertOperationId(operationId: string): void {
   if (!OPERATION_ID_PATTERN.test(operationId)) {
-    throw new DomainError("Operation identifier must contain a prefix and UUID.", "OPERATION_ID_INVALID");
+    throw new DomainError("El identificador de la operación debe contener un prefijo y un UUID.", "OPERATION_ID_INVALID");
   }
 }
 

@@ -43,7 +43,7 @@ export async function executeOfflineVisit(input: OfflineVisitInput): Promise<Off
   const existing = await input.repository.getRecord(input.operationId);
   if (existing) {
     assertVisitBinding(existing, input);
-    if (!isVisit(existing)) throw new Error("Operation identifier is already used by a physical operation.");
+    if (!isVisit(existing)) throw new Error("El identificador de la operación ya lo usa una operación física.");
     return { outcome: "duplicate", visit: existing };
   }
 
@@ -76,10 +76,10 @@ export async function executeOfflineVisit(input: OfflineVisitInput): Promise<Off
   const result = await input.repository.claimVisit(change);
   if (result.status === "existing") {
     assertVisitBinding(result.record, input);
-    if (!isVisit(result.record)) throw new Error("Operation identifier is already used by a physical operation.");
+    if (!isVisit(result.record)) throw new Error("El identificador de la operación ya lo usa una operación física.");
     return { outcome: "duplicate", visit: result.record };
   }
-  if (result.status !== "claimed") throw new Error("Visit could not be persisted locally.");
+  if (result.status !== "claimed") throw new Error("No se pudo guardar la visita localmente.");
   return { outcome: "visit_recorded", visit };
 }
 
@@ -90,6 +90,6 @@ function isVisit(record: StoredRecord): record is VisitRecord {
 /** Un `operationId` reutilizado debe pertenecer a la misma orden, técnico y dispositivo. */
 function assertVisitBinding(record: StoredRecord, input: OfflineVisitInput): void {
   if (record.orderId !== input.order.orderId || record.technicianId !== input.technicianId || record.deviceId !== input.deviceId) {
-    throw new Error("Operation identifier is bound to a different visit context.");
+    throw new Error("El identificador de la operación está ligado a otro contexto de visita.");
   }
 }

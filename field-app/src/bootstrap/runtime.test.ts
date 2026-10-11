@@ -52,7 +52,7 @@ describe("simulated authoritative technician runtime", () => {
 
     expect(report).toMatchObject({ processed: 1, synced: 0, failed: 1 });
     await expect(setup.repository.listSyncItems()).resolves.toMatchObject([{ operationId, status: "failed", manualReview: true, errorCode: "REMOTE_CONFLICT" }]);
-    await expect(setup.repository.listConflicts()).resolves.toMatchObject([{ operationId, reason: "Operation order is not assigned to this technician." }]);
+    await expect(setup.repository.listConflicts()).resolves.toMatchObject([{ operationId, reason: "La orden de la operación no está asignada a este técnico." }]);
   });
 
   it("does not grant a stale local order after authoritative reassignment", async () => {

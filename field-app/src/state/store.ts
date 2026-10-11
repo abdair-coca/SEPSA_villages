@@ -309,7 +309,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
 
   function getAssignedOrder(orderId: string): WorkOrder {
     const order = snapshot.orders.find((candidate) => candidate.orderId === orderId);
-    if (!order || order.assignedTechnicianId !== technicianId) throw new DomainError("Order is not assigned to this technician.", "ORDER_NOT_ASSIGNED");
+    if (!order || order.assignedTechnicianId !== technicianId) throw new DomainError("La orden no está asignada a este técnico.", "ORDER_NOT_ASSIGNED");
     return order;
   }
 

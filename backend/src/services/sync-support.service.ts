@@ -30,10 +30,10 @@ export async function rejectSync(client: PoolClient, user: SessionUser, payload:
 
 export function syncReplay(row: StoredOperationRow, technicianId: string, payload: SyncPayload): SyncResult | undefined {
   if (row.technician_id !== technicianId || row.device_id !== payload.device_id || row.payload_hash !== digestJson(payload)) {
-    return { status: "conflict", message: "Operation identifier is bound to another payload or device." };
+    return { status: "conflict", message: "El identificador de la operación está ligado a otro envío o dispositivo." };
   }
   if (row.status === "acknowledged") return { status: "acknowledged" };
-  return { status: "conflict", message: "Operation remains unresolved and requires review." };
+  return { status: "conflict", message: "La operación sigue sin resolverse y requiere revisión." };
 }
 
 export function safeSyncPayload(payload: SyncPayload): Record<string, unknown> {

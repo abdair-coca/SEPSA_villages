@@ -32,39 +32,39 @@ export async function applyPhysicalOperation(client: PoolClient, user: SessionUs
 }
 
 async function acceptReconnection(client: PoolClient, user: SessionUser, payload: SyncPayload, order: OrderRow): Promise<SyncResult> {
-  if (order.status !== "EJECUTADO" || order.physical_status !== "CONFIRMED") return rejectSync(client, user, payload, "RECONNECTION requires an executed order with a confirmed cut.");
-  if (payload.order_version === undefined || order.version !== payload.order_version) return rejectSync(client, user, payload, "Order version is stale.");
+  if (order.status !== "EJECUTADO" || order.physical_status !== "CONFIRMED") return rejectSync(client, user, payload, "RECONNECTION requiere una orden ejecutada con un corte confirmado.");
+  if (payload.order_version === undefined || order.version !== payload.order_version) return rejectSync(client, user, payload, "La versión de la orden está desactualizada.");
   const cuts = await listAcknowledgedCutOperationsShared(client, payload.order_id);
-  if (cuts.length !== 1) return rejectSync(client, user, payload, "Order does not identify exactly one confirmed CUT cycle.");
-  if (!payload.authorization_id || payload.authorization_token !== undefined) return rejectSync(client, user, payload, "RECONNECTION requires its consumed enablement identifier and must not resend the token.");
+  if (cuts.length !== 1) return rejectSync(client, user, payload, "La orden no identifica exactamente un ciclo CUT confirmado.");
+  if (!payload.authorization_id || payload.authorization_token !== undefined) return rejectSync(client, user, payload, "RECONNECTION requiere el identificador de la habilitación consumida y no debe reenviar el token.");
   const grant = await findReconnectionAuthorizationForSyncForUpdate(client, payload.authorization_id);
   if (!grant || !matchesReconnectionAuthorization(grant, user, payload)) {
-    return rejectSync(client, user, payload, "Consumed reconnection habilitation does not match this operation.");
+    return rejectSync(client, user, payload, "La habilitación de reconexión consumida no corresponde a esta operación.");
   }
-  if (payload.evidence_refs.length > 0 && !await hasVerifiedEvidence(client, payload, user.userId)) return rejectSync(client, user, payload, "RECONNECTION evidence is missing, unverified, or bound to another operation.");
+  if (payload.evidence_refs.length > 0 && !await hasVerifiedEvidence(client, payload, user.userId)) return rejectSync(client, user, payload, "Falta la evidencia de RECONNECTION, no está verificada o está ligada a otra operación.");
   const updatedCount = await markOrderReconnected(client, payload.order_id, payload.order_version);
-  if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed while recording reconnection.");
+  if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "La orden cambió mientras se registraba la reconexión.");
   await markSyncOperationAcknowledged(client, payload.operation_id);
   await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_RECONNECTION", result: "accepted", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, metadata: safeSyncPayload(payload), transition: { before: order.status, after: "RECONEXIÓN", version: payload.order_version + 1 } });
   return { status: "acknowledged" };
 }
 
 async function acceptCut(client: PoolClient, user: SessionUser, payload: SyncPayload, order: OrderRow): Promise<SyncResult> {
-  if (order.status !== "GENERADO") return rejectSync(client, user, payload, "Only GENERADO orders can be cut.");
-  if (order.physical_status !== "NONE") return rejectSync(client, user, payload, "Physical status must be NONE before a cut can be synchronized.");
-  if (payload.evidence_refs.length > 0 && !await hasVerifiedEvidence(client, payload, user.userId)) return rejectSync(client, user, payload, "CUT evidence is missing, unverified, or bound to another operation.");
-  if (!payload.authorization_id || !payload.authorization_token || payload.order_version === undefined) return rejectSync(client, user, payload, "Cut requires authorization, token, and order version.");
-  if (order.version !== payload.order_version) return rejectSync(client, user, payload, "Order version is stale.");
+  if (order.status !== "GENERADO") return rejectSync(client, user, payload, "Solo se pueden cortar órdenes en estado GENERADO.");
+  if (order.physical_status !== "NONE") return rejectSync(client, user, payload, "El estado físico debe ser NONE antes de sincronizar un corte.");
+  if (payload.evidence_refs.length > 0 && !await hasVerifiedEvidence(client, payload, user.userId)) return rejectSync(client, user, payload, "Falta la evidencia de CUT, no está verificada o está ligada a otra operación.");
+  if (!payload.authorization_id || !payload.authorization_token || payload.order_version === undefined) return rejectSync(client, user, payload, "CUT requiere autorización, token y versión de la orden.");
+  if (order.version !== payload.order_version) return rejectSync(client, user, payload, "La versión de la orden está desactualizada.");
   const grant = await findCutAuthorizationForSyncForUpdate(client, payload.authorization_id);
   const authorizationToken = payload.authorization_token;
   if (!grant || !matchesCutAuthorization(grant, user, payload, authorizationToken)) {
-    return rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
+    return rejectSync(client, user, payload, "La autorización no es válida, venció, ya fue consumida o no está ligada a esta operación.");
   }
   // Consumo de un solo uso: solo pasa de RESERVED a CONSUMED si no venció (hora de la base, no del cliente).
   const consumedCount = await consumeCutAuthorization(client, grant.authorization_id, payload.operation_id);
-  if (consumedCount !== 1) return rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
+  if (consumedCount !== 1) return rejectSync(client, user, payload, "La autorización no es válida, venció, ya fue consumida o no está ligada a esta operación.");
   const updatedCount = await markOrderCutExecuted(client, payload.order_id, payload.order_version);
-  if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed while consuming authorization.");
+  if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "La orden cambió mientras se consumía la autorización.");
   await markSyncOperationAcknowledged(client, payload.operation_id);
   await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "SYNC_CUT", result: "accepted", entityId: payload.operation_id, orderId: payload.order_id, operationId: payload.operation_id, deviceId: payload.device_id, metadata: safeSyncPayload(payload), transition: { before: order.status, after: "EJECUTADO", version: payload.order_version + 1 } });
   return { status: "acknowledged" };

@@ -52,17 +52,17 @@ export async function parseJsonBody(request: AsyncIterable<Uint8Array | string>,
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > maxBytes) throw new HttpError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
+    if (size > maxBytes) throw new HttpError(413, "PAYLOAD_TOO_LARGE", "El cuerpo de la solicitud es demasiado grande.");
     chunks.push(buffer);
   }
-  if (chunks.length === 0) throw new HttpError(400, "INVALID_JSON", "Request body must be JSON.");
+  if (chunks.length === 0) throw new HttpError(400, "INVALID_JSON", "El cuerpo de la solicitud debe ser JSON.");
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
-    throw new HttpError(400, "INVALID_JSON", "Request body must be valid JSON.");
+    throw new HttpError(400, "INVALID_JSON", "El cuerpo de la solicitud debe ser JSON válido.");
   }
-  if (!isRecord(parsed)) throw new HttpError(400, "INVALID_JSON", "Request body must be a JSON object.");
+  if (!isRecord(parsed)) throw new HttpError(400, "INVALID_JSON", "El cuerpo de la solicitud debe ser un objeto JSON.");
   return parsed;
 }
 
@@ -86,6 +86,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function errorBody(error: unknown): HttpErrorShape {
   if (error instanceof HttpError) return { status: error.status, code: error.code, message: error.message };
-  if (error && typeof error === "object" && "code" in error && error.code === "23505") return { status: 409, code: "IDEMPOTENCY_CONFLICT", message: "A provisional unique operation already exists." };
-  return { status: 500, code: "INTERNAL_ERROR", message: "Unexpected provisional backend error." };
+  if (error && typeof error === "object" && "code" in error && error.code === "23505") return { status: 409, code: "IDEMPOTENCY_CONFLICT", message: "Ya existe una operación única provisional." };
+  return { status: 500, code: "INTERNAL_ERROR", message: "Error inesperado del backend provisional." };
 }

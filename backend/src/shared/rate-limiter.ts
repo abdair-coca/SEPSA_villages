@@ -37,7 +37,7 @@ export function createLoginRateLimiter(config: Pick<Config, "loginRateLimitMax" 
     }
 
     attempt.count += 1;
-    if (attempt.count > maxAttempts) throw new HttpError(429, "LOGIN_RATE_LIMITED", "Too many login attempts. Try again later.");
+    if (attempt.count > maxAttempts) throw new HttpError(429, "LOGIN_RATE_LIMITED", "Demasiados intentos de inicio de sesión. Intente más tarde.");
   }
 
   function evictExpiredAttempts(now: number): void {

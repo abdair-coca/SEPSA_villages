@@ -62,14 +62,14 @@ export function createAuthService(context: ServiceContext): AuthService {
 
   async function resolveSession(token: string): Promise<SessionUser> {
     const row = await findActiveSessionByTokenHash(context.pool, hashToken(token));
-    if (!row) throw new HttpError(401, "UNAUTHENTICATED", "Session is invalid, expired, or revoked.");
+    if (!row) throw new HttpError(401, "UNAUTHENTICATED", "La sesión no es válida, venció o fue revocada.");
     return { sessionId: row.session_id, userId: row.user_id, username: row.username, displayName: row.display_name, role: row.role, roles: row.roles, expiresAt: row.expires_at };
   }
 
   async function switchRole(user: SessionUser, role: Role): Promise<SessionUser> {
     return withTransaction(context.pool, async (client) => {
       const previousRole = await lockSessionActiveRole(client, user.sessionId);
-      if (!previousRole) throw new HttpError(401, "UNAUTHENTICATED", "Session is invalid, expired, or revoked.");
+      if (!previousRole) throw new HttpError(401, "UNAUTHENTICATED", "La sesión no es válida, venció o fue revocada.");
       const row = await updateSessionActiveRole(client, user.sessionId, role);
       if (!row) throw new HttpError(403, "ROLE_NOT_GRANTED", "Esta cuenta no tiene ambos roles habilitados. Solicite los permisos al administrador.");
       await insertAudit(client, { actorId: user.userId, actorRole: role, action: "SWITCH_ROLE", result: "accepted", entityId: user.sessionId, metadata: { previous_role: previousRole, active_role: role } });

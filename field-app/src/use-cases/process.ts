@@ -231,7 +231,7 @@ function assertReplayBinding(existing: StoredRecord, input: CutProcessInput): vo
 
 function requireOrderVersion(order: WorkOrder): number {
   if (order.version === undefined) {
-    throw new DomainError("Order version is required for atomic claims.", "ORDER_VERSION_REQUIRED");
+    throw new DomainError("Se requiere la versión de la orden para reclamar de forma atómica.", "ORDER_VERSION_REQUIRED");
   }
   return order.version;
 }
@@ -251,14 +251,14 @@ function isVisit(record: StoredRecord): record is VisitRecord {
 
 function claimedVisitResult(result: ClaimResult, input: CutProcessInput): CutProcessResult {
   if (result.status === "order_conflict") {
-    throw new DomainError("Order changed before visit could be recorded.", "ORDER_VERSION_CONFLICT");
+    throw new DomainError("La orden cambió antes de poder registrar la visita.", "ORDER_VERSION_CONFLICT");
   }
   if (result.status === "rejected") {
     throw new DomainError(result.reason, "VISIT_CLAIM_REJECTED");
   }
   assertReplayBinding(result.record, input);
   if (!isVisit(result.record)) {
-    throw new DomainError("Operation identifier is already used by a cut.", "OPERATION_BINDING_MISMATCH");
+    throw new DomainError("El identificador de la operación ya lo usa un corte.", "OPERATION_BINDING_MISMATCH");
   }
   return { outcome: "visit_recorded", visit: result.record, order: result.order };
 }
@@ -285,7 +285,7 @@ async function recoverExisting(
   if (existing.status === "INTENT_PERSISTED" || existing.physicalStatus === "CLAIMED") {
     const currentOrder = await input.repository.getOrder(existing.orderId);
     if (!currentOrder || currentOrder.version === undefined) {
-      throw new DomainError("Persisted cut recovery cannot prove current order version.", "ORDER_VERSION_REQUIRED");
+      throw new DomainError("La recuperación del corte guardado no puede comprobar la versión actual de la orden.", "ORDER_VERSION_REQUIRED");
     }
     const uncertainOperation: OperationRecord = {
       ...existing,
@@ -347,7 +347,7 @@ function handleClaimResult(
   input: CutProcessInput,
 ): { kind: "claimed"; order: WorkOrder } | { kind: "existing"; record: StoredRecord } | { kind: "conflict"; order: WorkOrder } {
   if (result.status === "claimed") {
-    if (!result.order) throw new DomainError("Cut claim did not return claimed order.", "ORDER_CLAIM_REJECTED");
+    if (!result.order) throw new DomainError("La reclamación del corte no devolvió la orden reclamada.", "ORDER_CLAIM_REJECTED");
     return { kind: "claimed", order: result.order };
   }
   if (result.status === "existing") {
@@ -358,7 +358,7 @@ function handleClaimResult(
     if (!result.currentOrder) throw new DomainError(result.status, "ORDER_CLAIM_REJECTED");
     return { kind: "conflict", order: result.currentOrder };
   }
-  throw new DomainError("Unknown claim result.", "ORDER_CLAIM_REJECTED");
+  throw new DomainError("Resultado de reclamación no reconocido.", "ORDER_CLAIM_REJECTED");
 }
 
 function isOrderVersionConflict(error: unknown): boolean {
@@ -369,7 +369,7 @@ function isOrderVersionConflict(error: unknown): boolean {
 
 /** Ejecuta el flujo completo de corte descrito al inicio del archivo. */
 export async function executeCut(input: CutProcessInput): Promise<CutProcessResult> {
-  if (!input.operationId.trim()) throw new DomainError("Operation identifier is required.", "OPERATION_ID_REQUIRED");
+  if (!input.operationId.trim()) throw new DomainError("Se requiere el identificador de la operación.", "OPERATION_ID_REQUIRED");
   assertOperationId(input.operationId);
 
   // Replay: el mismo operationId nunca genera un segundo corte ni una segunda autorización.

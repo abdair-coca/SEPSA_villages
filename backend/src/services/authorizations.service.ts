@@ -108,16 +108,16 @@ export function createAuthorizationService(context: ServiceContext): Authorizati
       const prior = await findCutAuthorizationByOperation(client, authorizationRequest.operationId);
       // Un operation_id solo puede tener una autorización: no se emite otra para el mismo intento.
       if (prior) {
-        if (belongsToAnotherCutAuthorization(prior, user.userId)) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another action or technician.");
-        throw new HttpError(409, "AUTHORIZATION_OPERATION_REPLAY", "Authorization operation already has a reservation; use saved response.");
+        if (belongsToAnotherCutAuthorization(prior, user.userId)) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "El identificador de la operación de autorización está ligado a otra acción o técnico.");
+        throw new HttpError(409, "AUTHORIZATION_OPERATION_REPLAY", "La operación de autorización ya tiene una reserva; use la respuesta guardada.");
       }
 
       const order = await findOrderForUpdate(client, authorizationRequest.orderId);
-      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found.");
-      if (order.assigned_technician_id !== user.userId) throw new HttpError(403, "ORDER_NOT_ASSIGNED", "Order is not assigned to current technician.");
-      if (order.version !== authorizationRequest.orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
-      if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "Order is not eligible for a cut authorization.");
-      if (order.physical_status !== "NONE") throw new HttpError(409, "PHYSICAL_STATUS_NOT_ELIGIBLE", "Physical status must be NONE before a new cut authorization.");
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "No se encontró la orden.");
+      if (order.assigned_technician_id !== user.userId) throw new HttpError(403, "ORDER_NOT_ASSIGNED", "La orden no está asignada al técnico actual.");
+      if (order.version !== authorizationRequest.orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "La versión de la orden está desactualizada.");
+      if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "La orden no es elegible para una autorización de corte.");
+      if (order.physical_status !== "NONE") throw new HttpError(409, "PHYSICAL_STATUS_NOT_ELIGIBLE", "El estado físico debe ser NONE antes de una nueva autorización de corte.");
 
       const authorizationId = randomUUID();
       const token = createOpaqueToken();
@@ -131,23 +131,23 @@ export function createAuthorizationService(context: ServiceContext): Authorizati
   async function authorizeReconnection(user: SessionUser, authorizationRequest: AuthorizationRequest): Promise<ReconnectionEnablementResult> {
     return withTransaction(context.pool, async (client) => {
       const order = await findOrderForUpdate(client, authorizationRequest.orderId);
-      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found.");
-      if (order.assigned_technician_id !== user.userId) throw new HttpError(403, "ORDER_NOT_ASSIGNED", "Order is not assigned to current technician.");
-      if (order.version !== authorizationRequest.orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
-      if (!isEligibleReconnectionOrder(order)) throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "Reconnection requires a confirmed cut on an executed order.");
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "No se encontró la orden.");
+      if (order.assigned_technician_id !== user.userId) throw new HttpError(403, "ORDER_NOT_ASSIGNED", "La orden no está asignada al técnico actual.");
+      if (order.version !== authorizationRequest.orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "La versión de la orden está desactualizada.");
+      if (!isEligibleReconnectionOrder(order)) throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "La reconexión requiere un corte confirmado en una orden ejecutada.");
 
       const cuts = await listAcknowledgedCutOperationsShared(client, authorizationRequest.orderId);
-      if (cuts.length !== 1) throw new HttpError(409, "CUT_CYCLE_AMBIGUOUS", "The order does not identify exactly one remotely confirmed cut cycle.");
+      if (cuts.length !== 1) throw new HttpError(409, "CUT_CYCLE_AMBIGUOUS", "La orden no identifica exactamente un ciclo de corte confirmado remotamente.");
       await expireStaleReconnectionReservations(client, authorizationRequest.orderId);
 
       const prior = await findAuthorizationByOperationForUpdate(client, authorizationRequest.operationId);
       if (prior) {
-        if (belongsToAnotherReconnection(prior, authorizationRequest, user.userId)) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another context.");
-        throw new HttpError(409, "ENABLEMENT_OPERATION_REPLAY", "This operation already has a habilitation reservation; verify its status before starting another operation.");
+        if (belongsToAnotherReconnection(prior, authorizationRequest, user.userId)) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "El identificador de la operación de autorización está ligado a otro contexto.");
+        throw new HttpError(409, "ENABLEMENT_OPERATION_REPLAY", "Esta operación ya tiene una reserva de habilitación; verifique su estado antes de iniciar otra operación.");
       }
 
       const activeAuthorization = await findActiveReconnectionForUpdate(client, authorizationRequest.orderId);
-      if (activeAuthorization?.status === "CONSUMED") throw new HttpError(409, "RECONNECTION_ALREADY_CONSUMED", "A reconnection operation is already consumed for this order.");
+      if (activeAuthorization?.status === "CONSUMED") throw new HttpError(409, "RECONNECTION_ALREADY_CONSUMED", "Ya se consumió una operación de reconexión para esta orden.");
       if (activeAuthorization?.status === "RESERVED") {
         await rejectReservedAuthorization(client, activeAuthorization.authorization_id);
         await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "RECONNECTION_ENABLEMENT_REPLACED", result: "accepted", entityId: activeAuthorization.authorization_id, orderId: authorizationRequest.orderId, operationId: activeAuthorization.operation_id, deviceId: authorizationRequest.deviceId, reason: "UNCONSUMED_RESERVATION_REPLACED", metadata: { replacement_operation_id: authorizationRequest.operationId, source: PROVISIONAL_SOURCE } });
@@ -165,7 +165,7 @@ export function createAuthorizationService(context: ServiceContext): Authorizati
   async function consumeReconnectionEnablement(user: SessionUser, consumeRequest: ConsumeReconnectionRequest): Promise<ReconnectionConsumeResult> {
     return withTransaction(context.pool, async (client) => {
       const order = await findOrderStateForUpdate(client, consumeRequest.orderId);
-      if (!order || order.assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
+      if (!order || order.assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "No se encontraron la orden ni el técnico asignado.");
 
       const grant = await findReconnectionGrantForUpdate(client, consumeRequest.enablementId);
       if (!hasExpectedBinding(grant, consumeRequest, user.userId, hashToken(consumeRequest.token))) {

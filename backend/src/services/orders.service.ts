@@ -81,14 +81,14 @@ export interface OrderService {
 export function createOrderService(context: ServiceContext): OrderService {
   async function createOrder(user: SessionUser, input: CreateOrderInput): Promise<unknown> {
     const { operationId, debtorId, purpose } = input;
-    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Only CUT is available in this provisional slice.");
+    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Solo CUT está disponible en este tramo provisional.");
     const requestHash = digestJson({ operation_id: operationId, debtor_id: debtorId, purpose });
     return withTransaction(context.pool, async (client) => {
       const command = await claimCommand(client, operationId, "CREATE_ORDER", user.userId, requestHash);
       if (!command.claimed) return command.replay;
       const debtor = await findDebtorForUpdate(client, debtorId);
-      if (!debtor) throw new HttpError(404, "DEBTOR_NOT_FOUND", "Debtor was not found.");
-      if (await hasActiveOrderForDebtorShared(client, debtorId, purpose)) throw new HttpError(409, "DUPLICATE_ORDER", "An active provisional order already exists for this debtor.");
+      if (!debtor) throw new HttpError(404, "DEBTOR_NOT_FOUND", "No se encontró el deudor.");
+      if (await hasActiveOrderForDebtorShared(client, debtorId, purpose)) throw new HttpError(409, "DUPLICATE_ORDER", "Ya existe una orden provisional activa para este deudor.");
       const orderId = randomUUID();
       const cuc = `CUC-${randomUUID()}`;
       const order = await insertOrderAndRead(client, {
@@ -107,7 +107,7 @@ export function createOrderService(context: ServiceContext): OrderService {
 
   async function createOrdersBatch(user: SessionUser, input: CreateOrdersBatchInput): Promise<unknown> {
     const { batchId, debtorIds, purpose } = input;
-    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Only CUT is available in this provisional slice.");
+    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Solo CUT está disponible en este tramo provisional.");
     const requestHash = digestJson({ batch_id: batchId, debtor_ids: debtorIds, purpose });
     return withTransaction(context.pool, async (client) => {
       const command = await claimCommand(client, batchId, "CREATE_ORDER_BATCH", user.userId, requestHash);
@@ -146,14 +146,14 @@ export function createOrderService(context: ServiceContext): OrderService {
     return withTransaction(context.pool, async (client) => {
       const command = await claimCommand(client, operationId, "ASSIGN_ORDER", user.userId, requestHash);
       if (!command.claimed) return command.replay;
-      if (!await isEnabledTechnician(client, technicianId)) throw new HttpError(404, "TECHNICIAN_NOT_FOUND", "Technician was not found.");
+      if (!await isEnabledTechnician(client, technicianId)) throw new HttpError(404, "TECHNICIAN_NOT_FOUND", "No se encontró el técnico.");
       const order = await findOrderForUpdate(client, orderId);
-      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found.");
-      if (order.version !== expectedVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
-      if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_ASSIGNABLE", "Only GENERADO orders can be assigned.");
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "No se encontró la orden.");
+      if (order.version !== expectedVersion) throw new HttpError(409, "VERSION_CONFLICT", "La versión de la orden está desactualizada.");
+      if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_ASSIGNABLE", "Solo se pueden asignar órdenes en estado GENERADO.");
       const nextVersion = order.version + 1;
       const updatedCount = await updateOrderAssignment(client, orderId, technicianId, nextVersion, expectedVersion);
-      if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed during assignment.");
+      if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "La orden cambió durante la asignación.");
       const updatedOrder = await findOrderById(client, orderId);
       if (!updatedOrder) throw new Error("Updated provisional order could not be read.");
       const next = toOrder(updatedOrder);
@@ -169,7 +169,7 @@ export function createOrderService(context: ServiceContext): OrderService {
       await ensureWorkPackageVersion(client, user.userId, deviceId);
       const lastVersion = await lockWorkPackageLastVersion(client, user.userId, deviceId);
       const nextVersion = Math.max(Date.now(), lastVersion + 1, knownVersion + 1);
-      if (!Number.isSafeInteger(nextVersion)) throw new HttpError(400, "INVALID_REQUEST", "known_version exceeds safe integer range.");
+      if (!Number.isSafeInteger(nextVersion)) throw new HttpError(400, "INVALID_REQUEST", "known_version excede el rango de enteros seguros.");
       const orders = (await listOrdersAssignedTo(client, user.userId)).map(toOrder);
       const generatedAt = new Date().toISOString();
       await updateWorkPackageVersion(client, user.userId, deviceId, nextVersion);

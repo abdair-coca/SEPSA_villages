@@ -32,16 +32,16 @@ export async function applySync(client: PoolClient, user: SessionUser, payload: 
     });
     if (insertedCount !== 1) {
       const concurrent = await findSyncOperationForUpdate(client, payload.operation_id);
-      return concurrent ? syncReplay(concurrent, user.userId, payload) ?? { status: "conflict", message: "Operation is already in progress." } : { status: "conflict", message: "Operation is already in progress." };
+      return concurrent ? syncReplay(concurrent, user.userId, payload) ?? { status: "conflict", message: "La operación ya está en curso." } : { status: "conflict", message: "La operación ya está en curso." };
     }
   } else {
     // Existe pero no es un replay aceptado: quedó en conflicto y solo se resuelve por revisión.
-    return { status: "conflict", message: "Operation remains unresolved and requires review." };
+    return { status: "conflict", message: "La operación sigue sin resolverse y requiere revisión." };
   }
 
   const order = await findOrderForUpdate(client, payload.order_id);
-  if (!order) return rejectSync(client, user, payload, "Order was not found.");
-  if (order.assigned_technician_id !== user.userId) return rejectSync(client, user, payload, "Order is not assigned to current technician.");
+  if (!order) return rejectSync(client, user, payload, "No se encontró la orden.");
+  if (order.assigned_technician_id !== user.userId) return rejectSync(client, user, payload, "La orden no está asignada al técnico actual.");
   if (payload.action === "CUT") validateCaptureMeter(payload.field_capture, order.context);
   if (payload.action === "VISIT") {
     await markSyncOperationAcknowledged(client, payload.operation_id);

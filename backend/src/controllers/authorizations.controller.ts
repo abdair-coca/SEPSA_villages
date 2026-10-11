@@ -32,7 +32,7 @@ export function createAuthorizationHandlers(context: ApplicationContext): Author
   async function authorizeReconnection(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void> {
     requireRole(user, "TECHNICIAN");
     const authorizationRequest = await readAuthorizationRequest(request, context.config.maxBodyBytes);
-    if (!isUuid(authorizationRequest.orderId) || authorizationRequest.orderVersion < 1) throw new HttpError(400, "INVALID_REQUEST", "order_id and order_version are invalid.");
+    if (!isUuid(authorizationRequest.orderId) || authorizationRequest.orderVersion < 1) throw new HttpError(400, "INVALID_REQUEST", "order_id y order_version no son válidos.");
     const result = await service.authorizeReconnection(user, authorizationRequest);
     context.logEvent("authorization.reconnection", { requestId: String(response.getHeader("x-request-id")), result: "reserved" });
     sendJson(response, 200, result);
@@ -41,8 +41,8 @@ export function createAuthorizationHandlers(context: ApplicationContext): Author
   async function consumeReconnectionEnablement(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void> {
     requireRole(user, "TECHNICIAN");
     const consumeRequest = await readConsumeRequest(request, context.config.maxBodyBytes);
-    if (consumeRequest.technicianId !== user.userId) throw new HttpError(403, "TECHNICIAN_SCOPE", "Enablement technician does not match session.");
-    if (!isUuid(consumeRequest.orderId) || consumeRequest.version < 1) throw new HttpError(400, "INVALID_REQUEST", "order_id and version are invalid.");
+    if (consumeRequest.technicianId !== user.userId) throw new HttpError(403, "TECHNICIAN_SCOPE", "El técnico de la habilitación no coincide con la sesión.");
+    if (!isUuid(consumeRequest.orderId) || consumeRequest.version < 1) throw new HttpError(400, "INVALID_REQUEST", "order_id y version no son válidos.");
     const result = await service.consumeReconnectionEnablement(user, consumeRequest);
     context.logEvent("authorization.reconnection", { requestId: String(response.getHeader("x-request-id")), result: "consumed" });
     sendJson(response, 200, result);
@@ -50,7 +50,7 @@ export function createAuthorizationHandlers(context: ApplicationContext): Author
 
   async function lookupReconnectionEnablement(response: ServerResponse, user: SessionUser, operationId: string | undefined): Promise<void> {
     requireRole(user, "TECHNICIAN");
-    if (!operationId) throw new HttpError(400, "INVALID_REQUEST", "operation_id is required.");
+    if (!operationId) throw new HttpError(400, "INVALID_REQUEST", "operation_id es obligatorio.");
     const result = await service.lookupReconnectionEnablement(user, operationId);
     sendJson(response, 200, result);
   }

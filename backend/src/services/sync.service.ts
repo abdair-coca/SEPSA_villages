@@ -78,15 +78,15 @@ export function createSyncService(context: ServiceContext): SyncService {
     const { operationId, orderId, technicianId, deviceId, expectedVersion, reason } = input;
     return withTransaction(context.pool, async (client) => {
       const order = await findOrderForReviewForUpdate(client, orderId);
-      if (!order || order.assigned_technician_id !== technicianId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
-      if (order.version !== expectedVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order changed before human review.");
-      if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_REVIEWABLE", "Only an active generated order can be marked physically uncertain.");
-      if (order.physical_status === "CONFIRMED") throw new HttpError(409, "ALREADY_CONFIRMED", "A confirmed physical result cannot be changed by review.");
+      if (!order || order.assigned_technician_id !== technicianId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "No se encontraron la orden ni el técnico asignado.");
+      if (order.version !== expectedVersion) throw new HttpError(409, "VERSION_CONFLICT", "La orden cambió antes de la revisión humana.");
+      if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_REVIEWABLE", "Solo una orden generada y activa puede marcarse como físicamente incierta.");
+      if (order.physical_status === "CONFIRMED") throw new HttpError(409, "ALREADY_CONFIRMED", "Un resultado físico confirmado no puede cambiarse por revisión.");
       const operation = await findSyncOperationForReview(client, operationId);
-      if (operation && (operation.order_id !== orderId || operation.technician_id !== technicianId || operation.device_id !== deviceId)) throw new HttpError(409, "OPERATION_IDENTITY_MISMATCH", "Operation does not match the reviewed order, technician, and device.");
-      if (operation?.status === "acknowledged") throw new HttpError(409, "ALREADY_CONFIRMED", "A remotely acknowledged operation cannot be changed by review.");
+      if (operation && (operation.order_id !== orderId || operation.technician_id !== technicianId || operation.device_id !== deviceId)) throw new HttpError(409, "OPERATION_IDENTITY_MISMATCH", "La operación no coincide con la orden, el técnico y el dispositivo revisados.");
+      if (operation?.status === "acknowledged") throw new HttpError(409, "ALREADY_CONFIRMED", "Una operación confirmada remotamente no puede cambiarse por revisión.");
       const updatedCount = await markOrderPhysicalUnknown(client, orderId, expectedVersion);
-      if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "Order changed during human review.");
+      if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "La orden cambió durante la revisión humana.");
       await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "HUMAN_REVIEW_RECORDED", result: "accepted", entityId: operationId, orderId, operationId, deviceId, reason, transition: { before: order.physical_status, after: "PHYSICAL_UNKNOWN", version: expectedVersion + 1 }, metadata: { expected_version: expectedVersion, technician_id: technicianId, device_id: deviceId, remote_operation_status: operation?.status ?? "not_found", physical_result_confirmed: false } });
       return { status: "recorded" as const, order_id: orderId, operation_id: operationId, physical_status: "PHYSICAL_UNKNOWN" as const, version: expectedVersion + 1 };
     });

@@ -38,7 +38,7 @@ export function parseDebtorSearchFilters(url: URL): DebtorSearchFilters {
   const minMonthsText = (url.searchParams.get("min_months_pending") ?? "").trim();
   const minMonthsPending = minMonthsText === "" ? 0 : Number(minMonthsText);
   if (!Number.isSafeInteger(minMonthsPending) || minMonthsPending < 0) {
-    throw new HttpError(400, "INVALID_REQUEST", "min_months_pending must be a non-negative integer.");
+    throw new HttpError(400, "INVALID_REQUEST", "min_months_pending debe ser un entero no negativo.");
   }
   return {
     search: (url.searchParams.get("query") ?? "").trim(),

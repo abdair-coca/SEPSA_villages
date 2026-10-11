@@ -140,9 +140,9 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     const user = matches.find((candidate) => candidate.username === input.username && candidate.credentialHash === suppliedHash && candidate.enabled);
     const now = new Date().toISOString();
     if (!user) {
-      transaction.objectStore("audit").put(auditEvent({ actorId: "anonymous", action: "LOGIN", result: "rejected", reason: "Invalid simulated credentials.", occurredAt: now }));
+      transaction.objectStore("audit").put(auditEvent({ actorId: "anonymous", action: "LOGIN", result: "rejected", reason: "Credenciales simuladas no válidas.", occurredAt: now }));
       await transactionComplete(transaction);
-      throw new DomainError("Invalid simulated credentials.", "AUTHENTICATION_FAILED");
+      throw new DomainError("Credenciales simuladas no válidas.", "AUTHENTICATION_FAILED");
     }
     const session: Session = {
       sessionId: secureUuid("session"),
@@ -166,7 +166,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     const transaction = db.transaction(["sessions", "audit"], "readwrite");
     const stored = await requestResult(transaction.objectStore("sessions").get(session.sessionId)) as Session | undefined;
     try {
-      if (!stored || !sameSession(stored, session)) throw new DomainError("Session is not valid.", "AUTHENTICATION_FAILED");
+      if (!stored || !sameSession(stored, session)) throw new DomainError("La sesión no es válida.", "AUTHENTICATION_FAILED");
       if (!stored.expiresAt || Date.parse(stored.expiresAt) <= Date.now()) throw new DomainError("La sesión expiró. Ingrese nuevamente.", "AUTHENTICATION_EXPIRED");
       assertCan(stored, action);
     } catch (error) {
@@ -218,14 +218,14 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     const prior = await requestResult(operationStore.get(input.operationId)) as StoredOperation | undefined;
     if (prior) {
       transaction.abort();
-      if (prior.action !== "CREATE_ORDER" || prior.commandHash !== hash) throw new DomainError("Operation identifier was reused with different data.", "IDEMPOTENCY_CONFLICT");
-      if (!prior.result || !isWorkOrderResult(prior.result)) throw new DomainError("Stored create result is invalid.", "IDEMPOTENCY_CONFLICT");
+      if (prior.action !== "CREATE_ORDER" || prior.commandHash !== hash) throw new DomainError("El identificador de la operación se reutilizó con datos distintos.", "IDEMPOTENCY_CONFLICT");
+      if (!prior.result || !isWorkOrderResult(prior.result)) throw new DomainError("El resultado guardado de la creación no es válido.", "IDEMPOTENCY_CONFLICT");
       return copyOrderForOperationalUse(prior.result);
     }
     const debtor = await requestResult(transaction.objectStore("debtors").get(input.debtorId)) as DebtorRecord | undefined;
     if (!debtor || !debtor.supplyId.trim()) {
       transaction.abort();
-      throw new DomainError("A confirmed supply identifier is required.", "SUPPLY_ID_REQUIRED");
+      throw new DomainError("Se requiere un identificador de suministro confirmado.", "SUPPLY_ID_REQUIRED");
     }
     const orders = (await requestResult(transaction.objectStore("orders").getAll())) as WorkOrder[];
     const existing = orders.find((order) => order.accountId === debtor.accountId && order.purpose === input.purpose && order.status !== "ANULADO");
@@ -261,7 +261,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
   async createOrdersBatch(input: CreateOrdersBatchCommand): Promise<CreateOrdersBatchResult> {
     const session = await this.requireAction(input.session, "CREATE_ORDER");
     const debtorIds = [...new Set(input.debtorIds.map((debtorId) => debtorId.trim()).filter(Boolean))];
-    if (!input.batchId.trim() || !debtorIds.length) throw new DomainError("A batch identifier and at least one debtor are required.", "BATCH_REQUEST_INVALID");
+    if (!input.batchId.trim() || !debtorIds.length) throw new DomainError("Se requieren un identificador de lote y al menos un deudor.", "BATCH_REQUEST_INVALID");
     const db = await this.dbPromise;
     const transaction = db.transaction(["debtors", "orders", "operations", "audit"], "readwrite");
     const operationStore = transaction.objectStore("operations");
@@ -269,7 +269,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     const prior = await requestResult(operationStore.get(input.batchId)) as StoredOperation | undefined;
     if (prior) {
       transaction.abort();
-      if (prior.action !== "CREATE_ORDER_BATCH" || prior.commandHash !== hash || !prior.result || !isBatchResult(prior.result)) throw new DomainError("Operation identifier was reused with different data.", "IDEMPOTENCY_CONFLICT");
+      if (prior.action !== "CREATE_ORDER_BATCH" || prior.commandHash !== hash || !prior.result || !isBatchResult(prior.result)) throw new DomainError("El identificador de la operación se reutilizó con datos distintos.", "IDEMPOTENCY_CONFLICT");
       return { ...structuredClone(prior.result), created: prior.result.created.map(copyOrderForOperationalUse) };
     }
     const debtors = (await requestResult(transaction.objectStore("debtors").getAll())) as DebtorRecord[];
@@ -302,7 +302,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
   /** Asigna una orden GENERADO a un técnico habilitado si la versión esperada coincide; avanza la versión en 1. */
   async assignOrder(input: AssignOrderCommand): Promise<WorkOrder> {
     const session = await this.requireAction(input.session, "ASSIGN_ORDER");
-    if (!Number.isFinite(input.expectedOrderVersion)) throw new DomainError("Expected order version is required.", "ORDER_VERSION_REQUIRED");
+    if (!Number.isFinite(input.expectedOrderVersion)) throw new DomainError("Se requiere la versión esperada de la orden.", "ORDER_VERSION_REQUIRED");
     const db = await this.dbPromise;
     const transaction = db.transaction(["users", "orders", "operations", "audit"], "readwrite");
     const operationStore = transaction.objectStore("operations");
@@ -310,31 +310,31 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     const prior = await requestResult(operationStore.get(input.operationId)) as StoredOperation | undefined;
     if (prior) {
       transaction.abort();
-      if (prior.action !== "ASSIGN_ORDER" || prior.commandHash !== hash) throw new DomainError("Operation identifier was reused with different data.", "IDEMPOTENCY_CONFLICT");
-      if (!prior.result || !isWorkOrderResult(prior.result)) throw new DomainError("Stored assignment result is invalid.", "IDEMPOTENCY_CONFLICT");
+      if (prior.action !== "ASSIGN_ORDER" || prior.commandHash !== hash) throw new DomainError("El identificador de la operación se reutilizó con datos distintos.", "IDEMPOTENCY_CONFLICT");
+      if (!prior.result || !isWorkOrderResult(prior.result)) throw new DomainError("El resultado guardado de la asignación no es válido.", "IDEMPOTENCY_CONFLICT");
       return copyOrderForOperationalUse(prior.result);
     }
     const technician = await requestResult(transaction.objectStore("users").get(input.technicianId)) as StoredUser | undefined;
     if (!technician || technician.role !== "TECHNICIAN" || !technician.enabled) {
       transaction.abort();
-      throw new DomainError("A habilitated technician is required.", "TECHNICIAN_REQUIRED");
+      throw new DomainError("Se requiere un técnico habilitado.", "TECHNICIAN_REQUIRED");
     }
     const current = await requestResult(transaction.objectStore("orders").get(input.orderId)) as WorkOrder | undefined;
     if (!current) {
       transaction.abort();
-      throw new DomainError("Order does not exist.", "ORDER_NOT_FOUND");
+      throw new DomainError("La orden no existe.", "ORDER_NOT_FOUND");
     }
     if (current.version !== input.expectedOrderVersion) {
       transaction.abort();
-      throw new DomainError("Order version is obsolete.", "ORDER_VERSION_CONFLICT");
+      throw new DomainError("La versión de la orden está desactualizada.", "ORDER_VERSION_CONFLICT");
     }
     if (current.status !== "GENERADO") {
       transaction.abort();
-      throw new DomainError("Only generated orders can be assigned.", "ORDER_STATUS_INVALID");
+      throw new DomainError("Solo se pueden asignar órdenes generadas.", "ORDER_STATUS_INVALID");
     }
     if (current.assignedTechnicianId === technician.userId) {
       transaction.abort();
-      throw new DomainError("Order is already assigned to this technician.", "ORDER_ALREADY_ASSIGNED");
+      throw new DomainError("La orden ya está asignada a este técnico.", "ORDER_ALREADY_ASSIGNED");
     }
     const now = new Date().toISOString();
     const assigned: WorkOrder = { ...copyOrderForOperationalUse(current), assignedTechnicianId: technician.userId, assignedTechnicianName: technician.displayName, version: input.expectedOrderVersion + 1 };
@@ -363,14 +363,14 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
 
   async downloadAssigned(technicianId: string, deviceId: string, session?: Session): Promise<WorkPackageEnvelope> {
     const authorized = await this.requireAction(session, "DOWNLOAD_ASSIGNED");
-    if (authorized.userId !== technicianId) throw new DomainError("Technician identity does not match session.", "ORDER_NOT_ASSIGNED");
-    if (!deviceId.trim()) throw new DomainError("Device identifier is required.", "DEVICE_ID_REQUIRED");
+    if (authorized.userId !== technicianId) throw new DomainError("La identidad del técnico no coincide con la sesión.", "ORDER_NOT_ASSIGNED");
+    if (!deviceId.trim()) throw new DomainError("Se requiere el identificador del dispositivo.", "DEVICE_ID_REQUIRED");
     const db = await this.dbPromise;
     const transaction = db.transaction(["orders", "debtors", "audit", "device-bindings"], "readwrite");
     const bindingStore = transaction.objectStore("device-bindings");
     const currentBinding = await requestResult(bindingStore.get(deviceId)) as DeviceBinding | undefined;
     if (currentBinding && (currentBinding.ownershipStatus === "CONFLICT" || currentBinding.technicianId !== technicianId)) {
-      const error = new DomainError("Device is already owned by another technician.", "DEVICE_OWNERSHIP_CONFLICT");
+      const error = new DomainError("El dispositivo ya pertenece a otro técnico.", "DEVICE_OWNERSHIP_CONFLICT");
       transaction.objectStore("audit").put(auditEvent({ actorId: authorized.userId, actorRole: authorized.role, action: "DOWNLOAD_ASSIGNED", deviceId, result: "rejected", reason: error.message, occurredAt: new Date().toISOString() }));
       await transactionComplete(transaction);
       throw error;
@@ -395,7 +395,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
   async recordSyncedOperation(operation: OperationRecord | VisitRecord, session: Session): Promise<void> {
     const authorized = await this.requireAction(session, "SYNC_OPERATION");
     if (operation.technicianId !== authorized.userId || !operation.deviceId.trim()) {
-      const error = new DomainError("Operation identity does not match technician session.", "ORDER_NOT_ASSIGNED");
+      const error = new DomainError("La identidad de la operación no coincide con la sesión del técnico.", "ORDER_NOT_ASSIGNED");
       await this.recordRejectedAudit(authorized, operation, error);
       throw error;
     }
@@ -412,7 +412,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       const canConsumeReservation = prior.action === "AUTHORIZATION_RESERVATION" && operation.kind !== "VISIT" && operation.status === "CONFIRMED" && operation.physicalStatus === "CONFIRMED";
       if (!canConsumeReservation) {
         transaction.abort();
-        const error = new DomainError("Operation identifier was reused with different data.", "IDEMPOTENCY_CONFLICT");
+        const error = new DomainError("El identificador de la operación se reutilizó con datos distintos.", "IDEMPOTENCY_CONFLICT");
         await transactionComplete(transaction).catch(() => undefined);
         await this.recordRejectedAudit(authorized, operation, error);
         throw error;
@@ -421,7 +421,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     const order = await requestResult(transaction.objectStore("orders").get(operation.orderId)) as WorkOrder | undefined;
     if (!order || order.assignedTechnicianId !== authorized.userId) {
       transaction.abort();
-      const error = new DomainError("Operation order is not assigned to this technician.", "ORDER_NOT_ASSIGNED");
+      const error = new DomainError("La orden de la operación no está asignada a este técnico.", "ORDER_NOT_ASSIGNED");
       await transactionComplete(transaction).catch(() => undefined);
       await this.recordRejectedAudit(authorized, operation, error);
       throw error;
@@ -441,14 +441,14 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     const reservation = requiresAuthorization ? prior?.authorization : undefined;
     if (requiresAuthorization && (!reservation || reservation.state !== "RESERVED" || reservation.action !== operation.action || reservation.operationId !== operation.operationId || reservation.orderId !== operation.orderId || reservation.technicianId !== authorized.userId || reservation.deviceId !== operation.deviceId)) {
       transaction.abort();
-      const error = new DomainError("A current technical authorization is required for confirmed physical operations.", "AUTHORIZATION_REQUIRED");
+      const error = new DomainError("Se requiere una autorización técnica vigente para las operaciones físicas confirmadas.", "AUTHORIZATION_REQUIRED");
       await transactionComplete(transaction).catch(() => undefined);
       await this.recordRejectedAudit(authorized, operation, error);
       throw error;
     }
     if (requiresAuthorization && reservation && order.version !== reservation.orderVersion) {
       transaction.abort();
-      const error = new DomainError("Order version is obsolete for this technical authorization.", "ORDER_VERSION_CONFLICT");
+      const error = new DomainError("La versión de la orden está desactualizada para esta autorización técnica.", "ORDER_VERSION_CONFLICT");
       await transactionComplete(transaction).catch(() => undefined);
       await this.recordRejectedAudit(authorized, operation, error);
       throw error;
@@ -458,7 +458,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       : order.status === "GENERADO" && order.physicalStatus === "NONE";
     if (requiresAuthorization && !eligibleStatus) {
       transaction.abort();
-      const error = new DomainError("Order is no longer eligible for this technical authorization.", "ORDER_STATE_INVALID");
+      const error = new DomainError("La orden ya no es elegible para esta autorización técnica.", "ORDER_STATE_INVALID");
       await transactionComplete(transaction).catch(() => undefined);
       await this.recordRejectedAudit(authorized, operation, error);
       throw error;
@@ -513,17 +513,17 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
       const binding = await requestResult(transaction.objectStore("device-bindings").get(input.deviceId)) as DeviceBinding | undefined;
       const action = input.action ?? "CUT";
       const reason = !order
-        ? { errorCode: "ORDER_NOT_FOUND", message: "Order does not exist." }
+        ? { errorCode: "ORDER_NOT_FOUND", message: "La orden no existe." }
         : order.assignedTechnicianId !== input.technicianId
-          ? { errorCode: "ORDER_NOT_ASSIGNED", message: "Order is not assigned to this technician." }
+          ? { errorCode: "ORDER_NOT_ASSIGNED", message: "La orden no está asignada a este técnico." }
           : order.version !== input.orderVersion
-            ? { errorCode: "ORDER_VERSION_CONFLICT", message: "Order version is obsolete." }
+            ? { errorCode: "ORDER_VERSION_CONFLICT", message: "La versión de la orden está desactualizada." }
           : !binding || binding.ownershipStatus === "CONFLICT" || binding.technicianId !== input.technicianId
-               ? { errorCode: "DEVICE_OWNERSHIP_CONFLICT", message: "Device is not currently bound to this technician." }
+               ? { errorCode: "DEVICE_OWNERSHIP_CONFLICT", message: "El dispositivo no está vinculado actualmente a este técnico." }
                : action === "CUT" && (order.status !== "GENERADO" || order.physicalStatus !== "NONE")
-                 ? { errorCode: "ORDER_STATE_INVALID", message: "Order is not eligible for a cut authorization." }
+                 ? { errorCode: "ORDER_STATE_INVALID", message: "La orden no es elegible para una autorización de corte." }
                  : action === "RECONNECTION" && (order.status !== "EJECUTADO" || order.physicalStatus !== "CONFIRMED")
-                   ? { errorCode: "ORDER_STATE_INVALID", message: "Order is not eligible for a reconnection authorization." }
+                   ? { errorCode: "ORDER_STATE_INVALID", message: "La orden no es elegible para una autorización de reconexión." }
                : undefined;
 
       if (reason) {
@@ -536,7 +536,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
          const existing = prior.authorization;
           if (prior.action !== "AUTHORIZATION_RESERVATION" || !existing || existing.state !== "RESERVED" || existing.action !== action || existing.operationId !== operationId || existing.orderId !== input.orderId || existing.technicianId !== input.technicianId || existing.deviceId !== input.deviceId || existing.orderVersion !== input.orderVersion) {
            transaction.abort();
-           const error = new DomainError("Operation identifier was reused with different authorization data.", "IDEMPOTENCY_CONFLICT");
+           const error = new DomainError("El identificador de la operación se reutilizó con datos de autorización distintos.", "IDEMPOTENCY_CONFLICT");
            await transactionComplete(transaction).catch(() => undefined);
            return { status: "not_authorized", errorCode: error.code, order };
          }
@@ -592,7 +592,7 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
   }
 
   private async requireAction(session: Session | undefined, action: Parameters<typeof assertCan>[1]): Promise<Session> {
-    if (!session) throw new DomainError("An authenticated session is required.", "AUTHENTICATION_REQUIRED");
+    if (!session) throw new DomainError("Se requiere una sesión autenticada.", "AUTHENTICATION_REQUIRED");
     await this.authorize(session, action);
     return session;
   }

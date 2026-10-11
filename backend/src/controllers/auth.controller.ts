@@ -33,7 +33,7 @@ export function createAuthHandlers(context: ApplicationContext): AuthHandlers {
     const session = await service.login(username, password);
     if (!session) {
       context.logEvent("auth.login", { requestId: String(response.getHeader("x-request-id")), result: "rejected" });
-      throw new HttpError(401, "INVALID_CREDENTIALS", "Username or password is invalid.");
+      throw new HttpError(401, "INVALID_CREDENTIALS", "El usuario o la contraseña no son válidos.");
     }
     response.setHeader("set-cookie", sessionCookie(session.token, context.config.sessionTtlSeconds, context.config.cookieSecure === true));
     context.logEvent("auth.login", { requestId: String(response.getHeader("x-request-id")), result: "accepted" });
@@ -54,7 +54,7 @@ export function createAuthHandlers(context: ApplicationContext): AuthHandlers {
 
   async function requireSession(request: IncomingMessage): Promise<SessionUser> {
     const token = parseBearerToken(request.headers.authorization) ?? parseCookie(request.headers.cookie, "sepsa_session");
-    if (!token) throw new HttpError(401, "UNAUTHENTICATED", "Valid session is required.");
+    if (!token) throw new HttpError(401, "UNAUTHENTICATED", "Se requiere una sesión válida.");
     return service.resolveSession(token);
   }
 
