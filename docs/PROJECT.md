@@ -63,6 +63,7 @@ La falta de conexión permite trabajo local, nunca autoriza un corte físico. Un
 - [Arquitectura](ARCHITECTURE.md)
 - [Dominio](DOMAIN.md)
 - [Reglas](RULES.md)
+- [Diseño de interfaz](design.md)
 - [Decisiones vigentes](DECISIONS.md)
 - [Asignaciones](features/assignments.md)
 - [Cortes y captura](features/cuts.md)
