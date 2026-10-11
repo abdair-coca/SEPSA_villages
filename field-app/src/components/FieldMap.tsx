@@ -2,11 +2,15 @@
  * Mapa de órdenes (Leaflet, carga diferida) con la ubicación del técnico por GPS, modo pantalla completa y
  * teselas satelitales que pueden quedar en caché para usarse sin conexión (`services/map-cache.ts`).
  * Las órdenes sin coordenadas catastrales válidas no se dibujan; nunca se inventa una ubicación.
+ * Las capas y los marcadores de Leaflet viven en `FieldMapLayers.ts`; el encabezado de pantalla completa, en
+ * `FieldMapFullscreenHeader.tsx`.
  */
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import type * as Leaflet from "leaflet";
 import type { ConnectivityMode, WorkOrder } from "../domain/types";
-import { MAP_CACHE_NAME, SATELLITE_TILE_URL_TEMPLATE } from "../services/map-cache";
+import { hasCadastralCoordinates } from "../domain/policies";
+import { FullscreenMapHeader } from "./FieldMapFullscreenHeader";
+import { addCachedSatelliteLayer, addOrderMarker } from "./FieldMapLayers";
 import {
   IconCrosshair,
   IconExpand,
@@ -16,7 +20,6 @@ import {
   IconPin,
   IconCheck,
 } from "./common/Icons";
-import { escapeHtml, orderPopupHtml } from "../utils/format";
 import { handleFullscreenMapKeyDown, restoreFullscreenMapFocus } from "../utils/dialog-lifecycle";
 
 interface FieldMapProps {
@@ -33,10 +36,9 @@ interface FieldMapProps {
 }
 
 function orderCoordinates(order: WorkOrder): { lat: number; lng: number } | null {
-  const lat = order.context?.cadastralLatitude;
-  const lng = order.context?.cadastralLongitude;
-  if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng };
+  const context = order.context;
+  if (!context || !hasCadastralCoordinates(context)) return null;
+  return { lat: context.cadastralLatitude as number, lng: context.cadastralLongitude as number };
 }
 
 export function FieldMap({
@@ -113,48 +115,7 @@ export function FieldMap({
 
       mapInstanceRef.current = map;
 
-      class CachedSatelliteLayer extends L.TileLayer {
-        override createTile(coords: Leaflet.Coords, done: Leaflet.DoneCallback): HTMLImageElement {
-          const tile = document.createElement("img");
-          const url = this.getTileUrl(coords);
-          tile.alt = "";
-          tile.setAttribute("role", "presentation");
-
-          if (typeof caches !== "undefined") {
-            caches
-              .open(MAP_CACHE_NAME)
-              .then((cache) => cache.match(url))
-              .then((response) => {
-                if (response) {
-                  return response.blob().then((blob) => {
-                    tile.src = URL.createObjectURL(blob);
-                    done(undefined, tile);
-                  });
-                }
-                tile.src = url;
-                L.DomEvent.on(tile, "load", () => done(undefined, tile));
-                L.DomEvent.on(tile, "error", () => done(new Error("Satellite tile failed to load"), tile));
-              })
-              .catch(() => {
-                tile.src = url;
-                L.DomEvent.on(tile, "load", () => done(undefined, tile));
-                L.DomEvent.on(tile, "error", () => done(new Error("Satellite tile failed to load"), tile));
-              });
-          } else {
-            tile.src = url;
-            L.DomEvent.on(tile, "load", () => done(undefined, tile));
-            L.DomEvent.on(tile, "error", () => done(new Error("Satellite tile failed to load"), tile));
-          }
-
-          return tile;
-        }
-      }
-
-      const satelliteLayer = new CachedSatelliteLayer(SATELLITE_TILE_URL_TEMPLATE, {
-        maxNativeZoom: 17,
-        maxZoom: 19,
-        attribution: "Tiles &copy; Esri",
-      }).addTo(map);
+      const satelliteLayer = addCachedSatelliteLayer(L, map);
 
       satelliteLayer.on("tileerror", () => {
         if (mode === "offline") {
@@ -190,41 +151,7 @@ export function FieldMap({
       const ordersBounds = L.latLngBounds([]);
 
       orderPoints.forEach(({ lat, lng, order }) => {
-        const isCancelled = order.status === "ANULADO";
-        const isExecuted = order.status === "EJECUTADO";
-        const isSelected = order.orderId === selectedOrderId;
-
-        const markerColor = isCancelled ? "#64748b" : isExecuted ? "#16a34a" : "#e85d04";
-
-        const debtCents = order.context?.debtCents;
-        const debt = typeof debtCents === "number" ? `Bs ${(debtCents / 100).toFixed(2)}` : "Dato no disponible";
-        const account = order.context?.accountId || order.accountId || "S/C";
-        const meter = order.context?.meterId || "S/M";
-        const customer = order.context?.customerName || order.orderId;
-        const markerTone = isCancelled ? "muted" : isExecuted ? "done" : "pending";
-        const marker = L.marker([lat, lng], {
-          icon: L.divIcon({
-            className: "map-order-marker-wrap",
-            html: `<div class="map-order-marker map-order-marker--${markerTone}${isSelected ? " map-order-marker--selected" : ""}"><span class="map-order-marker__dot" style="background:${markerColor}"></span><span class="map-order-marker__label">${escapeHtml(customer)}</span></div>`,
-            iconSize: [0, 0],
-            iconAnchor: [7, 7],
-          }),
-          title: customer,
-        }).addTo(map);
-
-        const popupContent = document.createElement("div");
-        popupContent.className = "map-popup";
-        popupContent.innerHTML = orderPopupHtml(account, customer, meter, debt, order.status);
-
-        const viewBtn = document.createElement("button");
-        viewBtn.className = "btn-map-popup";
-        viewBtn.textContent = "Ver ficha de corte";
-        viewBtn.onclick = () => {
-          onSelectOrder(order.orderId);
-        };
-        popupContent.appendChild(viewBtn);
-
-        marker.bindPopup(popupContent);
+        addOrderMarker(L, map, order, lat, lng, selectedOrderId, onSelectOrder);
         ordersBounds.extend([lat, lng]);
       });
 
@@ -484,21 +411,6 @@ export function FieldMap({
         <span><i className="field-map-legend__dot field-map-legend__dot--order" />Orden de corte</span>
         <span><i className="field-map-legend__dot field-map-legend__dot--location" />Mi ubicación</span>
       </div>
-    </div>
-  );
-}
-
-function FullscreenMapHeader({ closeRef, onClose }: { closeRef: RefObject<HTMLButtonElement | null>; onClose?: () => void }) {
-  return (
-    <div className="field-map-fullscreen-header">
-      <div>
-        <span className="eyebrow">SEPSA · CAMPO</span>
-        <h2>Mapa de órdenes</h2>
-      </div>
-      <button ref={closeRef} type="button" className="field-map-close" onClick={onClose} aria-label="Cerrar mapa en pantalla completa">
-        <span aria-hidden="true">×</span>
-        <span>Cerrar mapa</span>
-      </button>
     </div>
   );
 }
