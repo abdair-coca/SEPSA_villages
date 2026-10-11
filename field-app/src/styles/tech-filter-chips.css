@@ -1,0 +1,75 @@
+/* Técnico · chips de filtro rápido. Bloque de styles/app.css a partir de la línea 683; el orden de cascada es el original. */
+
+.filter-row::-webkit-scrollbar{
+  display: none;
+}
+
+.filter-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #ded8cc;
+  border-radius: 9999px;
+  color: #53605b;
+  background: var(--paper);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 140ms cubic-bezier(.32, .72, 0, 1);
+  user-select: none;
+}
+
+.filter-chip:hover{
+  border-color: #b9b2a4;
+  color: var(--ink);
+  background: #fbfaf7;
+}
+
+.filter-chip:active{
+  transform: translateY(1px);
+}
+
+.filter-chip:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.filter-chip--active{
+  background: #1e2423;
+  color: var(--paper);
+  border-color: #1e2423;
+  box-shadow: 0 2px 6px rgba(30, 36, 35, 0.16);
+}
+
+.filter-chip--active:hover{
+  background: #2b3332;
+  border-color: #2b3332;
+  color: var(--paper);
+}
+
+.chip-count{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: #ede8df;
+  color: #4a5550;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  transition: all 140ms cubic-bezier(.32, .72, 0, 1);
+}
+
+.filter-chip--active .chip-count{
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--paper);
+}

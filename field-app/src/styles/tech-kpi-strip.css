@@ -1,0 +1,17 @@
+/* Técnico · tira de indicadores. Bloque de styles/app.css a partir de la línea 679; el orden de cascada es el original. */
+
+/* Reference KPI strip: cards sit directly below sync status with visual status cues. */
+/* ==========================================================================
+   Bandeja de Cortes & Mobile Technician Cards (boceto-mvp alignment)
+   ========================================================================== */
+/* Quick filter chips */
+.filter-row{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-16);
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}

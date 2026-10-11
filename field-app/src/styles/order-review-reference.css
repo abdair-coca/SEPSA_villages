@@ -1,0 +1,405 @@
+/* Revisión de orden · imagen de referencia. Bloque de styles/app.css a partir de la línea 2405; el orden de cascada es el original. */
+
+/* Order review reference image */
+.operations-app .admin-order-detail{
+  margin-top: var(--space-16);
+  padding: var(--space-16);
+  overflow: hidden;
+  border: 1px solid var(--sepsa-border);
+  border-radius: var(--radius-8);
+  background: var(--sepsa-surface);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, .04);
+}
+
+.order-sheet-header{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding-bottom: var(--space-16);
+  border-bottom: 1px solid var(--sepsa-border);
+}
+
+.order-sheet-title{
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  min-width: 0;
+}
+
+.order-sheet-title__icon,
+.order-sheet-reference__icon{
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: var(--radius-8);
+  color: var(--sepsa-orange);
+  background: var(--sepsa-orange-soft);
+}
+
+.order-sheet-title__icon{
+  width: 32px;
+  height: 32px;
+}
+
+.order-sheet-title__icon svg{
+  width: 18px;
+  height: 18px;
+}
+
+.order-sheet-title h2{
+  margin: 0;
+  color: var(--sepsa-text);
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: -.02em;
+}
+
+.order-sheet-title p{
+  margin: 0;
+  color: var(--sepsa-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.order-sheet-status{
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex: 0 0 auto;
+  color: var(--sepsa-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.order-sheet-status__badge{
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 28px;
+  padding: var(--space-4) var(--space-12);
+  border: 1px solid var(--sepsa-green);
+  border-radius: var(--radius-full);
+  color: var(--sepsa-green);
+  background: var(--sepsa-green-soft);
+  font-weight: 600;
+}
+
+.order-sheet-status__badge--done{
+  border-color: var(--sepsa-blue);
+  color: var(--sepsa-blue);
+  background: var(--sepsa-blue-soft);
+}
+
+.order-sheet-status__badge--review{
+  border-color: var(--sepsa-red);
+  color: var(--sepsa-red);
+  background: var(--sepsa-red-soft);
+}
+
+.order-sheet-status__badge--muted{
+  border-color: var(--sepsa-border-strong);
+  color: var(--sepsa-text-secondary);
+  background: var(--sepsa-neutral-soft);
+}
+
+.order-sheet-status__badge svg{
+  width: 14px;
+  height: 14px;
+}
+
+.order-sheet-reference{
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-width: 0;
+  margin-top: var(--space-16);
+  padding: 0 var(--space-12);
+}
+
+.order-sheet-reference__icon{
+  width: 36px;
+  height: 36px;
+}
+
+.order-sheet-reference__icon svg{
+  width: 20px;
+  height: 20px;
+}
+
+.order-sheet-reference__content{
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.order-sheet-reference__value{
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.order-sheet-reference__value strong{
+  overflow-wrap: anywhere;
+  color: var(--sepsa-text);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 700;
+}
+
+.order-sheet-reference__value button{
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: var(--sepsa-text);
+  background: transparent;
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.order-sheet-reference__value button:hover{
+  color: var(--sepsa-orange);
+  transform: translateY(-1px);
+}
+
+.order-sheet-reference__content > span{
+  color: var(--sepsa-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.order-sheet-assign{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  min-height: 40px;
+  margin-left: auto;
+  padding: 0 var(--space-16);
+  border: 1px solid var(--sepsa-orange);
+  border-radius: var(--radius-8);
+  color: var(--sepsa-orange);
+  background: var(--sepsa-surface);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.order-sheet-assign:hover{
+  border-color: var(--sepsa-orange-hover);
+  color: var(--sepsa-orange-hover);
+  background: var(--sepsa-orange-soft);
+  transform: translateY(-1px);
+}
+
+.order-sheet-assign:active,
+.order-sheet-reference__value button:active{
+  transform: translateY(1px);
+}
+
+.order-sheet-assign .admin-data-icon{
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  color: currentColor;
+}
+
+.order-sheet-summary{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-8);
+  margin-top: var(--space-16);
+  padding-bottom: var(--space-16);
+}
+
+.operations-app .admin-order-detail .order-sheet-summary .data-point{
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  min-height: 72px;
+  padding: var(--space-12);
+  border: 1px solid var(--sepsa-border);
+  border-radius: var(--radius-8);
+  background: var(--sepsa-surface);
+}
+
+.order-sheet-summary .data-point__content{
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.order-sheet-summary .data-point span{
+  color: var(--sepsa-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.order-sheet-summary .data-point strong{
+  overflow-wrap: anywhere;
+  color: var(--sepsa-text);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.order-sheet-summary .admin-data-icon{
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  color: var(--sepsa-text-secondary);
+}
+
+.order-sheet-summary .data-point--emphasis .admin-data-icon{
+  padding: var(--space-2);
+  border-radius: var(--radius-full);
+  color: var(--sepsa-surface);
+  background: var(--sepsa-orange);
+}
+
+.order-sheet-summary .data-point--emphasis strong{
+  color: var(--sepsa-orange);
+  font-size: 14px;
+}
+
+.order-sheet-status-field{
+  align-items: center;
+}
+
+.order-sheet-status-value{
+  width: max-content;
+  padding: var(--space-4) var(--space-12);
+  border-radius: var(--radius-4);
+  color: var(--sepsa-yellow) !important;
+  background: var(--sepsa-yellow-soft);
+  font-size: 12px !important;
+  line-height: 16px !important;
+}
+
+.operations-app .admin-order-detail > .debt-section{
+  margin-top: 0;
+  padding-top: var(--space-16);
+  border-top: 1px solid var(--sepsa-border);
+}
+
+.operations-app .admin-order-detail .detail-section-heading{
+  align-items: center;
+  margin-bottom: var(--space-8);
+}
+
+.debt-section-title{
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.debt-section-title .admin-data-icon{
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  color: var(--sepsa-orange);
+}
+
+.debt-section-title strong{
+  color: var(--sepsa-text) !important;
+  font-size: 14px !important;
+  line-height: 20px !important;
+}
+
+.operations-app .admin-order-detail .debt-section-total{
+  color: var(--sepsa-orange);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.debt-section-total span{
+  color: var(--sepsa-text);
+  font-weight: 600;
+}
+
+.operations-app .admin-order-detail .debt-table{
+  overflow-x: auto;
+  border: 1px solid var(--sepsa-border);
+  border-radius: var(--radius-8);
+}
+
+.operations-app .admin-order-detail .debt-row{
+  grid-template-columns: 1fr 1.45fr 1.1fr 1fr .8fr;
+  min-height: 44px;
+  border-top-color: var(--sepsa-border);
+}
+
+.operations-app .admin-order-detail .debt-row span{
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: var(--space-8) var(--space-12);
+  overflow-wrap: anywhere;
+  color: var(--sepsa-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.operations-app .admin-order-detail .debt-row--header{
+  background: var(--sepsa-surface-soft);
+}
+
+.operations-app .admin-order-detail .debt-row--header span{
+  color: var(--sepsa-text);
+  font-weight: 600;
+}
+
+.operations-app .admin-order-detail .debt-row span:nth-child(4),
+.operations-app .admin-order-detail .debt-row span:nth-child(5){
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.operations-app .admin-order-detail .debt-row .technical-cell{
+  color: var(--sepsa-text-muted) !important;
+}
+
+@media (max-width: 900px){.order-sheet-summary{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }}
+
+@media (max-width: 760px){.order-sheet-header{
+    flex-direction: column;
+  }.order-sheet-status{
+    width: 100%;
+    justify-content: space-between;
+    white-space: normal;
+  }.order-sheet-reference{
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }.order-sheet-reference__content{
+    flex: 1 1 180px;
+  }.order-sheet-assign{
+    width: 100%;
+    margin-left: 0;
+  }}
+
+@media (max-width: 430px){.order-sheet-title h2{
+    font-size: 18px;
+    line-height: 28px;
+  }.order-sheet-status{
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-8);
+  }.order-sheet-reference{
+    padding: 0;
+  }.order-sheet-reference__value strong{
+    font-size: 14px;
+    line-height: 20px;
+  }.order-sheet-summary{
+    grid-template-columns: 1fr;
+  }}

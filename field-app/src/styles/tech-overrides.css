@@ -1,0 +1,141 @@
+/* Técnico · ajustes finales de jerarquía de campo. Bloque de styles/app.css a partir de la línea 1481; el orden de cascada es el original. */
+
+/* Final technician overrides: keep field hierarchy after legacy admin styles. */
+.field-app .filter-row{
+  gap: var(--space-4);
+  margin-bottom: var(--space-16);
+  padding: 0 0 var(--space-4);
+}
+
+.field-app .filter-chip{
+  min-height: var(--control-height);
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-6);
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.field-app .filter-chip--active{
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.field-app .order-card{
+  gap: var(--space-8);
+  padding: var(--space-16);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-8);
+  box-shadow: none;
+}
+
+.field-app .order-card:hover,
+.field-app .order-card--selected{
+  border-color: #d07d2c;
+  background: #fff9ee;
+  box-shadow: none;
+}
+
+.field-app .order-card__customer{
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.field-app .order-card__supply,
+.field-app .order-card__route,
+.field-app .order-card__address{
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.field-app .order-card__supply{
+  color: #59635d;
+  font-weight: 700;
+}
+
+.field-app .order-card__route{
+  padding-left: 20px;
+  font-weight: 700;
+}
+
+.field-app .order-card__footer{
+  align-items: center;
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.field-app .order-card__debt-val{
+  color: #9b5b1b;
+  font-size: 16px;
+}
+
+.field-app .order-card__actions{
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.field-app .order-card__action-btn{
+  min-height: var(--control-height);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-4);
+  color: var(--accent);
+  background: transparent;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
+.field-app .order-card__action-btn:hover{
+  background: #fff1d2;
+}
+
+.field-app .status-badge{
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-4);
+  font-size: 12px;
+  line-height: 16px;
+  text-transform: none;
+}
+
+.field-app .detail-navigation-bar{
+  margin-bottom: var(--space-32);
+  padding-bottom: var(--space-16);
+}
+
+.field-app .btn-back{
+  min-height: 40px;
+  border-radius: var(--radius-6);
+  color: #59635d;
+  background: transparent;
+}
+
+.field-app .queue-panel{
+  max-width: none;
+  padding: var(--space-32);
+  border-radius: var(--radius-12);
+}
+
+.field-app .queue-item{
+  border-radius: var(--radius-8);
+  box-shadow: none;
+}
+
+@media (max-width: 560px){.field-app .detail-panel--fullscreen,
+  .field-app .queue-panel{
+    padding: var(--space-24);
+  }.field-app .order-card__footer{
+    align-items: flex-start;
+    flex-direction: column;
+  }.field-app .order-card__actions{
+    width: 100%;
+  }.field-app .order-card__action-btn{
+    flex: 1;
+    border: 1px solid var(--line);
+  }}

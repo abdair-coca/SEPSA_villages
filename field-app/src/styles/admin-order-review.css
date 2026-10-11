@@ -1,0 +1,125 @@
+/* Administrador · revisión estandarizada de orden. Bloque de styles/app.css a partir de la línea 2301; el orden de cascada es el original. */
+
+/* Standardized admin order review; palette lives in styles/tokens.css. */
+.operations-app{
+  background: var(--sepsa-bg);
+}
+
+.operations-app .admin-order-detail .large-status{
+  min-height: 28px;
+  padding: var(--space-4) var(--space-12);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.operations-app .admin-order-detail .large-status--ready{
+  border-color: var(--sepsa-yellow);
+  color: var(--sepsa-yellow);
+  background: var(--sepsa-yellow-soft);
+}
+
+.operations-app .admin-order-detail .large-status--active{
+  border-color: var(--sepsa-green);
+  color: var(--sepsa-green);
+  background: var(--sepsa-green-soft);
+}
+
+.operations-app .admin-order-detail .large-status--done{
+  border-color: var(--sepsa-blue);
+  color: var(--sepsa-blue);
+  background: var(--sepsa-blue-soft);
+}
+
+.operations-app .admin-order-detail .large-status--review{
+  border-color: var(--sepsa-red);
+  color: var(--sepsa-red);
+  background: var(--sepsa-red-soft);
+}
+
+.operations-app .admin-order-detail .large-status--muted{
+  border-color: var(--sepsa-border-strong);
+  color: var(--sepsa-text-secondary);
+  background: var(--sepsa-neutral-soft);
+}
+
+.admin-order-detail .technical-id{
+  color: var(--sepsa-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.admin-order-detail .technical-id button{
+  color: var(--sepsa-orange);
+  font-size: 12px;
+}
+
+.operations-app .admin-order-detail .data-point{
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.operations-app .admin-order-detail .data-point span{
+  color: var(--sepsa-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.operations-app .admin-order-detail .data-point strong{
+  overflow-wrap: anywhere;
+  color: var(--sepsa-text);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.order-detail-technical{
+  margin-top: var(--space-24);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--sepsa-border);
+  border-radius: var(--radius-8);
+  background: var(--sepsa-surface);
+}
+
+.order-detail-technical summary{
+  color: var(--sepsa-orange-hover);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.order-detail-technical__grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-16);
+  margin-top: var(--space-16);
+  padding-top: var(--space-16);
+  border-top: 1px solid var(--sepsa-border);
+}
+
+.operations-app .admin-order-detail .order-detail-technical .data-point--technical strong{
+  color: var(--sepsa-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.operations-app .admin-order-detail .detail-section-heading strong{
+  color: var(--sepsa-orange);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.operations-app .admin-order-detail .debt-table{border-color: var(--sepsa-border);background: var(--sepsa-surface)}
+
+@media (max-width: 760px){.operations-app .admin-order-detail{
+    padding: var(--space-16);
+  }.order-detail-technical__grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }}
+
+@media (max-width: 430px){.order-detail-technical__grid{
+    grid-template-columns: 1fr;
+  }}

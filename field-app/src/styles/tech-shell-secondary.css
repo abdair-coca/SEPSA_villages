@@ -1,0 +1,17 @@
+/* Técnico · cáscara compartida de superficies secundarias. Bloque de styles/app.css a partir de la línea 5569; el orden de cascada es el original. */
+
+/* Minimal shared shell for Technician secondary surfaces. */
+.field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"]{
+  width: min(1280px, calc(100% - 48px));
+  gap: 0;
+  padding: 24px 0 16px;
+}
+
+.field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"] .app-header__topbar-transition{
+  width: 100%;
+}
+
+@media (max-width: 760px){.field-app .app-header.app-shell[data-shell="shared"][data-variant="minimal"]{
+    width: calc(100% - 24px);
+    padding: 8px 0;
+  }}

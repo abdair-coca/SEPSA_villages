@@ -1,0 +1,33 @@
+/* Técnico · detalle a pantalla completa. Bloque de styles/app.css a partir de la línea 1321; el orden de cascada es el original. */
+
+/* Fullscreen Detail View */
+.detail-panel--fullscreen{
+  width: 100%;
+}
+
+.detail-navigation-bar{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line, #e2e8f0);
+}
+
+.btn-back{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-back:hover{
+  background: #e2e8f0;
+}

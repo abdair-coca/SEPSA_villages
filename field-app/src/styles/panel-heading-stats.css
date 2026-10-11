@@ -1,0 +1,4 @@
+/* Encabezados de panel y píldoras de estadística. Bloque de styles/app.css a partir de la línea 759; el orden de cascada es el original. */
+
+/* Panel heading & Stat pills */
+.panel-heading{display: flex;justify-content: space-between;gap: var(--space-12);flex-wrap: wrap}

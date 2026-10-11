@@ -1,0 +1,213 @@
+/* Técnico · bandeja compacta de orden. Bloque de styles/app.css a partir de la línea 2117; el orden de cascada es el original. */
+
+/* Compact field order tray */
+.order-filters .search-field input{
+  min-height: 42px;
+}
+
+.order-filters .filter-row{
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.order-filters .filter-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.order-filters .filter-chip--active{
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.order-filters .chip-count{
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: var(--radius-full);
+  color: var(--ink);
+  background: #f1ede5;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.order-filters .filter-chip--active .chip-count{
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.order-card.order-list-row{
+  display: grid;
+  grid-template-columns: minmax(132px, .8fr) minmax(220px, 1.55fr) minmax(180px, 1fr);
+  align-items: center;
+  gap: var(--space-16);
+  min-width: 0;
+  padding: var(--space-12) var(--space-16);
+  cursor: pointer;
+}
+
+.order-list-row .order-card__header{
+  display: grid;
+  justify-items: start;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.order-list-row .order-card__identifiers{
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.order-list-row .order-card__order-id{
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 16px;
+}
+
+.order-list-row .order-card__cuc{
+  width: fit-content;
+  padding: 2px 5px;
+  color: var(--muted);
+  background: #f1ede5;
+  font-size: 10px;
+}
+
+.order-list-row .order-card__body{
+  min-width: 0;
+}
+
+.order-list-row .order-card__customer,
+.order-list-row .order-card__supply,
+.order-list-row .order-card__address,
+.order-list-row .order-card__route{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-list-row .order-card__customer{
+  font-size: 14px;
+}
+
+.order-list-row .order-card__footer{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-12);
+  min-width: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.order-list-row .order-card__debt-info{
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.order-list-row .order-card__debt-label,
+.order-list-row .order-card__months{
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.order-list-row .order-card__debt-val{
+  font-size: 14px;
+}
+
+.order-list-row .order-card__actions{
+  display: flex;
+  justify-content: flex-end;
+}
+
+.order-list-row .order-card__action-btn{
+  min-height: var(--control-height);
+  padding: 0 var(--space-12);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-6);
+  color: var(--accent);
+  background: var(--paper);
+}
+
+.order-list-row .order-card__action-btn:hover{
+  border-color: var(--accent);
+  background: #fff8e8;
+}
+
+.order-list-empty{
+  margin: 0;
+  padding: var(--space-24);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-8);
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.order-pagination{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  margin-top: var(--space-16);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.order-pagination__controls{
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.order-pagination button{
+  min-height: 34px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-6);
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.order-pagination button:hover:not(:disabled){
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.order-pagination button:disabled{
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+@media (max-width: 760px){.order-card.order-list-row{
+    grid-template-columns: 1fr;
+    gap: var(--space-12);
+  }.order-list-row .order-card__header{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }.order-list-row .order-card__footer{
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-top: var(--space-8);
+    border-top: 1px solid var(--line);
+  }.order-list-row .order-card__customer,
+  .order-list-row .order-card__supply,
+  .order-list-row .order-card__address,
+  .order-list-row .order-card__route{
+    white-space: normal;
+  }.order-pagination{
+    align-items: stretch;
+    flex-direction: column;
+  }.order-pagination__controls{
+    justify-content: space-between;
+  }}

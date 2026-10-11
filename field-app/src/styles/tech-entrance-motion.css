@@ -1,0 +1,42 @@
+/* Técnico · movimiento de entrada de superficies. Bloque de styles/app.css a partir de la línea 5534; el orden de cascada es el original. */
+
+/* Brief entrance motion marks newly mounted work surfaces and their first content. */
+.field-app .workbench > :is(.field-home, .map-page, .queue-panel, .orders-tray, .orders-layout, .detail-panel, .capture-wizard){
+  animation: field-surface-enter var(--motion-enter) var(--ease-field) both;
+}
+
+.field-app .workbench > .field-home > :nth-child(-n + 3), .field-app .workbench > .map-page > :nth-child(-n + 3), .field-app .workbench > .queue-panel > :is(.panel-heading, .queue-intro, .queue-list), .field-app .workbench > .orders-tray > :nth-child(-n + 3){
+  animation: field-surface-enter var(--motion-enter) var(--ease-field) both;
+}
+
+.field-app .workbench > .field-home > :nth-child(2), .field-app .workbench > .map-page > :nth-child(2), .field-app .workbench > .queue-panel > .queue-intro, .field-app .workbench > .orders-tray > :nth-child(2){
+  animation-delay: var(--motion-stagger);
+}
+
+.field-app .workbench > .field-home > :nth-child(3),
+.field-app .workbench > .map-page > :nth-child(3),
+.field-app .workbench > .queue-panel > .queue-list,
+.field-app .workbench > .orders-tray > :nth-child(3){
+  animation-delay: calc(var(--motion-stagger) * 2);
+}
+
+@keyframes field-surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.995);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce){.field-app .workbench > :is(.field-home, .map-page, .queue-panel, .orders-tray, .orders-layout, .detail-panel, .capture-wizard), .field-app .workbench > .field-home > :nth-child(-n + 3), .field-app .workbench > .map-page > :nth-child(-n + 3), .field-app .workbench > .queue-panel > :is(.panel-heading, .queue-intro, .queue-list), .field-app .workbench > .orders-tray > :nth-child(-n + 3){
+    animation: none;
+  }.field-app button,
+  .field-app input,
+  .field-app select,
+  .field-app textarea{
+    transition-duration: .01ms;
+  }}

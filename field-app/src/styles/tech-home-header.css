@@ -1,0 +1,362 @@
+/* Técnico · cabecera de inicio. Bloque de styles/app.css a partir de la línea 5199; el orden de cascada es el original. */
+
+/* Premium mobile hierarchy for the Technician home header. */
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .field-header-context-card{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid #efede9;
+  border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 12px 32px rgba(33, 42, 59, .06);
+}
+
+.field-app:has(.field-home) .field-header-context__item{
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-app:has(.field-home) .field-header-context__icon{
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 13px;
+  color: #263754;
+  background: #f5f6f7;
+}
+
+.field-app:has(.field-home) .field-header-context__icon .icon{
+  width: 19px;
+  height: 19px;
+}
+
+.field-app:has(.field-home) .field-header-context__copy{
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.field-app:has(.field-home) .field-header-context__label{
+  overflow: hidden;
+  color: #7b8799;
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-app:has(.field-home) .field-header-context__copy strong{
+  overflow: hidden;
+  color: #263754;
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-app:has(.field-home) .field-header-context__divider{
+  width: 1px;
+  height: 32px;
+  background: #e8e7e4;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row{
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button{
+  display: flex;
+  width: 100%;
+  min-height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 16px;
+  color: var(--paper);
+  background: var(--accent);
+  box-shadow: 0 10px 22px rgba(196, 91, 25, .18);
+  font-size: clamp(15px, 4.4vw, 20px);
+  line-height: 24px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button:hover:not(:disabled){
+  background: #a84d16;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > .icon{
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > span:not(.header-refresh-button__arrow){
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary{
+  display: grid;
+  grid-template-columns: minmax(0, 1.22fr) minmax(0, .78fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update,
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry{
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  align-items: center;
+  border: 1px solid #efede9;
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: 0 12px 32px rgba(33, 42, 59, .05);
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update{
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 2px;
+  padding: 8px 12px;
+  color: #7b8799;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: left;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update br{
+  display: none;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update strong{
+  color: #263754;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update .last-update-exact{
+  color: #7b8799;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry{
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-color: #efede9;
+  color: #263754;
+  background: var(--paper);
+  box-shadow: 0 12px 32px rgba(33, 42, 59, .05);
+  font-size: 13px;
+  line-height: 17px;
+  text-align: left;
+  white-space: normal;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon{
+  display: inline-flex;
+  flex: 0 0 20px;
+  color: #263754;
+}
+
+.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon .icon{
+  width: 20px;
+  height: 20px;
+}
+
+@media (min-width: 761px){.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .field-header-context-card{
+    display: flex;
+    width: auto;
+    margin-top: 16px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }.field-app:has(.field-home) .field-header-context__item{
+    gap: 8px;
+  }.field-app:has(.field-home) .field-header-context__icon{
+    display: none;
+  }.field-app:has(.field-home) .field-header-context__label,
+  .field-app:has(.field-home) .field-header-context__copy strong{
+    font-size: 13px;
+    line-height: 18px;
+  }.field-app:has(.field-home) .field-header-context__divider{
+    width: auto;
+    height: auto;
+    margin-inline: 8px;
+  }.field-app:has(.field-home) .field-header-context__divider::after{
+    content: "|";
+    color: #c8c0b5;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row{
+    display: flex;
+    width: auto;
+    align-items: center;
+    justify-content: flex-end;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button{
+    width: auto;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 12px;
+    box-shadow: none;
+    font-size: 14px;
+    line-height: 20px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > .icon{
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update,
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry{
+    min-height: 40px;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: none;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update{
+    display: inline-flex;
+    width: auto;
+    padding: 2px 6px;
+    font-size: 12px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update strong{
+    font-size: 12px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update .last-update-exact{
+    font-size: 11px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry{
+    width: auto;
+    padding: 0 12px;
+    font-size: 12px;
+    line-height: 16px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon{
+    flex-basis: 16px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon .icon{
+    width: 16px;
+    height: 16px;
+  }}
+
+@media (max-width: 760px){.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"]{
+    gap: 12px;
+    padding-top: 8px;
+    padding-bottom: 12px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__body{
+    gap: 12px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__heading h1{
+    margin-bottom: 4px;
+    font-size: 28px;
+    line-height: 32px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__description{
+    font-size: 13px;
+    line-height: 18px;
+  }.field-app:has(.field-home),
+  .field-app:has(.field-home) *{
+    scrollbar-width: none;
+  }.field-app:has(.field-home)::-webkit-scrollbar,
+  .field-app:has(.field-home) *::-webkit-scrollbar{
+    display: none;
+  }html:has(.field-app .field-home),
+  body:has(.field-app .field-home){
+    scrollbar-width: none;
+  }html:has(.field-app .field-home)::-webkit-scrollbar,
+  body:has(.field-app .field-home)::-webkit-scrollbar{
+    display: none;
+  }}
+
+@media (max-width: 430px){.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"]{
+    gap: 8px;
+    padding-top: 4px;
+    padding-bottom: 8px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__body{
+    gap: 8px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__heading h1{
+    margin-bottom: 4px;
+    font-size: 22px;
+    line-height: 26px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .app-header__description{
+    font-size: 11px;
+    line-height: 14px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .field-header-context-card{
+    gap: 6px;
+    margin-top: 8px;
+    padding: 2px 8px;
+    border-radius: 14px;
+  }.field-app:has(.field-home) .field-header-context__item{
+    gap: 6px;
+  }.field-app:has(.field-home) .field-header-context__icon{
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+    border-radius: 10px;
+  }.field-app:has(.field-home) .field-header-context__icon .icon{
+    width: 16px;
+    height: 16px;
+  }.field-app:has(.field-home) .field-header-context__label{
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
+  }.field-app:has(.field-home) .field-header-context__copy strong{
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
+  }.field-app:has(.field-home) .field-header-context__divider{
+    height: 24px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row{
+    gap: 8px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button{
+    min-height: var(--control-height);
+    gap: 5px;
+    padding-inline: 10px;
+    border-radius: 12px;
+    font-size: var(--text-control);
+    line-height: var(--text-control-line);
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-refresh-button > .icon{
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary{
+    gap: 8px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update,
+  .field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry{
+    min-height: var(--control-height);
+    border-radius: 12px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update{
+    padding: 4px 8px;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update strong{
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .last-update .last-update-exact{
+    font-size: var(--text-caption);
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry{
+    gap: 4px;
+    padding: 4px 8px;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption-line);
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon{
+    flex-basis: 16px;
+  }.field-app:has(.field-home) .app-header.app-shell[data-shell="shared"] .header-action-row__secondary > .btn-network-retry .retry-icon .icon{
+    width: 16px;
+    height: 16px;
+  }}
+
+@media (max-width: 760px){.field-app:has(.field-home){
+    overflow-x: clip;
+  }}
