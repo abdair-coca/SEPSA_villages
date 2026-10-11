@@ -1,13 +1,10 @@
 /**
- * Validación de evidencia:
- * - `validateEvidenceImage`: la foto debe ser un JPEG/PNG completo, estático, decodificable y dentro de los
- *   límites de tamaño (se decodifica entera; los metadatos solos no bastan).
- * - `hasVerifiedEvidence`: todas las fotos referenciadas por una operación están verificadas y ligadas a ella.
+ * Validación de la imagen de evidencia (`validateEvidenceImage`): la foto debe ser un JPEG/PNG completo, estático,
+ * decodificable y dentro de los límites de tamaño (se decodifica entera; los metadatos solos no bastan).
+ * No toca la base de datos; la verificación de fotos ligadas a una operación está en `evidence.service.ts`.
  */
 import sharp from "sharp";
-import type { PoolClient } from "pg";
 import { HttpError } from "../http/responses.js";
-import type { SyncPayload } from "../types.js";
 
 const MAX_EVIDENCE_DIMENSION = 4096;
 const MAX_EVIDENCE_PIXELS = 16_000_000;
@@ -35,14 +32,6 @@ export async function validateEvidenceImage(bytes: Buffer, mimeType: "image/jpeg
     if (error instanceof Error && error.message.includes("pixel limit")) throw evidenceImageTooLarge();
     throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "Evidence must be a complete, decodable JPEG or PNG photo within the processing limit. Retake or re-export the photo.");
   }
-}
-
-export async function hasVerifiedEvidence(client: PoolClient, payload: SyncPayload, technicianId: string): Promise<boolean> {
-  const evidence = await client.query<{ evidence_id: string }>(
-    "SELECT evidence_id FROM evidence_assets WHERE evidence_id = ANY($1::text[]) AND order_id = $2 AND operation_id = $3 AND technician_id = $4 AND device_id = $5 AND status = 'verified'",
-    [payload.evidence_refs, payload.order_id, payload.operation_id, technicianId, payload.device_id],
-  );
-  return evidence.rows.length === new Set(payload.evidence_refs).size;
 }
 
 function evidenceImageTooLarge(): HttpError {

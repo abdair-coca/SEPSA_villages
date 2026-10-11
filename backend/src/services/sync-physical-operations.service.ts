@@ -13,7 +13,7 @@ import { HttpError } from "../http/responses.js";
 import type { SessionUser, SyncPayload } from "../types.js";
 import { insertAudit } from "../repositories/audit.repository.js";
 import { type OrderRow } from "../mappers/order.mapper.js";
-import { hasVerifiedEvidence } from "./evidence-verification.service.js";
+import { hasVerifiedEvidence } from "./evidence.service.js";
 import { rejectSync, safeSyncPayload, type SyncResult } from "./sync-support.service.js";
 
 interface ReconnectionAuthorizationRow {

@@ -110,3 +110,15 @@ export async function listOrdersAssignedTo(client: Queryable, technicianId: stri
 export async function updateWorkPackageVersion(client: Queryable, technicianId: string, deviceId: string, nextVersion: number): Promise<void> {
   await client.query("UPDATE work_package_versions SET last_version = $3, updated_at = now() WHERE technician_id = $1 AND device_id = $2", [technicianId, deviceId, nextVersion]);
 }
+
+/** Técnico asignado a la orden, sin bloquear. `undefined` si la orden no existe. */
+export async function findOrderAssignment(db: Queryable, orderId: string): Promise<{ assigned_technician_id: string | null } | undefined> {
+  const orderScope = await db.query<{ assigned_technician_id: string | null }>("SELECT assigned_technician_id FROM orders WHERE order_id = $1 AND source = $2", [orderId, PROVISIONAL_SOURCE]);
+  return orderScope.rows[0];
+}
+
+/** Igual que `findOrderAssignment`, pero bloquea la fila de la orden hasta el fin de la transacción. */
+export async function findOrderAssignmentForUpdate(client: Queryable, orderId: string): Promise<{ assigned_technician_id: string | null } | undefined> {
+  const orderResult = await client.query<{ assigned_technician_id: string | null }>("SELECT assigned_technician_id FROM orders WHERE order_id = $1 AND source = $2 FOR UPDATE", [orderId, PROVISIONAL_SOURCE]);
+  return orderResult.rows[0];
+}
