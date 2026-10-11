@@ -17,7 +17,7 @@
     "e2e:browser": "tsx scripts/connected-browser-smoke.ts",
     "pilot:migrate:roles": "node migrations/20261002-role-grants.mjs",
     "test": "tsx --test test/**/*.test.ts",
-    "test:unit": "tsx --test test/auth.test.ts test/config.test.ts test/http.test.ts test/application.test.ts test/pilot-contract.test.ts test/role-switch.test.ts test/reconnection.test.ts test/debtor-queries.test.ts test/server.test.ts test/router.test.ts",
+    "test:unit": "tsx --test test/auth.test.ts test/config.test.ts test/http.test.ts test/application.test.ts test/pilot-contract.test.ts test/role-switch.test.ts test/reconnection.test.ts test/debtor-queries.test.ts test/server.test.ts test/router.test.ts test/architecture.test.ts",
     "test:integration": "tsx --test test/db.integration.test.ts"
   },
   "dependencies": {
