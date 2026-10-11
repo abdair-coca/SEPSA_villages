@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **6**
+Fase en curso: **7**
 
 ---
 
@@ -174,15 +174,15 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 
 ## Fase 6 — CSS por tipo y deduplicación
 
-- [ ] Capturas de referencia antes de tocar CSS: login, técnico (inicio, lista, detalle, captura, mapa, cola), admin (búsqueda, creación, ficha, auditoría); móvil y escritorio
-- [ ] Inventario de `styles/app.css` por bloque: a qué pantalla/componente pertenece cada sección
-- [ ] Crear un archivo por pantalla/componente en `styles/` y mover los bloques sin modificarlos
-- [ ] `styles/app.css` queda solo con `@import` en el orden de cascada original
-- [ ] Comparar capturas (sin diferencias) y commit
-- [ ] Eliminar selectores duplicados archivo por archivo, comparando capturas en cada commit
-- [ ] Eliminar reglas sin uso (clase no presente en ningún `.tsx`)
-- [ ] Reemplazar colores directos por tokens solo cuando el valor coincide exactamente
-- [ ] **Validación:** suite de field-app + `smoke:ui` + comparación visual sin diferencias; commit; estado actualizado en `PLAN.md`
+- [x] Capturas de referencia antes de tocar CSS: login, técnico (inicio, lista, detalle, captura, mapa, cola), admin (búsqueda, creación, ficha, auditoría); móvil y escritorio. Referencia `base`/`base2` regenerada con animaciones desactivadas y espera de layout; la lista de órdenes sigue variando entre ejecuciones (ver Hallazgos). La auditoría no es una pantalla propia: aparece como contador «Trazas» en el resumen del administrador.
+- [x] Inventario de `styles/app.css` por bloque: a qué pantalla/componente pertenece cada sección (1.497 unidades; ver Hallazgos sobre por qué no se agrupan por componente)
+- [x] Crear un archivo por pantalla/componente en `styles/` y mover los bloques sin modificarlos — **parcial**: un archivo por sección de la hoja original (26 y `base.css`), no por componente (ver Hallazgos)
+- [x] `styles/app.css` queda solo con `@import` en el orden de cascada original
+- [x] Comparar capturas (sin diferencias) y commit — el CSS compilado tras la división es byte a byte igual al anterior; limpieza y tokens verificados con capturas y reglas de ruido documentadas
+- [x] Eliminar selectores duplicados archivo por archivo, comparando capturas en cada commit — una pasada sobre el CSS completo (290 declaraciones y 71 reglas vacías), no archivo por archivo (ver Hallazgos)
+- [x] Eliminar reglas sin uso (clase no presente en ningún `.tsx`) — 646 selectores y 515 reglas; comprobado contra el código fuente y el DOM de referencia
+- [x] Reemplazar colores directos por tokens solo cuando el valor coincide exactamente — 135 sustituciones (22 literales), solo si el token vale lo mismo en `:root` y en `.field-app`
+- [x] **Validación:** `tsc`, `vitest` (316/316), `build`, `smoke:ui` (17/17) y `smoke:pwa` en verde; comparación visual sin diferencias salvo las carreras documentadas; commits; estado actualizado en `PLAN.md`
 
 ## Fase 7 — Higiene del repositorio y migraciones
 
@@ -229,3 +229,10 @@ Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de u
 - Fase 5: `/healthz` pasó a ser una ruta pública de la tabla; antes se respondía antes de `validateOrigin`. Es equivalente porque `validateOrigin` ignora los GET, pero queda anotado. `POST /v1/auth/logout` figura como pública en la tabla (valida la sesión dentro del controlador) aunque el OpenAPI declare seguridad; el test lo documenta.
 - Fase 5: la tabla de rutas hace que una ruta desconocida sin sesión responda 401 (no 404), igual que antes: la sesión se exige antes de buscar rutas protegidas. Conservado a propósito.
 - Fase 5: `tsc --noUnusedLocals` en backend baja de 10 a 9 errores (se quitó un import sin usar en `mappers/debtor.mapper.ts`); los 9 restantes son de `test/application.test.ts` y `test/reconnection.test.ts` (preexistentes, fuera del alcance).
+- Fase 6: `app.css` no se puede repartir por pantalla o componente sin cambiar la cascada. Tenía 1.497 bloques intercalados entre dueños (525 tramos contiguos); reordenarlos por dueño produjo 59.372 diferencias de elementos y 138 PNG. Los dueños forman un ciclo porque las secciones sobrescriben clases compartidas (`.panel`, `.panel-heading`, `.primary-action`, `.app-header`…). Agrupar por componente exige consolidar esos overrides en una tarea aparte, con su propia verificación.
+- Fase 6: la lista de órdenes del técnico (`tech-orders*`, 1024 y 1280 px) no es reproducible entre ejecuciones: la altura de la página cambia en saltos de 56 px (593/649, 909/965, 1137/1193). Esperar a que el layout se estabilice no lo resolvió. Esos estados se verifican sin propiedades de color.
+- Fase 6: durante el zoom de Leaflet, la capa de teselas queda en fase transitoria según la carga (`transform`, `z-index`, `transition-*`). Afecta a `tech-map-fullscreen` (320 y 760 px) y a `tech-home-after` (1024 px).
+- Fase 6: `tokens.css` redefine nueve tokens dentro de `.field-app` y `[data-ui-theme="field"]`; un literal solo se sustituye por `var(--token)` si el token vale lo mismo en ambos ámbitos.
+- Fase 6: al borrar reglas sin uso, las clases dentro de `:is()`, `:where()`, `:has()` y `:not()` no cuentan como muertas: una alternativa viva mantiene el selector.
+- Fase 6: el orden de las subtareas cambió. Las reglas sin uso y la deduplicación se hicieron antes del reparto, porque el reparto solo era verificable sobre el CSS ya limpio. La deduplicación fue una pasada global y solo elimina declaraciones que una regla posterior idéntica (mismo selector, propiedad e importancia) siempre sobrescribe.
+- Fase 6: `shared-shell.css` pasa a `shell.css`, como indica el plan. `docs/ARCHITECTURE.md` y `docs/design.md` se actualizaron.

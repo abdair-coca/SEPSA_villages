@@ -33,7 +33,7 @@ Los patrones visuales compartidos deben tener una interfaz pequeña y más de un
 
 `SearchField` comparte búsqueda controlada y limpieza accesible entre Técnico y Admin. `PaginationControls` comparte las acciones de página; las cantidades y los cálculos siguen perteneciendo a cada vista. `AppStateCard` y `Notification` presentan estados y mensajes recuperables. `AppModal` monta los diálogos en un portal con el tema del rol: controla foco, teclado y bloqueo del fondo; `closeDisabled` impide cancelar mientras una operación administrativa está en curso. Los resultados de captura conservan su contenido y acción «Listo» con este mismo comportamiento.
 
-Los estilos tienen un punto de entrada en `src/styles/app.css`. Los tokens visuales y capas viven en `src/styles/tokens.css`, el frame compartido en `src/styles/shared-shell.css` y los controles compartidos en `src/styles/controls.css`; el resto de estilos se organiza por superficie hasta completar su migración. La hoja de estilos no contiene reglas de autorización ni de negocio.
+Los estilos tienen un punto de entrada en `src/styles/app.css`, que solo importa hojas en orden de cascada. Los tokens visuales viven en `src/styles/tokens.css`, el frame compartido en `src/styles/shell.css` y los controles compartidos en `src/styles/controls.css`; cada sección del CSS original tiene su hoja (`base.css`, `tech-*.css`, `admin-*.css`, …). El orden de importación forma parte de la cascada: reordenar hojas exige verificar el CSS compilado. La hoja de estilos no contiene reglas de autorización ni de negocio.
 
 `npm run smoke:ui` complementa las pruebas de componentes con Chrome/CDP sobre un build simulado, usando un perfil temporal y sin contactar servicios externos. Captura vistas responsive y verifica foco, filtros, mapa, GPS tardío, desplazamiento de captura y restauración de borradores. `npm run smoke:pwa` verifica por separado el guardado local, cola y recuperación offline.
 
@@ -97,7 +97,7 @@ Dónde vive cada responsabilidad. Cada archivo empieza con un comentario que exp
 | `bootstrap/` | Construcción de stores con sus adaptadores | `runtime.ts` |
 | `screens/` | Pantallas: técnico (`FieldApp`), administrador (`OperationsApp`), login; guardan estado y handlers, y componen `components/` | — |
 | `components/`, `components/common/` | Componentes con lógica visible (técnico: `FieldHome`, `OrderList`, `FieldMap`, `OrderDetail`, `CaptureForm`; admin: `Admin*`, `DebtorSearchPanel`); primitivas genéricas | `OrderDetail.tsx`, `CaptureForm.tsx` |
-| `services/`, `utils/`, `styles/` | Servicios del navegador sin UI (`mobile-back-guard.ts`, `map-cache.ts`); funciones puras de presentación; CSS | — |
+| `services/`, `utils/`, `styles/` | Servicios del navegador sin UI (`mobile-back-guard.ts`, `map-cache.ts`); funciones puras de presentación; CSS por sección | `styles/app.css` |
 
 La regla de dependencias entre carpetas la verifica `field-app/src/architecture.test.ts`.
 

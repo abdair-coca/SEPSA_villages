@@ -150,7 +150,7 @@ El detalle de reglas sigue en `docs/`; el comentario enlaza al documento en vez 
 | 3 | Comentarios y mapa del código | ambos | Nulo | Hecha |
 | 4 | División de componentes grandes | field-app | Medio | Hecha |
 | 5 | Backend por tipo (controller/service/repository) | backend | Medio | Hecha |
-| 6 | CSS por tipo y deduplicación | field-app | **Alto** | Pendiente |
+| 6 | CSS por tipo y deduplicación | field-app | **Alto** | Hecha (por sección, no por componente; ver Hallazgos de la fase 6 en `TASK.md`) |
 | 7 | Higiene del repositorio y migraciones | repo | Medio | Pendiente |
 
 Ejecutar en orden. Las fases 3 y 4 pueden alternarse, pero la 6 va siempre después de la 4 (los estilos se reparten según los componentes finales).

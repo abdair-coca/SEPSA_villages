@@ -52,7 +52,7 @@ El naranja (`--sepsa-orange`, `--accent`) identifica acción primaria y marca SE
 
 ## Tipografía, escala y componentes
 
-- Familia: Manrope; usar la pila y configuración declaradas en `tokens.css` y `styles.css`. Mantener números tabulares en datos operativos.
+- Familia: Manrope; usar la pila y configuración declaradas en `tokens.css` y `app.css`. Mantener números tabulares en datos operativos.
 - Usar la escala existente: caption `12/16px`, cuerpo y controles `14/20px`, encabezado de sección `20/28px`. Mantener la jerarquía de títulos de página ya usada por el shell.
 - Usar los tokens de espaciado `--space-*` (de `2px` a `96px`) y radios `--radius-*` (`4px`, `6px`, `8px`, `12px`, `16px`, `24px`, `32px`, pill y circular). No agregar escalas locales.
 - Controles interactivos: altura mínima `--control-height` (`44px`); mantener áreas táctiles cómodas y no reducirlas para que quepa más contenido.
