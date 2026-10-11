@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **7**
+Fase en curso: **6**
 
 ---
 
@@ -176,7 +176,7 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 
 - [x] Capturas de referencia antes de tocar CSS: login, técnico (inicio, lista, detalle, captura, mapa, cola), admin (búsqueda, creación, ficha, auditoría); móvil y escritorio. Referencia `base`/`base2` regenerada con animaciones desactivadas y espera de layout; la lista de órdenes sigue variando entre ejecuciones (ver Hallazgos). La auditoría no es una pantalla propia: aparece como contador «Trazas» en el resumen del administrador.
 - [x] Inventario de `styles/app.css` por bloque: a qué pantalla/componente pertenece cada sección (1.497 unidades; ver Hallazgos sobre por qué no se agrupan por componente)
-- [x] Crear un archivo por pantalla/componente en `styles/` y mover los bloques sin modificarlos — **parcial**: un archivo por sección de la hoja original (26 y `base.css`), no por componente (ver Hallazgos)
+- [ ] Crear un archivo por pantalla/componente en `styles/` y mover los bloques sin modificarlos — **pendiente**: hoy un archivo por sección de la hoja original (commit `ec7635d`); el reparto por componente se intentó y se revirtió (ver Hallazgos)
 - [x] `styles/app.css` queda solo con `@import` en el orden de cascada original
 - [x] Comparar capturas (sin diferencias) y commit — el CSS compilado tras la división es byte a byte igual al anterior; limpieza y tokens verificados con capturas y reglas de ruido documentadas
 - [x] Eliminar selectores duplicados archivo por archivo, comparando capturas en cada commit — una pasada sobre el CSS completo (290 declaraciones y 71 reglas vacías), no archivo por archivo (ver Hallazgos)
@@ -236,3 +236,5 @@ Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de u
 - Fase 6: al borrar reglas sin uso, las clases dentro de `:is()`, `:where()`, `:has()` y `:not()` no cuentan como muertas: una alternativa viva mantiene el selector.
 - Fase 6: el orden de las subtareas cambió. Las reglas sin uso y la deduplicación se hicieron antes del reparto, porque el reparto solo era verificable sobre el CSS ya limpio. La deduplicación fue una pasada global y solo elimina declaraciones que una regla posterior idéntica (mismo selector, propiedad e importancia) siempre sobrescribe.
 - Fase 6: `shared-shell.css` pasa a `shell.css`, como indica el plan. `docs/ARCHITECTURE.md` y `docs/design.md` se actualizaron.
+- Fase 6: intento de reparto por componente (23 archivos; las 408 reglas que compiten, dentro del mismo componente o entre componentes, en `cascade-overrides.css` y el resto por componente). Se revirtió. `smoke:ui` falló en la notificación móvil de 360 px: el texto medía 58 px en vez de ≥180 px. Las capturas no lo detectaron porque esa configuración de DOM no se captura, y el análisis de conflictos se apoya en el DOM capturado. El reordenado por componente no es verificable con el método actual. Para hacerlo hay que consolidar los overrides de selectores compartidos y ampliar el inventario de estados (notificaciones, banners, errores, modales) antes de verificar. Copia del intento fuera del repo.
+- Fase 6: algunos estados muestran identificadores técnicos (p. ej. `…0073` frente a `…0077`) que cambian entre ejecuciones porque la captura parchea `randomUUID` con un contador. Los píxeles distintos de esos estados están en esos textos; estilos calculados y geometría coinciden en los estados verificados.
