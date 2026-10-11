@@ -85,3 +85,8 @@ export function queueReviewMessage(item: Pick<SyncItem, "manualReview" | "uncert
   if (item.uncertain) return "Resultado incierto: verificar estado podría continuar sincronización según el motor.";
   return undefined;
 }
+
+/** Etiquetas del administrador. Usan textos propios ("Generada", "Físico incierto") distintos a los del técnico. */
+export function adminOrderDomainStatusLabel(status: WorkOrder["status"]): string { return status === "GENERADO" ? "Generada" : status === "EJECUTADO" ? "Ejecutada" : status === "RECONEXIÓN" ? "Reconectada" : "Anulada"; }
+export function adminOrderStatusLabel(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "Físico incierto"; return adminOrderDomainStatusLabel(order.status); }
+export function adminOrderStatusTone(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "review"; return order.status === "GENERADO" ? "ready" : order.status === "EJECUTADO" ? "done" : order.status === "ANULADO" ? "muted" : "active"; }

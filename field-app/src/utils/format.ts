@@ -114,3 +114,10 @@ export function orderPopupHtml(account: string, customer: string, meter: string,
           <span>Deuda: ${escapeHtml(debt)} · <strong>${escapeHtml(status)}</strong></span>
         `;
 }
+
+/** Formatos del administrador: montos en Bs, fechas y valores combinados ("A · B"); un dato ausente se muestra como no disponible. */
+export function formatAdminMoney(cents: number): string { return (cents / 100).toFixed(2); }
+export function formatAdminDate(value?: string): string { if (!value) return "Dato no disponible"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "Dato no disponible" : new Intl.DateTimeFormat("es-BO", { dateStyle: "short", timeStyle: "short" }).format(date); }
+export function formatAdminOrderHeaderDate(value?: string): string { if (!value) return "fecha no disponible"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "fecha no disponible" : new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "numeric", year: "2-digit", hour: "numeric", minute: "2-digit" }).format(date); }
+export function formatAdminRelativeDate(value?: string): string { if (!value) return "en fecha no disponible"; const date = new Date(value); if (Number.isNaN(date.getTime())) return "en fecha no disponible"; return new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(date).replace(",", " ·"); }
+export function joinAdminValues(...values: Array<string | number | undefined>): string | undefined { const available = values.filter((value) => value !== undefined && value !== ""); return available.length ? available.join(" · ") : undefined; }

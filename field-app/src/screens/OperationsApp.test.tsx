@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AdminOrderDetail, AdminSelectionSummary, OrderCreationModal } from "./OperationsApp";
+import { AdminOrderDetail } from "../components/AdminOrderDetail";
+import { AdminSelectionSummary } from "../components/DebtorSearchPanel";
+import { OrderCreationModal } from "../components/AdminOrderModals";
 import { createDemoPackage } from "../bootstrap/runtime";
 import type { DebtorRecord } from "../domain/types";
 import { getMissingOrderCreationDebtorIds } from "../utils/filters";

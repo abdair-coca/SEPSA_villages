@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import type { DebtorRecord, Session, TechnicianRecord } from "../domain/types";
 import type { OperationsAuthorityPort } from "../ports/authority";
 import { OperationsApp } from "./OperationsApp";
+import { DebtorSearchPanel } from "../components/DebtorSearchPanel";
 import { createDemoPackage } from "../bootstrap/runtime";
 
 // Minimal hook scheduler: callbacks run from the actual component, effects retain
@@ -35,6 +36,8 @@ function elements(node: unknown): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!node || typeof node !== "object" || !("props" in node)) return [];
   const element = node as ReactElement<Record<string, unknown>>;
+  // El panel de búsqueda antes era JSX en línea de la pantalla: se expande para seguir viendo su formulario y sus controles.
+  if (element.type === DebtorSearchPanel) return [element, ...elements(DebtorSearchPanel(element.props as unknown as Parameters<typeof DebtorSearchPanel>[0]))];
   return [element, ...elements(element.props.children)];
 }
 function deferred<T>() {

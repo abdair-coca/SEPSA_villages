@@ -15,14 +15,13 @@ import {
 } from "../domain/types";
 import type { OperationsAuthorityPort } from "../ports/authority";
 import { AppHeader, type AppHeaderRoleSwitch } from "../components/AppHeader";
-import { IconAlertTriangle, IconCheck, IconDocument } from "../components/common/Icons";
-import { AppModal } from "../components/common/Modal";
-import { AppStateCard } from "../components/common/UiState";
 import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "../components/common/Notification";
-import { SearchField } from "../components/common/SearchField";
-import { PaginationControls } from "../components/common/PaginationControls";
+import { AdminOverview } from "../components/AdminOverview";
+import { DebtorSearchPanel, type SearchFilters } from "../components/DebtorSearchPanel";
+import { SelectedSupplyPanel, EmptySupplyPanel, RecentOrdersPreview } from "../components/AdminSupplyPanel";
+import { AdminOrderDetail } from "../components/AdminOrderDetail";
+import { OrderCreationModal, OrderAssignmentModal, type OrderCreationDialog } from "../components/AdminOrderModals";
 import { findActiveOrderForSupply } from "../domain/policies";
-import { formatAdminCoordinates } from "../utils/format";
 import { ADMIN_SUPPLIES_PAGE_SIZE, getAdminOrderPage } from "../utils/pagination";
 import { getAdminFilterOptions, matchesFilterValue, getMissingOrderCreationDebtorIds } from "../utils/filters";
 
@@ -33,22 +32,7 @@ interface OperationsAppProps {
   roleSwitch?: AppHeaderRoleSwitch;
 }
 
-interface SearchFilters {
-  query: string;
-  area: string;
-  locality: string;
-  route: string;
-  minMonthsPending: string;
-  supplyStatus: string;
-}
-
-interface OrderCreationDialog {
-  mode: "single" | "batch";
-  debtorIds: string[];
-}
-
 type MessageTone = "info" | "success" | "error";
-type SupplyDataIconKind = "client" | "address" | "account" | "circuit" | "supply" | "area" | "meter" | "status" | "route" | "tariff" | "coordinates" | "phone" | "debt";
 
 const DEFAULT_SEARCH_FILTERS: SearchFilters = { query: "", area: "", locality: "", route: "", minMonthsPending: "2", supplyStatus: "A" };
 
@@ -369,14 +353,6 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   const selectedDebtorRecord = debtors.find((debtor) => debtor.debtorId === selectedDebtor);
   const selectedOrderRecord = orders.find((order) => order.orderId === selectedOrder);
   const activeOrderForSupply = selectedDebtorRecord ? findActiveOrderForSupply(orders, selectedDebtorRecord.debtorId, selectedDebtorRecord.accountId) : undefined;
-  const generated = orders.filter((order) => order.status === "GENERADO").length;
-  const executed = orders.filter((order) => order.status === "EJECUTADO").length;
-  const cancelled = orders.filter((order) => order.status === "ANULADO").length;
-  const unassigned = orders.filter((order) => !order.assignedTechnicianId).length;
-  const assigned = orders.filter((order) => Boolean(order.assignedTechnicianId)).length;
-  const auditTraceCount = audit.filter((event) => event.action !== "SYNC_OPERATION").length;
-  const syncTraceCount = audit.filter((event) => event.action === "SYNC_OPERATION").length;
-  const allDebtorsSelected = debtors.length > 0 && selectedDebtorIds.length === debtors.length;
   const availableFilterOptions = getAdminFilterOptions(filterRecords, filters.area, filters.locality, filters.route, filters.supplyStatus);
   const recentOrdersPage = getAdminOrderPage(orders, ordersPage);
   const suppliesPageData = getAdminOrderPage(debtors, suppliesPage, ADMIN_SUPPLIES_PAGE_SIZE);
@@ -396,43 +372,31 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
       {message ? <Notification tone={messageTone} text={message} onDismiss={() => setMessage("")} /> : null}
 
       <main className="operations-main">
-        <section className="admin-summary" aria-label="Resumen de órdenes">
-          <div className="overview-stats">
-            <Stat label="Generadas" value={generated} tone="ready" />
-            <Stat label="Sin asignar" value={unassigned} tone="review" />
-            <Stat label="Asignadas" value={assigned} tone="active" />
-            <Stat label="Ejecutadas" value={executed} tone="done" />
-            <Stat label="Anuladas" value={cancelled} tone="muted" />
-            <Stat label="Trazas" value={audit.length} tone="traces" detail={`${auditTraceCount} auditoría · ${syncTraceCount} sincronización`} />
-          </div>
-        </section>
+        <AdminOverview orders={orders} audit={audit} />
 
         <div className="operations-grid admin-workspace">
-          <section className="panel operations-search" aria-labelledby="supplies-title">
-            <div className="panel-heading"><span className="panel-heading__icon panel-heading__icon--list" aria-hidden="true" /><div><span className="eyebrow">Buscar morosos</span><h2 id="supplies-title">Buscar morosos</h2><p className="panel-subtitle">Busca y selecciona un suministro para crear una orden de corte.</p></div><span className="count-badge">{debtors.length} resultados</span></div>
-            <form className="admin-search-form admin-search-form--extended" onSubmit={search}>
-              <SearchField id="admin-search" label="Buscar morosos" value={filters.query} onChange={(query) => setFilters((current) => ({ ...current, query }))} onClear={() => setFilters((current) => ({ ...current, query: "" }))} busy={searching} disabled={busy} placeholder="Buscar por nombre, cuenta, área, localidad, ruta o estado" />
-              <div className="compact-filters">
-                 <label className="text-field"><span>Área</span><select value={filters.area} onChange={(event) => changeArea(event.target.value)}><option value="">Todas</option>{availableFilterOptions.areas.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                 <label className="text-field"><span>Localidad</span><select value={filters.locality} onChange={(event) => setFilters({ ...filters, locality: event.target.value })}><option value="">Todas</option>{availableFilterOptions.localities.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                 <label className="text-field"><span>Ruta</span><select value={filters.route} onChange={(event) => setFilters({ ...filters, route: event.target.value })}><option value="">Todas</option>{availableFilterOptions.routes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                <label className="text-field"><span>Facturas vencidas</span><input type="number" min="0" inputMode="numeric" value={filters.minMonthsPending} onChange={(event) => setFilters({ ...filters, minMonthsPending: event.target.value })} /></label>
-                 <label className="text-field"><span>Estado del suministro</span><select value={filters.supplyStatus} onChange={(event) => setFilters({ ...filters, supplyStatus: event.target.value })}><option value="">Todos</option>{availableFilterOptions.statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-              </div>
-               <div className="filter-actions"><button className="primary-action" type="submit" disabled={searching || busy}>{searching ? "Consultando…" : "Buscar morosos"}<span>→</span></button><button className="filter-reset" type="button" onClick={() => void clearFilters()} disabled={searching || busy}>Limpiar</button><button className="secondary-action filter-select-all" type="button" onClick={toggleAllDebtors} disabled={!debtors.length || searching || busy}>{allDebtorsSelected ? "Quitar selección" : "Seleccionar todos"}</button>{selectedDebtorIds.length ? <button className="primary-action filter-batch-action" type="button" onClick={prepareBatch} disabled={busy}>Crear y asignar ({selectedDebtorIds.length})<span>→</span></button> : null}</div>
-            </form>
-
-            <AdminSelectionSummary selectedCount={selectedDebtorIds.length} visibleSelectedCount={suppliesPageData.items.filter((debtor) => selectedDebtorIds.includes(debtor.debtorId)).length} />
-
-             <div className="results-heading"><span><strong>{loading ? "Consultando suministros…" : `${debtors.length} suministros encontrados`}</strong><small>Ordenados por deuda pendiente</small></span></div>
-              {loading ? <AdminLoadingState /> : loadError && !debtors.length ? <AdminErrorState message={loadError} onRetry={() => void loadAdminData()} /> : <>
-                <div className="admin-record-list">{suppliesPageData.items.map((debtor, index) => <DebtorItem key={debtor.debtorId} debtor={debtor} position={(suppliesPageData.page - 1) * ADMIN_SUPPLIES_PAGE_SIZE + index + 1} selected={selectedDebtor === debtor.debtorId} checked={selectedDebtorIds.includes(debtor.debtorId)} onSelect={() => selectDebtor(debtor.debtorId)} onToggle={() => toggleDebtor(debtor.debtorId)} />)}</div>
-                {suppliesPageData.totalPages > 1 ? <PaginationControls className="admin-pagination supply-pagination" label="Paginación de suministros" page={suppliesPageData.page} totalPages={suppliesPageData.totalPages} onPrevious={() => setSuppliesPage(suppliesPageData.page - 1)} onNext={() => setSuppliesPage(suppliesPageData.page + 1)} /> : null}
-                {loadError ? <AdminInlineError message={loadError} onRetry={() => void loadAdminData()} /> : null}
-                {!debtors.length && !loadError ? <AppStateCard tone="empty" layout="inline" className="empty-state" title="No hay resultados con estos filtros" description="Ajusta la búsqueda y vuelve a consultar." /> : null}
-              </>}
-
-          </section>
+          <DebtorSearchPanel
+            filters={filters}
+            availableFilterOptions={availableFilterOptions}
+            debtors={debtors}
+            suppliesPageData={suppliesPageData}
+            selectedDebtor={selectedDebtor}
+            selectedDebtorIds={selectedDebtorIds}
+            loading={loading}
+            loadError={loadError}
+            searching={searching}
+            busy={busy}
+            onFiltersChange={setFilters}
+            onAreaChange={changeArea}
+            onSearch={search}
+            onClear={clearFilters}
+            onToggleAll={toggleAllDebtors}
+            onPrepareBatch={prepareBatch}
+            onSelectDebtor={selectDebtor}
+            onToggleDebtor={toggleDebtor}
+            onRetry={loadAdminData}
+            onSuppliesPageChange={setSuppliesPage}
+          />
 
           <section className="panel operations-orders selected-supply-panel" aria-labelledby="selected-supply-title">
             {selectedDebtorRecord ? <SelectedSupplyPanel debtor={selectedDebtorRecord} activeOrder={activeOrderForSupply} busy={busy} onCreateOrder={openSingleOrderDialog} onViewOrder={(orderId) => setSelectedOrder(orderId)} /> : <EmptySupplyPanel />}
@@ -448,151 +412,6 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   );
 }
 
-function Stat({ label, value, tone, detail }: { label: string; value: number; tone: string; detail?: string }) { return <div className={`overview-stat overview-stat--${tone}`}><span className="overview-stat__icon" aria-hidden="true" /><div className="overview-stat__content"><span className={`status-mark status-mark--${tone}`}>{label}</span><strong>{value}</strong>{detail ? <small>{detail}</small> : null}</div></div>; }
-
-export function AdminSelectionSummary({ selectedCount, visibleSelectedCount }: { selectedCount: number; visibleSelectedCount: number }) {
-  if (!selectedCount) return null;
-  return <div className="admin-selection-summary" role="status" aria-live="polite"><strong>{selectedCount} suministros seleccionados</strong><span>{visibleSelectedCount} en esta página · La selección se conserva al cambiar de página.</span></div>;
-}
-
-function AdminLoadingState() {
-  return <AppStateCard as="div" className="admin-state-card" tone="loading" title="Cargando suministros" description="Estamos consultando información operativa." />;
-}
-
-function AdminErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return <AppStateCard as="div" className="admin-state-card" tone="error" title="No pudimos cargar los suministros" description={message} action={{ label: "Reintentar", onClick: onRetry, variant: "secondary" }} />;
-}
-
-function AdminInlineError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return <AppStateCard tone="error" layout="inline" className="admin-inline-error" title="No pudimos actualizar los suministros" description={message} action={{ label: "Reintentar", onClick: onRetry, variant: "secondary" }} />;
-}
-
-function DebtorItem({ debtor, position, selected, checked, onSelect, onToggle }: { debtor: DebtorRecord; position: number; selected: boolean; checked: boolean; onSelect: () => void; onToggle: () => void }) {
-  return <article className={selected ? "admin-record admin-record--selected" : "admin-record"}>
-    <span className="record-position" aria-hidden="true">{position}</span>
-    <label className="record-select" title="Seleccionar para lote"><input type="checkbox" checked={checked} onChange={onToggle} /><span className="sr-only">Lote</span></label>
-    <div className="record-review" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(); } }}><span className="record-identity"><strong>{debtor.customerName}</strong><small>Cuenta {debtor.accountId} · Medidor {debtor.meterId}</small></span><span className="record-address"><strong>{debtor.address || `${debtor.locality}`}</strong><small>Ruta {debtor.routeName ?? debtor.route}</small></span><span className="record-debt"><b>Bs {formatMoney(debtor.debtCents)}</b><small>{debtor.monthsPending} facturas</small></span><span className="record-state">{debtor.supplyStatus ?? "Estado no disponible"}</span></div>
-  </article>;
-}
-
-function EmptySupplyPanel() {
-  return <div className="selected-supply-content selected-supply-content--empty">
-    <div className="selected-supply-heading"><span className="panel-heading__icon panel-heading__icon--document" aria-hidden="true" /><div><span className="eyebrow">Crear y asignar orden de corte</span><h2 id="selected-supply-title">Crear y asignar orden de corte</h2><p>Verifica la información del suministro y genera la orden.</p></div></div>
-    <SupplyDataCard />
-    <div className="create-order-zone create-order-zone--empty"><div className="create-order-summary"><span className="eyebrow">Crear y asignar orden de corte</span><strong>Selecciona un suministro moroso</strong><span>La acción estará disponible después de revisar sus datos.</span></div><button className="primary-action" type="button" disabled>Crear orden de corte<span>→</span></button></div>
-  </div>;
-}
-
-function SupplyDataCard({ debtor }: { debtor?: DebtorRecord }) {
-  return <section className="supply-context-card"><h3>Datos del suministro seleccionado</h3><div className="supply-data-grid">
-    <Data label="Cliente" value={debtor?.customerName} icon="client" emptyValue="-" />
-    <Data label="Dirección" value={debtor?.address} icon="address" emptyValue="-" />
-    <Data label="Cuenta" value={debtor?.accountId} icon="account" emptyValue="-" />
-    <Data label="Circuito" value={debtor?.circuit} icon="circuit" emptyValue="-" />
-    <Data label="Suministro" value={debtor?.supplyId} icon="supply" emptyValue="-" />
-    <Data label="Área / localidad" value={debtor ? joinAdminValues(debtor.areaName ?? debtor.area, debtor.locality) : undefined} icon="area" emptyValue="-" />
-    <Data label="Medidor / marca" value={debtor ? joinAdminValues(debtor.meterId, debtor.meterBrand) : undefined} icon="meter" emptyValue="-" />
-    <Data label="Estado del cliente" value={debtor?.supplyStatus} icon="status" emptyValue="-" />
-    <Data label="Ruta / orden" value={debtor ? joinAdminValues(debtor.routeName ?? debtor.route, debtor.routeOrder) : undefined} icon="route" emptyValue="-" />
-    <Data label="Tarifa / estado" value={debtor ? joinAdminValues(debtor.tariff, debtor.supplyStatus) : undefined} icon="tariff" emptyValue="-" />
-    <Data label="Coordenadas (catastro)" value={debtor ? formatAdminCoordinates(debtor.cadastralLatitude, debtor.cadastralLongitude) : undefined} icon="coordinates" technical emptyValue="-" />
-    <Data label="Teléfono de contacto" value={debtor?.contactPhone} icon="phone" emptyValue="-" />
-  </div></section>;
-}
-
-function SelectedSupplyPanel({ debtor, activeOrder, busy, onCreateOrder, onViewOrder }: { debtor: DebtorRecord; activeOrder?: WorkOrder; busy: boolean; onCreateOrder: (event: FormEvent) => void; onViewOrder: (orderId: string) => void }) {
-    return <div className="selected-supply-content">
-      <div className="selected-supply-heading"><span className="panel-heading__icon panel-heading__icon--document" aria-hidden="true" /><div><span className="eyebrow">Crear y asignar orden de corte</span><h2 id="selected-supply-title">Crear y asignar orden de corte</h2><p>Verifica la información del suministro y genera la orden.</p></div></div>
-      <SupplyDataCard debtor={debtor} />
-
-      <form className={activeOrder ? "supply-order-action supply-order-action--active" : "supply-order-action"} onSubmit={activeOrder ? undefined : onCreateOrder}><div className="create-order-summary"><span className="eyebrow">{activeOrder ? "Orden de corte activa" : "Acción disponible"}</span><strong>{activeOrder ? "Este suministro ya tiene una orden activa" : "Crear una orden de corte"}</strong><span>{activeOrder ? `Creada ${formatRelativeDate(activeOrder.createdAt)} · ${activeOrder.assignedTechnicianId ? `Asignada a ${activeOrder.assignedTechnicianName ?? "Técnico asignado"}` : "Sin técnico asignado"}` : "Confirma el suministro y asigna un técnico antes de crearla."}</span></div><button className={activeOrder ? "primary-action primary-action--success" : "primary-action"} type={activeOrder ? "button" : "submit"} onClick={activeOrder ? () => onViewOrder(activeOrder.orderId) : undefined} disabled={busy}>{activeOrder ? "Ver orden de corte" : "Crear orden de corte"}<span>→</span></button></form>
-
-    </div>;
-}
-
-export function OrderCreationModal({ dialog, debtors, technicians, selectedTechnician, busy, onTechnicianChange, onCancel, onConfirm }: { dialog: OrderCreationDialog; debtors: DebtorRecord[]; technicians: readonly TechnicianRecord[]; selectedTechnician: string; busy: boolean; onTechnicianChange: (technicianId: string) => void; onCancel: () => void; onConfirm: () => void }) {
-  const selectedDebtors = dialog.debtorIds.map((debtorId) => debtors.find((debtor) => debtor.debtorId === debtorId)).filter((debtor): debtor is DebtorRecord => Boolean(debtor));
-  const missingDebtorIds = getMissingOrderCreationDebtorIds(dialog.debtorIds, debtors);
-  const isBatch = dialog.mode === "batch";
-  return <AppModal titleId="order-modal-title" eyebrow={isBatch ? "Creación masiva" : "Nueva orden"} title={isBatch ? "Crear y asignar órdenes" : "Crear y asignar orden de corte"} onClose={onCancel} closeDisabled={busy}><p className="admin-modal__intro">Revisa el suministro y selecciona el técnico responsable antes de confirmar.</p><div className="admin-modal__context"><div className="admin-modal__supply-list">{selectedDebtors.map((debtor) => <article className="admin-modal__supply" key={debtor.debtorId}><strong>{debtor.customerName}</strong><span>{debtor.supplyId} · Cuenta {debtor.accountId}</span><small>{debtor.address}</small></article>)}{missingDebtorIds.map((debtorId) => <article className="admin-modal__supply" key={debtorId}><strong>Suministro no disponible</strong><span>ID {debtorId}</span></article>)}</div>{missingDebtorIds.length ? <p role="alert">No se puede confirmar: actualice los resultados para incluir todos los suministros seleccionados.</p> : null}</div><label className="text-field"><span>Asignar a técnico</span><select value={selectedTechnician} onChange={(event) => onTechnicianChange(event.target.value)} disabled={busy || !technicians.length}><option value="" disabled>{technicians.length ? "Seleccione un técnico" : "No hay técnicos habilitados"}</option>{technicians.map((technician) => <option key={technician.userId} value={technician.userId}>{technicianOptionLabel(technician)}</option>)}</select></label><div className="admin-modal__actions"><button className="secondary-action" type="button" onClick={onCancel} disabled={busy}>Cancelar</button><button className="primary-action" type="button" onClick={onConfirm} disabled={busy || missingDebtorIds.length > 0 || selectedDebtors.length !== dialog.debtorIds.length || !selectedTechnician}>{busy ? "Creando…" : isBatch ? "Aceptar y crear órdenes" : "Aceptar y crear orden"}<span>→</span></button></div></AppModal>;
-}
-
-function OrderAssignmentModal({ order, technicians, selectedTechnician, busy, onTechnicianChange, onCancel, onConfirm }: { order: WorkOrder; technicians: readonly TechnicianRecord[]; selectedTechnician: string; busy: boolean; onTechnicianChange: (technicianId: string) => void; onCancel: () => void; onConfirm: () => void }) {
-  return <AppModal titleId="assignment-modal-title" eyebrow="Asignación" title="Asignar técnico" onClose={onCancel} closeDisabled={busy}><p className="admin-modal__intro">Selecciona técnico responsable para continuar con esta orden.</p><div className="admin-modal__context"><article className="admin-modal__supply"><strong>{order.context?.customerName ?? order.accountId ?? "Suministro"}</strong><span>Cuenta {order.context?.accountId ?? order.accountId ?? "Dato no disponible"}</span><small>{order.context?.address ?? "Dirección no disponible"}</small></article></div><label className="text-field"><span>Asignar a técnico</span><select value={selectedTechnician} onChange={(event) => onTechnicianChange(event.target.value)} disabled={busy || !technicians.length}><option value="" disabled>{technicians.length ? "Seleccione un técnico" : "No hay técnicos habilitados"}</option>{technicians.map((technician) => <option key={technician.userId} value={technician.userId}>{technicianOptionLabel(technician)}</option>)}</select></label><div className="admin-modal__actions"><button className="secondary-action" type="button" onClick={onCancel} disabled={busy}>Cancelar</button><button className="primary-action" type="button" onClick={onConfirm} disabled={busy || !selectedTechnician}>{busy ? "Asignando…" : "Asignar técnico"}<span>→</span></button></div></AppModal>;
-}
-
-function RecentOrdersPreview({ orders, totalOrders, selectedOrderId, page, totalPages, onSelect, onPageChange }: { orders: WorkOrder[]; totalOrders: number; selectedOrderId: string; page: number; totalPages: number; onSelect: (orderId: string) => void; onPageChange: (page: number) => void }) {
-  return <section className="orders-index admin-recent-orders" aria-labelledby="recent-orders-title"><div className="admin-recent-orders__heading"><div><span className="eyebrow">Actividad</span><h3 id="recent-orders-title">Órdenes recientes</h3></div><span className="admin-recent-orders__count">{totalOrders}</span></div><div className="order-index-list">{orders.map((order) => <OrderRow key={order.orderId} order={order} selected={selectedOrderId === order.orderId} onSelect={() => onSelect(order.orderId)} />)}</div>{!totalOrders ? <AppStateCard tone="empty" layout="inline" className="activity-empty" title="Todavía no hay órdenes creadas." description="Selecciona un suministro para crear una orden." /> : null}{totalPages > 1 ? <PaginationControls className="admin-pagination" label="Paginación de órdenes recientes" page={page} totalPages={totalPages} onPrevious={() => onPageChange(page - 1)} onNext={() => onPageChange(page + 1)} /> : null}</section>;
-}
-
-function OrderRow({ order, selected, onSelect }: { order: WorkOrder; selected: boolean; onSelect: () => void }) { return <button type="button" className={selected ? "order-index-item order-index-item--selected" : "order-index-item"} onClick={onSelect}><span><strong>Orden de corte · {order.context?.customerName ?? order.accountId ?? "Suministro"}</strong><small>{order.assignedTechnicianId ? `Asignada a ${order.assignedTechnicianName ?? "Técnico asignado"}` : "Sin técnico asignado"} · {formatDate(order.createdAt)}</small></span><span className={`large-status order-status-label large-status--${statusTone(order)}`}>{orderStatusLabel(order)}</span></button>; }
-
-export function AdminOrderDetail({ order, onAssign }: { order?: WorkOrder; onAssign?: () => void }) {
-  const [copiedReference, setCopiedReference] = useState(false);
-  if (!order) return null;
-  const context = order.context;
-  const reference = order.cuc ?? order.orderId;
-  const assignedTechnician = order.assignedTechnicianName ?? (order.assignedTechnicianId ? "Técnico asignado" : "Sin asignar");
-  const headerStatus = orderDomainStatusLabel(order.status);
-  const copyReference = async () => { try { await navigator.clipboard?.writeText(reference); setCopiedReference(true); window.setTimeout(() => setCopiedReference(false), 1400); } catch { setCopiedReference(false); } };
-  return <section className="panel admin-order-detail" aria-labelledby="order-detail-title">
-    <header className="order-sheet-header">
-      <div className="order-sheet-title"><span className="order-sheet-title__icon"><IconDocument /></span><div><h2 id="order-detail-title">Ficha integral de corte</h2><p>Detalle completo de la orden seleccionada.</p></div></div>
-      <div className="order-sheet-status"><span className={`order-sheet-status__badge order-status-label order-sheet-status__badge--${statusTone(order)}`}>{order.status === "ANULADO" ? <IconAlertTriangle /> : <IconCheck />}{headerStatus}</span><span>Generada el {formatOrderHeaderDate(order.createdAt)}</span></div>
-    </header>
-    <div className="order-sheet-reference">
-      <span className="order-sheet-reference__icon"><IconDocument /></span>
-      <div className="order-sheet-reference__content"><div className="order-sheet-reference__value"><strong title={reference}>{reference}</strong><button type="button" onClick={() => void copyReference()} aria-label="Copiar CUC">{copiedReference ? "Copiado" : "⧉"}</button></div><span>Cuenta {context?.accountId ?? order.accountId ?? "Dato no disponible"} · Versión {order.version ?? "Dato no disponible"}</span></div>
-      {!order.assignedTechnicianId && onAssign ? <button className="order-sheet-assign" type="button" onClick={onAssign}><AdminDataIcon kind="client" />Asignar técnico</button> : null}
-    </div>
-    {context ? <>
-      <section className="order-sheet-summary" aria-label="Resumen de la orden">
-        <Data label="Cliente" value={context.customerName} icon="client" />
-        <Data label="Dirección" value={context.address} icon="address" />
-        <Data label="Medidor" value={joinAdminValues(context.meterId, context.meterBrand)} icon="meter" />
-        <Data label="Circuito" value={context.circuit} icon="circuit" />
-        <Data label="Técnico asignado" value={assignedTechnician} icon="client" />
-        <Data label="Deuda total" value={`Bs ${formatMoney(context.debtCents)}`} icon="debt" emphasis />
-        {order.physicalStatus === "PHYSICAL_UNKNOWN" ? <div className="data-point data-point--with-icon order-sheet-status-field"><AdminDataIcon kind="tariff" /><div className="data-point__content"><span>Estado físico</span><strong className={`order-sheet-status-value order-sheet-status-value--${statusTone(order)}`}>{orderStatusLabel(order)}</strong></div></div> : null}
-        <Data label="Área / Localidad" value={joinAdminValues(context.areaName ?? context.area, context.locality)} icon="area" />
-      </section>
-      <DebtTable entries={context.kardex} total={context.debtCents} />
-    </> : <div className="context-missing" role="status">Contexto operativo no disponible en esta orden.</div>}
-    </section>;
-}
-
-function DebtTable({ entries, total }: { entries: DebtorRecord["kardex"]; total: number }) { return <section className="debt-section"><div className="detail-section-heading"><div className="debt-section-title"><AdminDataIcon kind="tariff" /><strong>Deuda asociada</strong></div><strong className="debt-section-total"><span>Total</span> Bs {formatMoney(total)}</strong></div><div className="debt-table"><div className="debt-row debt-row--header"><span>Periodo</span><span>Fecha facturación</span><span>Origen</span><span>Monto</span><span>Días mora</span></div>{entries.map((entry) => <div className="debt-row" key={entry.entryId}><span>{entry.period || "Dato no disponible"}</span><span>{entry.billingDate ? formatDate(entry.billingDate) : "Dato no disponible"}</span><span className="technical-cell">{entry.invoiceOrigin ?? "Dato no disponible"}</span><span>Bs {formatMoney(entry.amountCents)}</span><span>{entry.daysLate ?? "Dato no disponible"}</span></div>)}</div></section>; }
-
-function AdminDataIcon({ kind }: { kind: SupplyDataIconKind }) {
-  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  return <svg className="admin-data-icon" viewBox="0 0 24 24" aria-hidden="true" {...common}>
-    {kind === "client" || kind === "status" ? <><circle cx="12" cy="8" r="3" /><path d="M5 20c.8-3.2 3.1-5 7-5s6.2 1.8 7 5" /></> : null}
-    {kind === "address" || kind === "coordinates" ? <><path d="M19 10c0 4.8-7 10-7 10S5 14.8 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2.2" /></> : null}
-    {kind === "account" ? <><rect x="4" y="6" width="16" height="12" rx="2" /><path d="M4 10h16M8 14h4" /></> : null}
-    {kind === "circuit" ? <><circle cx="6" cy="12" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="m8 12 8-6M8 12l8 6" /></> : null}
-    {kind === "supply" ? <><path d="M9 4v6M15 4v6M7 10h10v3a5 5 0 0 1-10 0v-3ZM12 18v2" /></> : null}
-    {kind === "area" ? <><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z" /><path d="M9 3v15M15 6v15" /></> : null}
-    {kind === "meter" ? <><path d="M5 16a7 7 0 1 1 14 0" /><path d="m12 12 3-3M7 19h10" /></> : null}
-    {kind === "debt" ? <><circle cx="12" cy="12" r="8" /><text x="12" y="16" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11" fontWeight="700">$</text></> : null}
-    {kind === "route" ? <><circle cx="6" cy="18" r="2" /><path d="M8 18h7a4 4 0 0 0 0-8H7" /><path d="m9 7-3 3 3 3" /></> : null}
-    {kind === "tariff" ? <><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4M9 12h6M9 16h4" /></> : null}
-    {kind === "phone" ? <path d="M7 4h3l1.5 4-2 1.5a12 12 0 0 0 5 5l1.5-2 4 1.5v3c0 1-1 2-2 2C11.4 19.6 4.4 12.6 4 6c0-1 1-2 3-2Z" /> : null}
-  </svg>;
-}
-
-function Data({ label, value, technical = false, emphasis = false, icon, emptyValue = "Dato no disponible" }: { label: string; value?: string | number; technical?: boolean; emphasis?: boolean; icon?: SupplyDataIconKind; emptyValue?: string }) {
-  const className = ["data-point", technical ? "data-point--technical" : "", emphasis ? "data-point--emphasis" : "", icon ? "data-point--with-icon" : ""].filter(Boolean).join(" ");
-  return <div className={className}>{icon ? <AdminDataIcon kind={icon} /> : null}<div className="data-point__content"><span>{label}</span><strong>{value === undefined || value === "" ? emptyValue : value}</strong></div></div>;
-}
-
-function formatMoney(cents: number): string { return (cents / 100).toFixed(2); }
-function formatDate(value?: string): string { if (!value) return "Dato no disponible"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "Dato no disponible" : new Intl.DateTimeFormat("es-BO", { dateStyle: "short", timeStyle: "short" }).format(date); }
-function formatOrderHeaderDate(value?: string): string { if (!value) return "fecha no disponible"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "fecha no disponible" : new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "numeric", year: "2-digit", hour: "numeric", minute: "2-digit" }).format(date); }
-function formatRelativeDate(value?: string): string { if (!value) return "en fecha no disponible"; const date = new Date(value); if (Number.isNaN(date.getTime())) return "en fecha no disponible"; return new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(date).replace(",", " ·"); }
-function orderDomainStatusLabel(status: WorkOrder["status"]): string { return status === "GENERADO" ? "Generada" : status === "EJECUTADO" ? "Ejecutada" : status === "RECONEXIÓN" ? "Reconectada" : "Anulada"; }
-function orderStatusLabel(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "Físico incierto"; return orderDomainStatusLabel(order.status); }
-function statusTone(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "review"; return order.status === "GENERADO" ? "ready" : order.status === "EJECUTADO" ? "done" : order.status === "ANULADO" ? "muted" : "active"; }
-function technicianOptionLabel(technician: TechnicianRecord): string { return technician.displayName || technician.username; }
 function isActiveOrderConflict(error: unknown): boolean {
   return errorCode(error) === "DUPLICATE_ORDER" || errorCode(error) === "ACTIVE_ORDER_EXISTS";
 }
@@ -604,4 +423,3 @@ function readableError(error: unknown): string {
   return error instanceof Error ? error.message : "No pudimos completar la operación administrativa.";
 }
 function parseMinMonths(value: string): number | undefined { const parsed = Number(value); return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined; }
-function joinAdminValues(...values: Array<string | number | undefined>): string | undefined { const available = values.filter((value) => value !== undefined && value !== ""); return available.length ? available.join(" · ") : undefined; }
