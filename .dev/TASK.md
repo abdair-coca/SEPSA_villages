@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **6**
+Fase en curso: **7**
 
 ---
 
@@ -176,7 +176,7 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 
 - [x] Capturas de referencia antes de tocar CSS: login, técnico (inicio, lista, detalle, captura, mapa, cola), admin (búsqueda, creación, ficha, auditoría); móvil y escritorio. Referencia `base`/`base2` regenerada con animaciones desactivadas y espera de layout; la lista de órdenes sigue variando entre ejecuciones (ver Hallazgos). La auditoría no es una pantalla propia: aparece como contador «Trazas» en el resumen del administrador.
 - [x] Inventario de `styles/app.css` por bloque: a qué pantalla/componente pertenece cada sección (1.497 unidades; ver Hallazgos sobre por qué no se agrupan por componente)
-- [ ] Crear un archivo por pantalla/componente en `styles/` y mover los bloques sin modificarlos — **pendiente**: hoy un archivo por sección de la hoja original (commit `ec7635d`); el reparto por componente se intentó y se revirtió (ver Hallazgos)
+- [ ] Crear un archivo por pantalla/componente en `styles/` y mover los bloques sin modificarlos — **aplazado** por decisión del usuario (fase 6 finalizada sin este reparto): hoy un archivo por sección de la hoja original (commit `ec7635d`); el reparto por componente se intentó y se revirtió (ver Hallazgos)
 - [x] `styles/app.css` queda solo con `@import` en el orden de cascada original
 - [x] Comparar capturas (sin diferencias) y commit — el CSS compilado tras la división es byte a byte igual al anterior; limpieza y tokens verificados con capturas y reglas de ruido documentadas
 - [x] Eliminar selectores duplicados archivo por archivo, comparando capturas en cada commit — una pasada sobre el CSS completo (290 declaraciones y 71 reglas vacías), no archivo por archivo (ver Hallazgos)
@@ -186,14 +186,14 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 
 ## Fase 7 — Higiene del repositorio y migraciones
 
-- [ ] Revisar cómo se aplican y registran las migraciones: `scripts/apply-startup-schema-migrations.mjs`, `migrate-test-db.mjs`, `bootstrap-pilot.mjs`, `Dockerfile`, `docker-compose.yml`, CI, `render.yaml`
-- [ ] Si los nombres de archivo identifican migraciones ya aplicadas en el piloto: no renombrar; crear `backend/sql/README.md` con el orden real y el motivo de los números duplicados (`002`, `003`, `007`)
-- [ ] Si no: renumerar sin duplicados y actualizar todas las referencias
-- [ ] Separar seeds (`002_seed`, `004_e2e_seed`, `005_definitive_seed`, `006_replace-…`) en `backend/sql/seeds/` y actualizar referencias
-- [ ] Unificar o documentar la relación entre `backend/sql/` y `backend/migrations/*.mjs`
-- [ ] `docs/`: archivar o enlazar `constitution.md`, el `.docx` (`ROLE_Actúa como…`) y `guia-tecnico-campo-piloto.pdf`
-- [ ] `boceto-mvp/`: mover a `docs/archive/` o eliminar, previa confirmación del usuario
-- [ ] **Validación:** suite completa de backend (incluida integración y E2E) en verde; commit; estado actualizado en `PLAN.md`
+- [x] Revisar cómo se aplican y registran las migraciones: `scripts/apply-startup-schema-migrations.mjs`, `migrate-test-db.mjs`, `bootstrap-pilot.mjs`, `Dockerfile`, `docker-compose.yml`, CI, `render.yaml`
+- [x] Si los nombres de archivo identifican migraciones ya aplicadas en el piloto: no renombrar; crear `backend/sql/README.md` con el orden real y el motivo de los números duplicados (`002`, `003`, `007`)
+- [x] No aplica: los nombres sí identifican migraciones aplicadas; no se renumera.
+- [x] Separar seeds (`002_seed`, `004_e2e_seed`, `005_definitive_seed`, `006_replace-…`) en `backend/sql/seeds/` y actualizar referencias
+- [x] Unificar o documentar la relación entre `backend/sql/` y `backend/migrations/*.mjs` (documentada en `backend/sql/README.md`; no unificada)
+- [x] `docs/`: archivar o enlazar `constitution.md`, el `.docx` (`ROLE_Actúa como…`) y `guia-tecnico-campo-piloto.pdf`
+- [ ] `boceto-mvp/`: mover a `docs/archive/` o eliminar, previa confirmación del usuario. **Pendiente:** requiere la respuesta del usuario.
+- [x] **Validación:** suite completa de backend (incluida integración y E2E) en verde; commit; estado actualizado en `PLAN.md`
 
 ## Cierre del plan
 
@@ -238,3 +238,13 @@ Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de u
 - Fase 6: `shared-shell.css` pasa a `shell.css`, como indica el plan. `docs/ARCHITECTURE.md` y `docs/design.md` se actualizaron.
 - Fase 6: intento de reparto por componente (23 archivos; las 408 reglas que compiten, dentro del mismo componente o entre componentes, en `cascade-overrides.css` y el resto por componente). Se revirtió. `smoke:ui` falló en la notificación móvil de 360 px: el texto medía 58 px en vez de ≥180 px. Las capturas no lo detectaron porque esa configuración de DOM no se captura, y el análisis de conflictos se apoya en el DOM capturado. El reordenado por componente no es verificable con el método actual. Para hacerlo hay que consolidar los overrides de selectores compartidos y ampliar el inventario de estados (notificaciones, banners, errores, modales) antes de verificar. Copia del intento fuera del repo.
 - Fase 6: algunos estados muestran identificadores técnicos (p. ej. `…0073` frente a `…0077`) que cambian entre ejecuciones porque la captura parchea `randomUUID` con un contador. Los píxeles distintos de esos estados están en esos textos; estilos calculados y geometría coinciden en los estados verificados.
+- Fase 6 (cierre): el usuario dio la fase por finalizada sin el reparto por componente. Queda como tarea aparte, con las condiciones de las entradas anteriores de esta fase.
+- Fase 7 (decisión): los nombres de los SQL no cambian. El piloto está en uso y el arranque, el bootstrap y el runbook identifican cada migración por su archivo. El orden real y los números repetidos están en `backend/sql/README.md`.
+- Fase 7 (decisión): los seeds pasan a `backend/sql/seeds/` sin editar su contenido. Cambian solo las rutas de `bootstrap-pilot.mjs`, `docker-compose.yml` y `docs/DOMAIN.md`. En Compose el destino dentro del contenedor no cambia, así que tampoco el orden de carga. El bootstrap imprime ahora `Applied seeds/…`: es texto de consola, no de la UI.
+- Fase 7 (decisión): `constitution.md` era un stub de compatibilidad y pasa a `docs/archive/legacy/constitution-redirect.md` con los enlaces corregidos. El `.docx` cuyo nombre es un prompt pasa a `docs/archive/legacy/`. La guía PDF pasa a `docs/operations/` y se enlaza desde el runbook, porque sigue describiendo el uso en campo.
+- Fase 7: `seeds/006_replace-betanzos-…` (3,6 MB, 948 registros) no lo referencia ningún script ni documento, y su cabecera dice que no se conectó a ninguna base. Su estado en el piloto no se puede verificar desde el repo: `TODO: VALIDAR CON SEPSA`. Decidir si se documenta, se archiva o se elimina.
+- Fase 7: `003_payment_observations.sql` no lo ejecuta ningún script, a propósito (`backend/README.md`). Estado en el piloto: `TODO: VALIDAR CON SEPSA`.
+- Fase 7: `008_reconnection_schema.sql` se reejecuta en cada arranque: hace DROP y ADD de constraints en `orders` y `sync_operations`, con bloqueo exclusivo durante la revalidación. Es idempotente, pero conviene revisarlo antes de aumentar el tráfico del piloto (tarea aparte).
+- Fase 7: las cuatro listas de archivos (bootstrap, Compose, arranque y base de pruebas) difieren a propósito; ver `backend/sql/README.md`. Unificarlas cambiaría la herramienta de despliegue, así que queda fuera de esta fase.
+- Fase 7: `seeds/004_e2e_seed.sql` cita en un comentario la ruta anterior de `005`. No se edita porque es SQL aplicado. Los documentos de `docs/archive/` citan rutas antiguas; tampoco se editan.
+- Fase 7: cinco archivos de las especificaciones 007 y 008 (`docs/archive/legacy/specs/`) enlazan `../../design.md`, que no existe en el archivo (el original está en `docs/design.md`). Enlaces rotos previos, en material histórico; no se corrigen.
