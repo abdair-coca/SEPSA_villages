@@ -7,11 +7,11 @@ import { deleteFieldDatabase } from "../adapters/indexeddb/database";
 import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/mock/authorization";
 import { MockConnectivity } from "../adapters/mock/connectivity";
 import { MockSyncTransport } from "../adapters/mock/transport";
-import { createAppStore, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type ActivityEntry, type AppStore } from "../app/store";
-import { createDemoPackage } from "../app/runtime";
+import { createAppStore, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type ActivityEntry, type AppStore } from "../state/store";
+import { createDemoPackage } from "../bootstrap/runtime";
 import type { WorkOrder, WorkPackage } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
-import { AppModal, type AppModalProps } from "./Modal";
+import { AppModal, type AppModalProps } from "../components/common/Modal";
 import { ActionCompletionDialog, adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, openOrderMap, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay, syncThenRefreshAssigned } from "./FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];

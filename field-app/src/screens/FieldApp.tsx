@@ -1,24 +1,24 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { ActionKind, AppMessage, AppStore, AppState, OrderFilter } from "../app/store";
-import { selectVisibleOrders } from "../app/store";
-import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../app/map-cache";
+import type { ActionKind, AppMessage, AppStore, AppState, OrderFilter } from "../state/store";
+import { selectVisibleOrders } from "../state/store";
+import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../services/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
 import type { ConnectivityMode, WorkOrder } from "../domain/types";
-import { AppHeader, type AppHeaderRoleSwitch } from "./AppHeader";
-import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconUser } from "./Icons";
-import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "./Notification";
-import { SearchField } from "./SearchField";
-import { PaginationControls } from "./PaginationControls";
-import { AppStateCard } from "./UiState";
-import { OrderDetail } from "./order-detail";
-import { QueuePanel } from "./sync-queue";
-import { activityLabel, activityTimestamp, adjacentJourneyOrder, displayValue, fieldOrderStatusLabel, formatActivityTime, formatDebt, formatLastUpdate, hasCadastralCoordinates, isManualVisitAllowed, orderJourneyOrders, orderStatusTone, pendingCount, shortTechnicalId, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay } from "./field-app-utils";
+import { AppHeader, type AppHeaderRoleSwitch } from "../components/AppHeader";
+import { FieldMap } from "../components/FieldMap";
+import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconUser } from "../components/common/Icons";
+import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "../components/common/Notification";
+import { SearchField } from "../components/common/SearchField";
+import { PaginationControls } from "../components/common/PaginationControls";
+import { AppStateCard } from "../components/common/UiState";
+import { OrderDetail } from "../components/OrderDetail";
+import { QueuePanel } from "../components/SyncQueue";
+import { activityLabel, activityTimestamp, adjacentJourneyOrder, displayValue, fieldOrderStatusLabel, formatActivityTime, formatDebt, formatLastUpdate, hasCadastralCoordinates, isManualVisitAllowed, orderJourneyOrders, orderStatusTone, pendingCount, shortTechnicalId, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay } from "../utils/field-app-utils";
 
-export { ActionCompletionDialog, cutCompletionOutcome, OrderReviewMap, orderActivityReviewPages, paginateReviewFields } from "./order-detail";
-export { EvidencePicker, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, loadCaptureDraftSafely, restoreEvidenceFile } from "./capture-form";
-export { QueuePanel, queuePageItem, queueReviewMessage } from "./sync-queue";
-export { adjacentJourneyOrder, fieldOrderStatusLabel, orderJourneyOrders, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay } from "./field-app-utils";
+export { ActionCompletionDialog, cutCompletionOutcome, OrderReviewMap, orderActivityReviewPages, paginateReviewFields } from "../components/OrderDetail";
+export { EvidencePicker, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, loadCaptureDraftSafely, restoreEvidenceFile } from "../components/CaptureForm";
+export { QueuePanel, queuePageItem, queueReviewMessage } from "../components/SyncQueue";
+export { adjacentJourneyOrder, fieldOrderStatusLabel, orderJourneyOrders, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay } from "../utils/field-app-utils";
 
 export interface FieldAppProps {
   store: AppStore;

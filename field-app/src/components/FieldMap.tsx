@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type * as Leaflet from "leaflet";
 import type { ConnectivityMode, WorkOrder } from "../domain/types";
-import { MAP_CACHE_NAME, SATELLITE_TILE_URL_TEMPLATE } from "../app/map-cache";
+import { MAP_CACHE_NAME, SATELLITE_TILE_URL_TEMPLATE } from "../services/map-cache";
 import {
   IconCrosshair,
   IconExpand,
@@ -10,7 +10,7 @@ import {
   IconRoute,
   IconPin,
   IconCheck,
-} from "./Icons";
+} from "./common/Icons";
 
 interface FieldMapProps {
   orders: WorkOrder[];

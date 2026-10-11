@@ -3,8 +3,8 @@ import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/mock/authorization";
 import { MockConnectivity } from "../adapters/mock/connectivity";
 import { MockSyncTransport } from "../adapters/mock/transport";
-import type { ActionKind, AppStore, PrepareExternalValidation } from "./store";
-import { createAppStore, DEMO_DEVICE_ID, DEMO_PACKAGE_ID, DEMO_TECHNICIAN_ID } from "./store";
+import type { ActionKind, AppStore, PrepareExternalValidation } from "../state/store";
+import { createAppStore, DEMO_DEVICE_ID, DEMO_PACKAGE_ID, DEMO_TECHNICIAN_ID } from "../state/store";
 import type {
   AuthorizationAdapter,
   AuthorizationGrant,

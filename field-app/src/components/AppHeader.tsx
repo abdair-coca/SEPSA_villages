@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { BrandLockup } from "./BrandLockup";
+import { BrandLockup } from "./common/BrandLockup";
 
 export interface AppHeaderUser {
   displayName: string;

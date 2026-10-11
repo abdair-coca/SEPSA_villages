@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import type { DebtorRecord, Session, TechnicianRecord } from "../domain/types";
 import type { OperationsAuthorityPort } from "../ports/authority";
 import { OperationsApp } from "./OperationsApp";
-import { createDemoPackage } from "../app/runtime";
+import { createDemoPackage } from "../bootstrap/runtime";
 
 // Minimal hook scheduler: callbacks run from the actual component, effects retain
 // dependencies/cleanup, and renders explicitly flush state. No browser dependency.

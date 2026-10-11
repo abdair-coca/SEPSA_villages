@@ -1,4 +1,4 @@
-import type { Session } from "../domain/types";
+import type { Session } from "../../domain/types";
 
 export const SESSION_STORAGE_KEY = "sepsa.authenticated-session";
 export const REMEMBERED_USERNAME_STORAGE_KEY = "sepsa.remembered-username";

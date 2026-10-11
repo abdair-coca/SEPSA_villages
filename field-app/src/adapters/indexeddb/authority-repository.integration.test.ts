@@ -1,8 +1,8 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { assignOrder, createOrder, createOrdersBatch, findDebtors } from "../../application/admin";
-import { downloadAssigned } from "../../application/download";
-import { login } from "../../application/auth";
+import { assignOrder, createOrder, createOrdersBatch, findDebtors } from "../../use-cases/admin";
+import { downloadAssigned } from "../../use-cases/download";
+import { login } from "../../use-cases/auth";
 import type { AssignOrderCommand, CreateOrderCommand, OperationRecord, WorkOrder } from "../../domain/types";
 import { IndexedDbAuthorityRepository } from "./authority-repository";
 import { deleteAuthorityDatabase, openAuthorityDatabase } from "./authority-database";

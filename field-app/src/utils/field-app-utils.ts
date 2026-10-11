@@ -1,5 +1,5 @@
 import type { ConnectivityMode, SyncStatus, WorkOrder } from "../domain/types";
-import type { ActivityEntry, ActionKind } from "../app/store";
+import type { ActivityEntry, ActionKind } from "../state/store";
 import type { StoredRecord } from "../ports/repository";
 import type { SyncItem } from "../ports/sync";
 

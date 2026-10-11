@@ -1,10 +1,10 @@
 import { useState } from "react";
-import type { AppState, AppStore } from "../app/store";
+import type { AppState, AppStore } from "../state/store";
 import type { WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
-import { PaginationControls } from "./PaginationControls";
-import { AppStateCard } from "./UiState";
-import { activityTimestampsByOperation, formatDate, isUsable, queueActionLabel, queueReviewMessage, shortTechnicalId, sortSyncItemsForDisplay, syncItemTimestamp, syncStatusLabel } from "./field-app-utils";
+import { PaginationControls } from "./common/PaginationControls";
+import { AppStateCard } from "./common/UiState";
+import { activityTimestampsByOperation, formatDate, isUsable, queueActionLabel, queueReviewMessage, shortTechnicalId, sortSyncItemsForDisplay, syncItemTimestamp, syncStatusLabel } from "../utils/field-app-utils";
 
 export function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
   const [requestedPage, setRequestedPage] = useState(1);
@@ -57,4 +57,4 @@ function QueueItem({ item, displayedAt, order, onRetry, onViewOrder, onViewFullD
   );
 }
 
-export { queueReviewMessage } from "./field-app-utils";
+export { queueReviewMessage } from "../utils/field-app-utils";

@@ -72,7 +72,7 @@ Estas asociaciones describen el importador provisional, PostgreSQL piloto y las 
 
 La fuente observada de estos valores es la carga Excel y el backend piloto, ambos provisionales. Mantener las normalizaciones y presentaciones existentes; confirmar con SEPSA cualquier equivalencia o formato de salida SC08 antes de tratarlos como datos oficiales.
 
-Trazabilidad de esta revisión: esquema en `backend/sql/001_init.sql`, mapeo de importación en `backend/sql/005_definitive_seed.sql`, proyección del backend en `backend/src/application.ts`, adaptación al contexto de campo en `field-app/src/adapters/http/client.ts` y etiquetas en `field-app/src/ui/OperationsApp.tsx` / `FieldApp.tsx`.
+Trazabilidad de esta revisión: esquema en `backend/sql/001_init.sql`, mapeo de importación en `backend/sql/005_definitive_seed.sql`, proyección del backend en `backend/src/application.ts`, adaptación al contexto de campo en `field-app/src/adapters/http/client.ts` y etiquetas en `field-app/src/screens/OperationsApp.tsx` / `FieldApp.tsx`.
 
 - `NRO_CORREL`: lo asigna SEPSA; falta definir cómo lo recibirá la aplicación.
 - `NIV_CALIDAD`: lo define SEPSA por cantidad de usuarios de la localidad: nivel 1 si supera 10.000; nivel 2 si es menor de 10.000. El caso exacto de 10.000 usuarios queda `TODO: VALIDAR CON SEPSA`.

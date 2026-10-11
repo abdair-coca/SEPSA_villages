@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { LoginScreen } from "./LoginScreen";
 import type { Session } from "../domain/types";
 import type { IdentityPort } from "../ports/identity";
-import { REMEMBERED_USERNAME_STORAGE_KEY } from "../application/session-persistence";
+import { REMEMBERED_USERNAME_STORAGE_KEY } from "../adapters/browser/session-persistence";
 
 // Exercise component callbacks without a DOM dependency. A render explicitly flushes state;
 // submitting twice before that render reproduces the event race a disabled button cannot stop.

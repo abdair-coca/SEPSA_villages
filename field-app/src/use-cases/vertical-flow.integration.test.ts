@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "../app/runtime";
+import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "../bootstrap/runtime";
 import { IndexedDbAuthorityRepository } from "../adapters/indexeddb/authority-repository";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { deleteAuthorityDatabase } from "../adapters/indexeddb/authority-database";

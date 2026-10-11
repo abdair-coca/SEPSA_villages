@@ -1,5 +1,5 @@
-import { executeReconnection as runReconnection } from "../application/reconnection";
-import { SyncEngine } from "../application/sync";
+import { executeReconnection as runReconnection } from "../use-cases/reconnection";
+import { SyncEngine } from "../use-cases/sync";
 import type { ActionKind, AppState, AppStoreDependencies } from "./store";
 import { formatSyncMessage } from "./store-results";
 

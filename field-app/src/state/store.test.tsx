@@ -8,7 +8,7 @@ import {
   DEMO_DEVICE_ID,
   DEMO_TECHNICIAN_ID,
 } from "./store";
-import { createDemoPackage, prepareDemoExternalValidation } from "./runtime";
+import { createDemoPackage, prepareDemoExternalValidation } from "../bootstrap/runtime";
 import { formatSyncMessage } from "./store-results";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { deleteFieldDatabase } from "../adapters/indexeddb/database";
@@ -16,7 +16,7 @@ import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/moc
 import { MockConnectivity } from "../adapters/mock/connectivity";
 import { MockSyncTransport } from "../adapters/mock/transport";
 import type { AppStore } from "./store";
-import { FieldApp } from "../ui/FieldApp";
+import { FieldApp } from "../screens/FieldApp";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];

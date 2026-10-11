@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AdminOrderDetail, AdminSelectionSummary, ADMIN_SUPPLIES_PAGE_SIZE, filterOptions, findActiveOrderForSupply, formatAdminCoordinates, getAdminFilterOptions, getAdminOrderPage, getMissingOrderCreationDebtorIds, NO_DATA_FILTER_VALUE, OrderCreationModal } from "./OperationsApp";
-import { createDemoPackage } from "../app/runtime";
+import { createDemoPackage } from "../bootstrap/runtime";
 import type { DebtorRecord } from "../domain/types";
 
 describe("admin order pagination", () => {

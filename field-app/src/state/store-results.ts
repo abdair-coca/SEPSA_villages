@@ -1,9 +1,9 @@
 import { DomainError } from "../domain/errors";
 import type { ConnectivityMode, WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
-import type { CutProcessResult } from "../application/process";
-import type { OfflineVisitResult } from "../application/visit";
-import type { ReconnectionResult } from "../application/reconnection";
+import type { CutProcessResult } from "../use-cases/process";
+import type { OfflineVisitResult } from "../use-cases/visit";
+import type { ReconnectionResult } from "../use-cases/reconnection";
 import type { ActionKind, ActionResult, ActionResultOutcome, AppMessage, AppState } from "./store";
 
 export function formatSyncMessage(synced: number): string {

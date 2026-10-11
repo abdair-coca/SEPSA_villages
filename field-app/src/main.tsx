@@ -1,8 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import "./ui/styles.css";
-import { registerServiceWorker } from "./app/pwa";
+import "./styles/app.css";
+import { registerServiceWorker } from "./adapters/browser/service-worker";
 
 const rootElement = document.getElementById("root");
 

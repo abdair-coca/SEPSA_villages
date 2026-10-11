@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { ActionInput, ActionKind, AppStore } from "../app/store";
+import type { ActionInput, ActionKind, AppStore } from "../state/store";
 import type { CutType, FieldCapture, WorkOrder } from "../domain/types";
 import type { CaptureDraftContent } from "../ports/repository";
-import { createCaptureGpsRequest } from "./capture-gps-request";
-import { actionLabel } from "./field-app-utils";
+import { createCaptureGpsRequest } from "../services/capture-gps-request";
+import { actionLabel } from "../utils/field-app-utils";
 
 export type CaptureWizardStep = "reading" | "cutSettings" | "gps" | "gpsException" | "evidence" | "evidenceException" | "review";
 export type CaptureDraftLoadResult = { status: "ready"; content: CaptureDraftContent } | { status: "error" };

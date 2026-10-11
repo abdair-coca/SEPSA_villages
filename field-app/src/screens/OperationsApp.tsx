@@ -8,13 +8,13 @@ import {
   type WorkOrder,
 } from "../domain/types";
 import type { OperationsAuthorityPort } from "../ports/authority";
-import { AppHeader, type AppHeaderRoleSwitch } from "./AppHeader";
-import { IconAlertTriangle, IconCheck, IconDocument } from "./Icons";
-import { AppModal } from "./Modal";
-import { AppStateCard } from "./UiState";
-import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "./Notification";
-import { SearchField } from "./SearchField";
-import { PaginationControls } from "./PaginationControls";
+import { AppHeader, type AppHeaderRoleSwitch } from "../components/AppHeader";
+import { IconAlertTriangle, IconCheck, IconDocument } from "../components/common/Icons";
+import { AppModal } from "../components/common/Modal";
+import { AppStateCard } from "../components/common/UiState";
+import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "../components/common/Notification";
+import { SearchField } from "../components/common/SearchField";
+import { PaginationControls } from "../components/common/PaginationControls";
 
 interface OperationsAppProps {
   authority: OperationsAuthorityPort;

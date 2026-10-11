@@ -1,6 +1,6 @@
-import { executeCut as runCut, type CutProcessResult } from "../application/process";
-import { executeOfflineVisit, type OfflineVisitResult } from "../application/visit";
-import { executeReconnection as runReconnection, type ReconnectionResult } from "../application/reconnection";
+import { executeCut as runCut, type CutProcessResult } from "../use-cases/process";
+import { executeOfflineVisit, type OfflineVisitResult } from "../use-cases/visit";
+import { executeReconnection as runReconnection, type ReconnectionResult } from "../use-cases/reconnection";
 import { generateOperationId, type FieldCapture, type WorkOrder } from "../domain/types";
 import type { CaptureDraftKey, StoredRecord } from "../ports/repository";
 import type { SyncItem } from "../ports/sync";

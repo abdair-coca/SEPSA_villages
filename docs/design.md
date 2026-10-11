@@ -1,6 +1,6 @@
 # Guía de diseño de interfaz
 
-Esta guía define el lenguaje visual vigente de la aplicación y las reglas obligatorias para nuevas pantallas y features. La implementación de referencia está en `field-app/src/ui/styles/tokens.css`, `field-app/src/ui/styles.css` y `field-app/src/ui/styles/`; los cambios visuales deben conservar coherencia con el shell compartido de administración y campo.
+Esta guía define el lenguaje visual vigente de la aplicación y las reglas obligatorias para nuevas pantallas y features. La implementación de referencia está en `field-app/src/styles/tokens.css`, `field-app/src/styles/app.css` y `field-app/src/styles/`; los cambios visuales deben conservar coherencia con el shell compartido de administración y campo.
 
 ## Dirección visual
 
@@ -11,7 +11,7 @@ Esta guía define el lenguaje visual vigente de la aplicación y las reglas obli
 
 ## Paleta vigente
 
-Los valores salen de `field-app/src/ui/styles/tokens.css`. Consumir las variables CSS, no copiar los valores hexadecimales en componentes.
+Los valores salen de `field-app/src/styles/tokens.css`. Consumir las variables CSS, no copiar los valores hexadecimales en componentes.
 
 ### Base y tema de campo
 
@@ -84,9 +84,9 @@ Antes de considerar lista una feature visual, debe cumplir todos estos puntos:
 
 ## Fuentes y mantenimiento
 
-- Tokens y tema: [`../field-app/src/ui/styles/tokens.css`](../field-app/src/ui/styles/tokens.css).
-- Estilos compartidos y responsivos: [`../field-app/src/ui/styles.css`](../field-app/src/ui/styles.css) y [`../field-app/src/ui/styles/`](../field-app/src/ui/styles/).
-- Shell y componentes: `field-app/src/ui/AppHeader.tsx`, `UiState.tsx`, `Modal.tsx`, `SearchField.tsx` y `PaginationControls.tsx`.
+- Tokens y tema: [`../field-app/src/styles/tokens.css`](../field-app/src/styles/tokens.css).
+- Estilos compartidos y responsivos: [`../field-app/src/styles/app.css`](../field-app/src/styles/app.css) y [`../field-app/src/styles/`](../field-app/src/styles/).
+- Shell y componentes: `field-app/src/components/AppHeader.tsx` y, en `field-app/src/components/common/`, `UiState.tsx`, `Modal.tsx`, `SearchField.tsx` y `PaginationControls.tsx`.
 - Reglas de operación, offline y autorización: [`RULES.md`](RULES.md), [`features/cuts.md`](features/cuts.md) y [`features/synchronization.md`](features/synchronization.md).
 
 Actualizar esta guía cuando cambie la paleta, escala, navegación o patrón responsivo vigente. Si la guía y el código difieren, confirmar cuál es la intención antes de extender la divergencia; no asumir que los estilos históricos son una decisión de diseño.

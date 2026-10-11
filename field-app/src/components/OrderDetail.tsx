@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { ActionInput, ActionResult, ActionKind, ActivityEntry, AppState, AppStore } from "../app/store";
+import type { ActionInput, ActionResult, ActionKind, ActivityEntry, AppState, AppStore } from "../state/store";
 import type { ConnectivityMode, WorkOrder } from "../domain/types";
 import { FieldMap } from "./FieldMap";
-import { IconAlertTriangle, IconCheckCircle, IconDocument, IconExpand, IconMap, IconPin, IconRoute, IconScissors, IconUser } from "./Icons";
-import { AppModal } from "./Modal";
-import { CaptureForm } from "./capture-form";
+import { IconAlertTriangle, IconCheckCircle, IconDocument, IconExpand, IconMap, IconPin, IconRoute, IconScissors, IconUser } from "./common/Icons";
+import { AppModal } from "./common/Modal";
+import { CaptureForm } from "./CaptureForm";
 import {
   activityDetail,
   activityException,
@@ -23,7 +23,7 @@ import {
   shortTechnicalId,
   splitReviewText,
   syncStatusLabel,
-} from "./field-app-utils";
+} from "../utils/field-app-utils";
 
 export type OrderReviewView = "review" | "details" | "map" | "activity";
 

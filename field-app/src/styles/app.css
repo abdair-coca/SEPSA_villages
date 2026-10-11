@@ -2,9 +2,9 @@
 @import "@fontsource/manrope/latin-500.css";
 @import "@fontsource/manrope/latin-600.css";
 @import "@fontsource/manrope/latin-700.css";
-@import "./styles/tokens.css";
-@import "./styles/shared-shell.css";
-@import "./styles/controls.css";
+@import "./tokens.css";
+@import "./shared-shell.css";
+@import "./controls.css";
 
 * { box-sizing: border-box; }
 body { min-width: 0; margin: 0; background: var(--warm-bg); }

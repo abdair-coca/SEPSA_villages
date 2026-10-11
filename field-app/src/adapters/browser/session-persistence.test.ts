@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Session } from "../domain/types";
+import type { Session } from "../../domain/types";
 import { clearStoredSession, persistRememberedUsername, persistSession, readRememberedUsername, readStoredSession } from "./session-persistence";
 
 function createStorage(): Storage {

@@ -1,8 +1,8 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { DemoCredentials, Session } from "../domain/types";
 import type { IdentityPort } from "../ports/identity";
-import { persistRememberedUsername, readRememberedUsername } from "../application/session-persistence";
-import { BrandLockup } from "./BrandLockup";
+import { persistRememberedUsername, readRememberedUsername } from "../adapters/browser/session-persistence";
+import { BrandLockup } from "../components/common/BrandLockup";
 
 export function LoginScreen({ authority, onAuthenticated }: { authority: IdentityPort; onAuthenticated: (session: Session) => void }) {
   const [username, setUsername] = useState(() => readRememberedUsername());
