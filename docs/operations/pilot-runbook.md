@@ -47,3 +47,7 @@ RPO, RTO, frecuencia de restauración, cifrado administrado y retención necesit
 - Revisar operaciones `conflict` y `PHYSICAL_UNKNOWN` desde consultas y auditoría; conservar operación, actor, dispositivo, versión y motivo.
 - Confirmar que referencias de evidencia correspondan a la orden y operación; comparar hash almacenado. No borrar evidencia para resolver discrepancias.
 - Resolver resultados inciertos solo mediante el procedimiento humano vigente, dejando razón y auditoría. Nunca reintentar una acción física ni inferir autorización.
+
+## Material para técnicos
+
+- [Guía de campo del piloto (PDF, una página)](guia-tecnico-campo-piloto.pdf): instrucciones para técnicos con y sin conexión. Las reglas de corte siguen en [RULES.md](../RULES.md).
