@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import type { DebtorRecord, Session } from "../domain";
+import type { DebtorRecord, Session, TechnicianRecord } from "../domain";
 import type { OperationsAuthorityPort } from "../ports";
 import { OperationsApp } from "./OperationsApp";
 import { createDemoPackage } from "../app/index";
@@ -45,6 +45,7 @@ function deferred<T>() {
 }
 async function settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); }
 const session: Session = { sessionId: "admin-session", userId: "admin", username: "admin", role: "ADMIN", permissions: [], authenticity: "SIMULATED", issuedAt: "2026-09-29", expiresAt: "2026-10-06" };
+const technician: TechnicianRecord = { userId: "tech-1", username: "tech.one", displayName: "Tech One", role: "TECHNICIAN", enabled: true, source: "PILOT_PROVISIONAL" };
 const debtor: DebtorRecord = { debtorId: "supply-1", accountId: "account-1", supplyId: "meter-1", customerName: "Current result", address: "Address", references: "", meterId: "meter-1", area: "A", locality: "Town", route: "1", debtCents: 100, monthsPending: 2, updatedAt: "2026-09-29", source: "SIMULATED", kardex: [] };
 
 function setup() {
@@ -52,7 +53,7 @@ function setup() {
   const a = deferred<DebtorRecord[]>(), b = deferred<DebtorRecord[]>();
   const requests = [a, b];
   const findDebtors = vi.fn((query) => "minMonthsPending" in query ? requests.shift()!.promise : Promise.resolve([]));
-  const authority = { findDebtors, listOrders: vi.fn().mockResolvedValue([]), listAudit: vi.fn().mockResolvedValue([]), listTechnicians: vi.fn().mockResolvedValue([{ userId: "tech-1", username: "tech.one", role: "TECHNICIAN", enabled: true, source: "PILOT_PROVISIONAL" }]) } as unknown as OperationsAuthorityPort;
+  const authority = { findDebtors, listOrders: vi.fn().mockResolvedValue([]), listAudit: vi.fn().mockResolvedValue([]), listTechnicians: vi.fn().mockResolvedValue([technician]) } as unknown as OperationsAuthorityPort;
   let activeSession = session;
   const render = () => {
     hooks.cursor = 0;
@@ -69,6 +70,14 @@ function setup() {
 }
 const hasMessage = (nodes: ReturnType<typeof elements>, text: string) => nodes.some((node) => node.props.message === text || node.props.text === text || node.props.children === text);
 const isSearching = (nodes: ReturnType<typeof elements>) => nodes.some((node) => Array.isArray(node.props.children) && node.props.children.includes("Consultando…"));
+const makeOrder = (orderId: string, debtorId: string) => ({ ...createDemoPackage("2026-09-29").orders[0], orderId, debtorId, accountId: `account-${debtorId}`, version: 1 });
+function openSingleCreation(render: () => ReactElement<Record<string, unknown>>[]) {
+  (render().find((node) => node.props.debtor === debtor && "onSelect" in node.props)!.props.onSelect as Function)();
+  (render().find((node) => "onCreateOrder" in node.props)!.props.onCreateOrder as Function)({ preventDefault() {} });
+}
+function confirmCreation(render: () => ReactElement<Record<string, unknown>>[]) {
+  (render().find((node) => "onConfirm" in node.props)!.props.onConfirm as Function)();
+}
 
 afterEach(() => { hooks.slots = []; hooks.pending = []; hooks.writes = 0; vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -231,5 +240,190 @@ describe("administrative request ownership", () => {
     else a.reject(new Error("Unmounted failure"));
     await settle();
     expect(hooks.writes).toBe(writes);
+  });
+
+  it("creates one order, assigns it, refreshes in order, and presents success", async () => {
+    const { a, authority, render } = setup();
+    const order = makeOrder("order-created", debtor.debtorId);
+    a.resolve([debtor]);
+    await settle();
+
+    const events: string[] = [];
+    vi.clearAllMocks();
+    vi.mocked(authority.findDebtors).mockImplementation(async () => { events.push("findDebtors"); return [debtor]; });
+    vi.mocked(authority.listOrders).mockImplementation(async () => { events.push("listOrders"); return [order]; });
+    authority.createOrder = vi.fn().mockImplementation(async () => { events.push("createOrder"); return order; });
+    authority.assignOrder = vi.fn().mockImplementation(async () => { events.push("assignOrder"); return order; });
+
+    openSingleCreation(render);
+    confirmCreation(render);
+    await settle();
+
+    expect(authority.createOrder).toHaveBeenCalledWith({ operationId: expect.stringMatching(/^create-order-/), debtorId: debtor.debtorId, purpose: "CUT", session });
+    expect(authority.assignOrder).toHaveBeenCalledWith({ operationId: expect.stringMatching(/^assign-order-/), orderId: order.orderId, technicianId: "tech-1", expectedOrderVersion: 1, session });
+    expect(events.slice(0, 2)).toEqual(["createOrder", "assignOrder"]);
+    expect(events.indexOf("assignOrder")).toBeLessThan(events.indexOf("findDebtors"));
+    expect(hasMessage(render(), "Orden creada y asignada al técnico seleccionado.")).toBe(true);
+    expect(render().some((node) => node.props.order === order)).toBe(true);
+  });
+
+  it("creates and assigns the batch result while reporting skipped supplies", async () => {
+    const secondDebtor = { ...debtor, debtorId: "supply-2", accountId: "account-2" };
+    const skippedDebtor = { ...debtor, debtorId: "supply-3", accountId: "account-3" };
+    const { a, b, authority, render } = setup();
+    a.resolve([debtor, secondDebtor, skippedDebtor]);
+    b.resolve([debtor, secondDebtor, skippedDebtor]);
+    await settle();
+    const firstOrder = makeOrder("batch-order-1", debtor.debtorId);
+    const secondOrder = makeOrder("batch-order-2", secondDebtor.debtorId);
+    vi.clearAllMocks();
+    vi.mocked(authority.findDebtors).mockResolvedValue([debtor, secondDebtor, skippedDebtor]);
+    vi.mocked(authority.listOrders).mockResolvedValue([firstOrder, secondOrder]);
+    authority.createOrdersBatch = vi.fn().mockResolvedValue({ batchId: "batch-1", requestedDebtorIds: [debtor.debtorId, secondDebtor.debtorId, skippedDebtor.debtorId], created: [firstOrder, secondOrder], skipped: [{ debtorId: skippedDebtor.debtorId, reason: "ACTIVE_ORDER_EXISTS", message: "Already active" }] });
+    authority.assignOrder = vi.fn().mockResolvedValue(firstOrder);
+
+    for (const row of render().filter((node) => "debtor" in node.props && "onToggle" in node.props)) (row.props.onToggle as Function)();
+    (render().find((node) => typeof node.props.className === "string" && node.props.className.includes("filter-batch-action"))!.props.onClick as Function)();
+    confirmCreation(render);
+    await settle();
+
+    expect(authority.createOrdersBatch).toHaveBeenCalledWith({ batchId: expect.stringMatching(/^create-order-batch-/), debtorIds: [debtor.debtorId, secondDebtor.debtorId, skippedDebtor.debtorId], purpose: "CUT", session });
+    expect(authority.assignOrder).toHaveBeenCalledTimes(2);
+    expect(hasMessage(render(), "Lote creado y asignado: 2 órdenes, 1 omitidas por validación o duplicado.")).toBe(true);
+  });
+
+  it.each([0, 1])("presents an empty batch result with %i skipped supplies and clears selection", async (skippedCount) => {
+    const secondDebtor = { ...debtor, debtorId: "supply-2", accountId: "account-2" };
+    const { a, b, authority, render } = setup();
+    a.resolve([debtor, secondDebtor]);
+    b.resolve([debtor, secondDebtor]);
+    await settle();
+    vi.clearAllMocks();
+    vi.mocked(authority.findDebtors).mockResolvedValue([debtor, secondDebtor]);
+    authority.createOrdersBatch = vi.fn().mockResolvedValue({
+      batchId: "empty-batch",
+      requestedDebtorIds: [debtor.debtorId, secondDebtor.debtorId],
+      created: [],
+      skipped: skippedCount ? [{ debtorId: secondDebtor.debtorId, reason: "ACTIVE_ORDER_EXISTS", message: "Already active" }] : [],
+    });
+    authority.assignOrder = vi.fn();
+
+    for (const row of render().filter((node) => "debtor" in node.props && "onToggle" in node.props)) (row.props.onToggle as Function)();
+    (render().find((node) => typeof node.props.className === "string" && node.props.className.includes("filter-batch-action"))!.props.onClick as Function)();
+    confirmCreation(render);
+    await settle();
+
+    expect(authority.createOrdersBatch).toHaveBeenCalledOnce();
+    expect(authority.assignOrder).not.toHaveBeenCalled();
+    expect(render().find((node) => "visibleSelectedCount" in node.props)!.props.selectedCount).toBe(0);
+    expect(hasMessage(render(), `Lote creado y asignado: 0 órdenes${skippedCount ? ", 1 omitidas por validación o duplicado" : ""}.`)).toBe(true);
+  });
+
+  it("assigns batch orders sequentially and stops after the first assignment failure", async () => {
+    const secondDebtor = { ...debtor, debtorId: "supply-2", accountId: "account-2" };
+    const thirdDebtor = { ...debtor, debtorId: "supply-3", accountId: "account-3" };
+    const { a, b, authority, render } = setup();
+    a.resolve([debtor, secondDebtor, thirdDebtor]);
+    b.resolve([debtor, secondDebtor, thirdDebtor]);
+    await settle();
+    const orders = [makeOrder("batch-order-1", debtor.debtorId), makeOrder("batch-order-2", secondDebtor.debtorId), makeOrder("batch-order-3", thirdDebtor.debtorId)];
+    vi.clearAllMocks();
+    vi.mocked(authority.findDebtors).mockResolvedValue([debtor, secondDebtor, thirdDebtor]);
+    vi.mocked(authority.listOrders).mockResolvedValue(orders);
+    authority.createOrdersBatch = vi.fn().mockResolvedValue({ batchId: "batch-2", requestedDebtorIds: [debtor.debtorId, secondDebtor.debtorId, thirdDebtor.debtorId], created: orders, skipped: [] });
+    const firstAssignment = deferred<ReturnType<typeof makeOrder>>();
+    authority.assignOrder = vi.fn().mockReturnValueOnce(firstAssignment.promise).mockRejectedValueOnce(new Error("Assignment failed")).mockResolvedValue(orders[2]);
+
+    for (const row of render().filter((node) => "debtor" in node.props && "onToggle" in node.props)) (row.props.onToggle as Function)();
+    (render().find((node) => typeof node.props.className === "string" && node.props.className.includes("filter-batch-action"))!.props.onClick as Function)();
+    confirmCreation(render);
+    await settle();
+
+    expect(authority.assignOrder).toHaveBeenCalledOnce();
+    expect(authority.assignOrder).toHaveBeenNthCalledWith(1, expect.objectContaining({ orderId: orders[0].orderId, session }));
+    firstAssignment.resolve(orders[0]);
+    await settle();
+    expect(authority.assignOrder).toHaveBeenCalledTimes(2);
+    expect(authority.assignOrder).toHaveBeenNthCalledWith(2, expect.objectContaining({ orderId: orders[1].orderId, session }));
+    expect(authority.assignOrder).not.toHaveBeenCalledWith(expect.objectContaining({ orderId: orders[2].orderId }));
+    expect(hasMessage(render(), "Se crearon 3 órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.")).toBe(true);
+  });
+
+  it("presents an ordinary creation rejection without assigning or refreshing", async () => {
+    const { a, authority, render } = setup();
+    a.resolve([debtor]);
+    await settle();
+    vi.clearAllMocks();
+    authority.createOrder = vi.fn().mockRejectedValue(new Error("Creation failed"));
+    authority.assignOrder = vi.fn();
+
+    openSingleCreation(render);
+    confirmCreation(render);
+    await settle();
+
+    expect(authority.createOrder).toHaveBeenCalledOnce();
+    expect(authority.assignOrder).not.toHaveBeenCalled();
+    expect(authority.listOrders).not.toHaveBeenCalled();
+    expect(hasMessage(render(), "Creation failed")).toBe(true);
+  });
+
+  it("keeps the partial-assignment message and retries refresh after a successful assignment refresh failure", async () => {
+    const { a, authority, render } = setup();
+    const order = makeOrder("order-refresh-failure", debtor.debtorId);
+    a.resolve([debtor]);
+    await settle();
+    vi.clearAllMocks();
+    vi.mocked(authority.findDebtors).mockResolvedValue([debtor]);
+    vi.mocked(authority.listOrders).mockRejectedValueOnce(new Error("Refresh failed")).mockResolvedValue([order]);
+    authority.createOrder = vi.fn().mockResolvedValue(order);
+    authority.assignOrder = vi.fn().mockResolvedValue(order);
+
+    openSingleCreation(render);
+    confirmCreation(render);
+    await settle();
+
+    expect(authority.createOrder).toHaveBeenCalledOnce();
+    expect(authority.assignOrder).toHaveBeenCalledOnce();
+    expect(authority.listOrders).toHaveBeenCalledTimes(2);
+    expect(authority.findDebtors).toHaveBeenCalledTimes(4);
+    expect(authority.listAudit).toHaveBeenCalledTimes(2);
+    expect(authority.listTechnicians).toHaveBeenCalledTimes(2);
+    expect(hasMessage(render(), "Se crearon 1 órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.")).toBe(true);
+  });
+
+  it.each(["session-change", "unmount"])("continues pending writes but guards UI state after %s", async (ownershipChange) => {
+    const { a, authority, render, changeSession, unmount } = setup();
+    const order = makeOrder("order-pending", debtor.debtorId);
+    const created = deferred<typeof order>();
+    const assigned = deferred<typeof order>();
+    a.resolve([debtor]);
+    await settle();
+    vi.clearAllMocks();
+    vi.mocked(authority.findDebtors).mockResolvedValue([debtor]);
+    vi.mocked(authority.listOrders).mockResolvedValue([order]);
+    authority.createOrder = vi.fn().mockReturnValue(created.promise);
+    authority.assignOrder = vi.fn().mockReturnValue(assigned.promise);
+
+    openSingleCreation(render);
+    confirmCreation(render);
+    if (ownershipChange === "session-change") {
+      changeSession();
+      await settle();
+    } else {
+      unmount();
+    }
+    const writes = hooks.writes;
+
+    created.resolve(order);
+    await settle();
+    expect(authority.assignOrder).toHaveBeenCalledWith(expect.objectContaining({ orderId: order.orderId, session }));
+    assigned.resolve(order);
+    await settle();
+
+    expect(hooks.writes).toBe(writes);
+    if (ownershipChange === "session-change") {
+      expect(hasMessage(render(), "Orden creada y asignada al técnico seleccionado.")).toBe(false);
+      expect(hasMessage(render(), "Se crearon 1 órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.")).toBe(false);
+    }
   });
 });

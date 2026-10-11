@@ -1,18 +1,14 @@
-import {
-  executeCut as runCut,
-  executeOfflineVisit,
-  executeReconnection as runReconnection,
-  SyncEngine,
-  type CutProcessResult,
-  type OfflineVisitResult,
-  type ReconnectionResult,
-} from "../application";
-import { DomainError, generateOperationId, type EvidenceReference, type ConnectivityMode, type FieldCapture, type WorkOrder, type WorkPackage } from "../domain";
+import { DomainError, type EvidenceReference, type ConnectivityMode, type FieldCapture, type WorkOrder, type WorkPackage } from "../domain";
 import type { AuthorizationAdapter, EnablementAdapter } from "../ports/authorization";
 import type { CaptureDraftContent, CaptureDraftKey, ConnectivityPort, LocalRepository, StoredRecord } from "../ports";
 import type { SyncItem } from "../ports/sync";
 import type { EvidenceUploadPort } from "../ports/sync";
-import { metadataOnlyEvidence, prepareEvidence, type EvidenceDraft } from "./evidence";
+import { metadataOnlyEvidence, type EvidenceDraft } from "./evidence";
+import { createActionCoordinator } from "./store-actions";
+import { createSyncCoordinator } from "./store-sync";
+import { formatSyncMessage, readableError } from "./store-results";
+
+export { formatSyncMessage } from "./store-results";
 
 export type { EvidenceDraft } from "./evidence";
 
@@ -134,12 +130,35 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     mode: dependencies.connectivity.getMode(),
   };
   let initPromise: Promise<void> | undefined;
-  let syncInFlight: Promise<void> | undefined;
-
   const update = (change: Partial<AppState>): void => {
     snapshot = { ...snapshot, ...change };
     for (const listener of listeners) listener();
   };
+  const syncCoordinator = createSyncCoordinator({
+    dependencies,
+    technicianId,
+    now,
+    getSnapshot: () => snapshot,
+    ensureReady,
+    refresh,
+    update,
+    runWithBusy,
+  });
+  const actionCoordinator = createActionCoordinator({
+    dependencies,
+    technicianId,
+    technicianName,
+    deviceId,
+    now,
+    getSnapshot: () => snapshot,
+    ensureReady,
+    getAssignedOrder,
+    runWithBusy,
+    finishDraftIfCommitted,
+    refreshAfterCommit,
+    syncAfterLocalAction: syncCoordinator.syncAfterLocalAction,
+    update,
+  });
 
   async function refresh(): Promise<void> {
     const workPackage = await dependencies.repository.loadAssignedPackage();
@@ -190,7 +209,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           await dependencies.repository.recoverInFlight?.(now());
           const workPackage = await loadOrSeed();
           assertPackageScope(workPackage, dependencies);
-          await recoverPendingReconnections();
+          await syncCoordinator.recoverPendingReconnections();
           await refresh();
          update({ status: "ready", busyAction: undefined, message: undefined });
         } catch (error) {
@@ -223,7 +242,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       setAdapterMode(dependencies.enablement, mode);
       setAdapterMode(dependencies.transport, mode);
       update({ mode, message: mode === "offline" ? { tone: "warning", text: "Trabajo local activo. Validaciones externas quedan bloqueadas." } : undefined });
-      if (wasOffline && mode !== "offline" && snapshot.status === "ready") void requestSync().catch(() => undefined);
+      if (wasOffline && mode !== "offline" && snapshot.status === "ready") void syncCoordinator.requestSync().catch(() => undefined);
     },
     async loadCaptureDraft(orderId, action) {
       await ensureReady();
@@ -250,100 +269,10 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       getAssignedOrder(orderId);
       await dependencies.repository.saveCaptureDraft({ ...draftKey(orderId, action), updatedAt: now(), content });
     },
-    async registerVisit(orderId, input = {}) {
-      await ensureReady();
-      const order = getAssignedOrder(orderId);
-      const result = await runWithBusy("VISIT", async (): Promise<OfflineVisitResult> => {
-        const operationId = generateOperationId("visit");
-        const timestamp = now();
-        const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
-        const visitResult = await executeOfflineVisit({
-          repository: dependencies.repository,
-          order,
-          operationId,
-          technicianId,
-          deviceId,
-          attemptedAction: order.status === "EJECUTADO" ? "RECONNECTION" : "CUT",
-          reason: input.reason ?? "Visita de campo sin ejecución",
-          exceptionReason: input.exceptionReason,
-          evidence,
-          fieldCapture: input.fieldCapture,
-          now: timestamp,
-        });
-        await finishDraftIfCommitted(orderId, "VISIT", visitResult.visit.operationId, input);
-        const refreshed = await refreshAfterCommit();
-        if (refreshed) update({ message: { tone: visitResult.outcome === "duplicate" ? "info" : "success", text: "Visita guardada en el dispositivo, sin afirmar ejecución física." } });
-        return visitResult;
-      });
-      await syncAfterLocalAction();
-      return actionResultForVisit(result, snapshot);
-    },
-    async executeCut(orderId, input = {}) {
-      await ensureReady();
-      const order = getAssignedOrder(orderId);
-      const result = await runWithBusy("CUT", async (): Promise<CutProcessResult> => {
-        const operationId = generateOperationId("cut");
-        const timestamp = now();
-        const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
-        dependencies.prepareExternalValidation?.("CUT", order, operationId, timestamp);
-        const result = await runCut({
-          repository: dependencies.repository,
-          authorization: dependencies.authorization,
-          order,
-          operationId,
-          technicianId,
-          technicianNameSnapshot: technicianName,
-          deviceId,
-          now: timestamp,
-          evidence,
-          exceptionReason: input.exceptionReason,
-          fieldCapture: input.fieldCapture,
-        });
-        const committed = result.outcome === "executed" || result.outcome === "pending_sync" || (result.outcome === "duplicate" && result.operation.status === "CONFIRMED");
-        if (committed) await finishDraftIfCommitted(orderId, "CUT", result.operation.operationId, input);
-        if (result.outcome === "visit_recorded") {
-          await finishDraftIfCommitted(orderId, "CUT", result.visit.operationId, input, { recordedAction: "VISIT", cleanupDraft: false });
-        }
-        const refreshed = await refreshAfterCommit();
-        if (refreshed) update({ message: messageForCut(result, snapshot.mode) });
-        return result;
-      });
-      await syncAfterLocalAction();
-      return actionResultForCut(result, snapshot);
-    },
-    async executeReconnection(orderId, input = {}) {
-      await ensureReady();
-      const order = getAssignedOrder(orderId);
-      const result = await runWithBusy("RECONNECTION", async (): Promise<ReconnectionResult> => {
-        const operationId = generateOperationId("reconnection");
-        const timestamp = now();
-        const evidence = await prepareEvidence(input, order, operationId, technicianId, deviceId);
-        dependencies.prepareExternalValidation?.("RECONNECTION", order, operationId, timestamp);
-        const result = await runReconnection({
-          repository: dependencies.repository,
-          enablement: dependencies.enablement,
-          order,
-          operationId,
-          technicianId,
-          technicianNameSnapshot: technicianName,
-          deviceId,
-          now: timestamp,
-          evidence,
-          exceptionReason: input.exceptionReason,
-          demora: input.demora,
-        });
-        const committed = result.outcome === "executed" || (result.outcome === "duplicate" && result.operation.status === "CONFIRMED");
-        if (committed) await finishDraftIfCommitted(orderId, "RECONNECTION", result.operation.operationId, input);
-        const refreshed = await refreshAfterCommit();
-        if (refreshed) update({ message: messageForReconnection(result, snapshot.mode) });
-        return result;
-      });
-      await syncAfterLocalAction();
-      return actionResultForReconnection(result, snapshot);
-    },
-    async sync() {
-      return requestSync();
-    },
+    registerVisit: actionCoordinator.registerVisit,
+    executeCut: actionCoordinator.executeCut,
+    executeReconnection: actionCoordinator.executeReconnection,
+    sync: syncCoordinator.requestSync,
   };
 
   async function ensureReady(): Promise<void> {
@@ -414,159 +343,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     }
   }
 
-  function requestSync(): Promise<void> {
-    if (syncInFlight) return syncInFlight;
-    const operation = runSync().catch(() => {
-      update({ message: { tone: "warning", text: "La operación quedó guardada en este dispositivo. No pudimos sincronizar; reintentaremos automáticamente." } });
-    }).finally(() => {
-      if (syncInFlight === operation) syncInFlight = undefined;
-    });
-    syncInFlight = operation;
-    return operation;
-  }
-
-  async function runSync(): Promise<void> {
-    await ensureReady();
-    if (!dependencies.connectivity.isUsable()) {
-      update({ message: { tone: "warning", text: "Sin conexión útil. La cola permanece guardada para después." } });
-      return;
-    }
-    await recoverPendingReconnections();
-    await runWithBusy("SYNC", async () => {
-      const report = await new SyncEngine(dependencies.repository, dependencies.connectivity, dependencies.transport, { now }, dependencies.evidenceUploader).syncOnce();
-      await refresh();
-      update({ message: report.failed
-        ? { tone: "warning", text: "Algunas operaciones requieren revisión; ninguna fue eliminada." }
-        : { tone: "success", text: formatSyncMessage(report.synced), transient: true } });
-    });
-  }
-
-  async function syncAfterLocalAction(): Promise<void> {
-    if (snapshot.mode === "offline" || !snapshot.syncItems.some((item) => item.status !== "synced")) return;
-    await requestSync();
-  }
-
-  async function recoverPendingReconnections(): Promise<void> {
-    if (!dependencies.connectivity.isUsable()) return;
-    const items = await dependencies.repository.listSyncItems();
-    for (const item of items) {
-      if (item.action !== "RECONNECTION" || item.status === "synced" || item.manualReview) continue;
-      const record = await dependencies.repository.getRecord(item.operationId);
-      if (!record || record.kind !== "RECONNECTION" || (record.status !== "INTENT_PERSISTED" && record.status !== "PHYSICAL_UNKNOWN")) continue;
-      const order = await dependencies.repository.getOrder(record.orderId);
-      if (!order || order.assignedTechnicianId !== technicianId) continue;
-      try {
-        await runReconnection({
-          repository: dependencies.repository,
-          enablement: dependencies.enablement,
-          order,
-          operationId: record.operationId,
-          technicianId: record.technicianId,
-          technicianNameSnapshot: record.technicianNameSnapshot,
-          deviceId: record.deviceId,
-          now: now(),
-          demora: record.demora,
-          exceptionReason: record.exceptionReason,
-        });
-      } catch {
-        // Keep the operation durable and uncertain; recovery never invents success.
-      }
-    }
-  }
-
   return store;
-}
-
-export function formatSyncMessage(synced: number): string {
-  const count = Number.isFinite(synced) ? Math.max(0, Math.trunc(synced)) : 0;
-  return `${count} ${count === 1 ? "operación sincronizada" : "operaciones sincronizadas"}`;
-}
-
-function actionResultForVisit(result: OfflineVisitResult, state: AppState): ActionResult {
-  const record = result.visit;
-  const item = state.syncItems.find((candidate) => candidate.operationId === record.operationId);
-  const syncStatus = item?.status ?? record.syncStatus;
-  const outcome: ActionResultOutcome = syncStatus === "synced"
-    ? "confirmed"
-    : item?.manualReview
-      ? "review"
-      : "saved";
-  return {
-    requestedAction: "VISIT",
-    recordedAction: "VISIT",
-    outcome,
-    localSaved: true,
-    operationId: record.operationId,
-    syncStatus,
-    reason: record.reason,
-  };
-}
-
-function actionResultForCut(result: CutProcessResult, state: AppState): ActionResult {
-  const record = "visit" in result ? result.visit : result.operation;
-  const operationId = record?.operationId;
-  const item = operationId ? state.syncItems.find((candidate) => candidate.operationId === operationId) : undefined;
-  const syncStatus = item?.status ?? record?.syncStatus;
-  const order = state.orders.find((candidate) => candidate.orderId === record?.orderId);
-  const recordedAction = record?.kind === "VISIT" ? "VISIT" : "CUT";
-  const localSaved = Boolean(record);
-  const serverConfirmed = recordedAction === "CUT"
-    && syncStatus === "synced"
-    && order?.status === "EJECUTADO"
-    && order.physicalStatus === "CONFIRMED";
-  let outcome: ActionResultOutcome;
-  if (serverConfirmed) outcome = "confirmed";
-  else if (result.outcome === "physical_unknown" || result.outcome === "recovery_required" || item?.manualReview || (recordedAction === "CUT" && item?.uncertain && syncStatus === "failed")) outcome = "review";
-  else if (result.outcome === "visit_recorded" || result.outcome === "blocked") outcome = "blocked";
-  else outcome = "saved";
-  return {
-    requestedAction: "CUT",
-    recordedAction,
-    outcome,
-    localSaved,
-    operationId,
-    syncStatus,
-    physicalStatus: order?.physicalStatus ?? (record && record.kind !== "VISIT" ? record.physicalStatus : undefined),
-    reason: result.outcome === "blocked" ? result.reason : record && "reason" in record ? record.reason : undefined,
-  };
-}
-
-function actionResultForReconnection(result: ReconnectionResult, state: AppState): ActionResult {
-  const record = result.outcome === "visit_recorded"
-    ? result.visit
-    : "operation" in result
-      ? result.operation
-      : undefined;
-  const item = record ? state.syncItems.find((candidate) => candidate.operationId === record.operationId) : undefined;
-  const syncStatus = item?.status ?? record?.syncStatus;
-  const order = record ? state.orders.find((candidate) => candidate.orderId === record.orderId) : undefined;
-  const recordedAction = record?.kind === "VISIT" ? "VISIT" : "RECONNECTION";
-  const locallySaved = Boolean(record);
-  const serverConfirmed = recordedAction === "RECONNECTION"
-    && syncStatus === "synced"
-    && order?.status === "RECONEXIÓN"
-    && order.physicalStatus === "CONFIRMED";
-  const uncertain = result.outcome === "physical_unknown"
-    || result.outcome === "recovery_required"
-    || (item?.manualReview && result.outcome !== "blocked")
-    || item?.uncertain;
-  const outcome: ActionResultOutcome = serverConfirmed
-    ? "confirmed"
-    : uncertain
-      ? "review"
-      : result.outcome === "blocked" || result.outcome === "visit_recorded"
-        ? "blocked"
-        : "saved";
-  return {
-    requestedAction: "RECONNECTION",
-    recordedAction,
-    outcome,
-    localSaved: locallySaved,
-    operationId: record?.operationId,
-    syncStatus,
-    physicalStatus: order?.physicalStatus ?? (record && record.kind !== "VISIT" ? record.physicalStatus : undefined),
-    reason: result.outcome === "blocked" ? result.reason : record && "reason" in record ? record.reason : undefined,
-  };
 }
 
 export function createUnavailableAppStore(): AppStore {
@@ -621,47 +398,4 @@ function assertPackageScope(workPackage: WorkPackage, dependencies: AppStoreDepe
 
 function setAdapterMode(adapter: unknown, mode: ConnectivityMode): void {
   if (adapter && typeof adapter === "object" && "setMode" in adapter && typeof adapter.setMode === "function") adapter.setMode(mode);
-}
-
-function readableError(error: unknown): string {
-  if (error instanceof DomainError) {
-    const messages: Record<string, string> = {
-      ORDER_NOT_EXECUTED: "La orden debe estar ejecutada antes de preparar reconexión.",
-      ORDER_STATUS_INVALID: "La orden no está lista para esta acción.",
-      CUT_ALREADY_CLAIMED: "Esta orden ya tiene una ejecución reclamada.",
-      CUT_STATUS_INVALID: "La orden necesita estado físico confirmado.",
-      EVIDENCE_REQUIRED: "Adjunte JPEG/PNG preparado o marque excepción con justificación.",
-      EVIDENCE_FORMAT_INVALID: "La evidencia debe ser JPEG o PNG.",
-      EVIDENCE_NOT_OPTIMIZED: "La evidencia debe quedar preparada en cinco megapíxeles o menos.",
-      VISIT_REASON_REQUIRED: "Escriba un motivo para registrar la visita.",
-      FIELD_CAPTURE_REQUIRED: "Complete lectura, tipo de corte, GPS y verificación de medidores.",
-      METER_READING_REQUIRED: "Ingrese lectura final válida del medidor.",
-      METER_READING_INVALID: "La lectura debe estar asociada al medidor descargado.",
-      GPS_REQUIRED: "Capture GPS o registre una excepción controlada.",
-      GPS_COORDINATES_INVALID: "Las coordenadas GPS no son válidas.",
-      GPS_ACCURACY_INVALID: "La precisión GPS no es válida.",
-      CUT_TYPE_INVALID: "Seleccione tipo de corte válido.",
-      NEARBY_METERS_REQUIRED: "Indique si verificó medidores cercanos.",
-      VISIT_NOT_ALLOWED_AFTER_CUT: "Esta orden ya tiene una ejecución o revisión registrada.",
-    };
-    return messages[error.code] ?? "La operación no pudo continuar. Revise datos locales.";
-  }
-  return error instanceof Error ? error.message : "La operación no pudo continuar.";
-}
-
-function messageForCut(result: CutProcessResult, mode: ConnectivityMode): AppMessage {
-  if (result.outcome === "pending_sync") return { tone: "info", text: "Corte guardado localmente; el servidor debe confirmarlo al sincronizar." };
-  if (result.outcome === "executed") return { tone: "success", text: mode === "offline" ? "Corte guardado localmente." : "Corte registrado localmente y pendiente de sincronización." };
-  if (result.outcome === "visit_recorded") return { tone: "info", text: "Visita guardada; corte bloqueado por validación externa." };
-  if (result.outcome === "physical_unknown" || result.outcome === "recovery_required") return { tone: "warning", text: "Resultado incierto. Revisión humana requerida; no repetir esta acción." };
-  if (result.outcome === "duplicate") return { tone: "info", text: "Operación ya registrada; no se creó duplicado." };
-  return { tone: "warning", text: "Corte bloqueado por validación externa; visita conservada si correspondía." };
-}
-
-function messageForReconnection(result: ReconnectionResult, mode: ConnectivityMode): AppMessage {
-  if (result.outcome === "executed") return { tone: "success", text: mode === "offline" ? "Reconexión guardada localmente." : "Reconexión registrada localmente y pendiente de sincronización." };
-  if (result.outcome === "visit_recorded") return { tone: "info", text: "Visita guardada; reconexión bloqueada por habilitación externa." };
-  if (result.outcome === "physical_unknown" || result.outcome === "recovery_required") return { tone: "warning", text: "Resultado incierto. Revisión humana requerida; no repetir esta acción." };
-  if (result.outcome === "duplicate") return { tone: "info", text: "Operación ya registrada; no se creó duplicado." };
-  return { tone: "warning", text: "Reconexión bloqueada por habilitación externa; visita conservada si correspondía." };
 }

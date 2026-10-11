@@ -9,14 +9,16 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "pilot:bootstrap": "node scripts/bootstrap-pilot.mjs",
     "pilot:field-test": "python scripts/import-debtors-xlsx.py",
     "pilot:migrate:field-test": "node migrations/20260923-load-excel-20260922.mjs",
     "db:migrate:test": "node scripts/migrate-test-db.mjs",
     "e2e:browser": "tsx scripts/connected-browser-smoke.ts",
     "pilot:migrate:roles": "node migrations/20261002-role-grants.mjs",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "tsx --test test/**/*.test.ts",
+    "test:unit": "tsx --test test/auth.test.ts test/config.test.ts test/http.test.ts test/application.test.ts test/pilot-contract.test.ts test/role-switch.test.ts test/reconnection.test.ts test/debtor-queries.test.ts test/server.test.ts",
+    "test:integration": "tsx --test test/db.integration.test.ts"
   },
   "dependencies": {
     "pg": "^8.16.3",

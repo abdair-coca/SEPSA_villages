@@ -219,7 +219,13 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
 
   async function assignCreatedOrders(createdOrders: WorkOrder[]): Promise<void> {
     for (const order of createdOrders) {
-      await authority.assignOrder({ operationId: generateOperationId("assign-order"), orderId: order.orderId, technicianId: selectedTechnician, expectedOrderVersion: order.version ?? 0, session });
+      await authority.assignOrder({
+        operationId: generateOperationId("assign-order"),
+        orderId: order.orderId,
+        technicianId: selectedTechnician,
+        expectedOrderVersion: order.version ?? 0,
+        session,
+      });
     }
   }
 
@@ -236,54 +242,86 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
       return;
     }
     let createdOrders: WorkOrder[] = [];
+    let skippedCount = 0;
     setBusy(true);
     try {
       if (creationDialog.mode === "single") {
-        const order = await authority.createOrder({ operationId: generateOperationId("create-order"), debtorId: creationDialog.debtorIds[0], purpose: "CUT", session });
+        const order = await authority.createOrder({
+          operationId: generateOperationId("create-order"),
+          debtorId: creationDialog.debtorIds[0],
+          purpose: "CUT",
+          session,
+        });
         createdOrders = [order];
-        if (isActiveSession()) setOrderCreationDialog(undefined);
-        await assignCreatedOrders([order]);
-        if (isActiveSession()) setSelectedOrder(order.orderId);
-        notify("Orden creada y asignada al técnico seleccionado.", "success");
       } else {
-        const result = await authority.createOrdersBatch({ batchId: generateOperationId("create-order-batch"), debtorIds: creationDialog.debtorIds, purpose: "CUT", session });
+        const result = await authority.createOrdersBatch({
+          batchId: generateOperationId("create-order-batch"),
+          debtorIds: creationDialog.debtorIds,
+          purpose: "CUT",
+          session,
+        });
         createdOrders = result.created;
-        if (isActiveSession()) setOrderCreationDialog(undefined);
-        await assignCreatedOrders(result.created);
-        if (isActiveSession() && result.created[0]) {
-          setSelectedDebtor(result.created[0].debtorId ?? "");
-          setSelectedOrder(result.created[0].orderId);
-        }
-        notify(`Lote creado y asignado: ${result.created.length} órdenes${result.skipped.length ? `, ${result.skipped.length} omitidas por validación o duplicado` : ""}.`, "success");
-        if (isActiveSession()) setSelectedDebtorIds([]);
+        skippedCount = result.skipped.length;
       }
+
+      if (isActiveSession()) setOrderCreationDialog(undefined);
+      await assignCreatedOrders(createdOrders);
+      presentOrderCreationSuccess(creationDialog.mode, createdOrders, skippedCount);
       await refresh();
     } catch (error) {
-      if (!isActiveSession()) return;
-      setOrderCreationDialog(undefined);
-      if (createdOrders.length) {
-        setSelectedOrder(createdOrders[0].orderId);
-        notify(`Se crearon ${createdOrders.length} órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.`, "error");
-        await refresh();
-      } else {
-        if (isActiveOrderConflict(error)) {
-          try {
-            const refreshedOrders = await refresh();
-            if (!isActiveSession()) return;
-            const debtor = debtors.find((candidate) => candidate.debtorId === creationDialog.debtorIds[0]);
-            const activeOrder = findActiveOrderForSupply(refreshedOrders, creationDialog.debtorIds[0], debtor?.accountId);
-            if (activeOrder) {
-              setSelectedOrder(activeOrder.orderId);
-              notify("Este suministro ya tiene una orden activa. Revise su ficha para asignarla.", "info");
-              return;
-            }
-          } catch {
-            // Preserve original conflict message when refresh cannot complete.
-          }
+      await handleOrderCreationFailure(error, creationDialog, createdOrders);
+    } finally {
+      if (isActiveSession()) setBusy(false);
+    }
+  }
+
+  function presentOrderCreationSuccess(mode: OrderCreationDialog["mode"], createdOrders: WorkOrder[], skippedCount: number): void {
+    if (!isActiveSession()) return;
+    const firstOrder = createdOrders[0];
+    if (mode === "single") {
+      setSelectedOrder(firstOrder.orderId);
+      notify("Orden creada y asignada al técnico seleccionado.", "success");
+      return;
+    }
+
+    if (firstOrder) {
+      setSelectedDebtor(firstOrder.debtorId ?? "");
+      setSelectedOrder(firstOrder.orderId);
+    }
+    const skippedSummary = skippedCount ? `, ${skippedCount} omitidas por validación o duplicado` : "";
+    notify(`Lote creado y asignado: ${createdOrders.length} órdenes${skippedSummary}.`, "success");
+    setSelectedDebtorIds([]);
+  }
+
+  async function handleOrderCreationFailure(error: unknown, dialog: OrderCreationDialog, createdOrders: WorkOrder[]): Promise<void> {
+    if (!isActiveSession()) return;
+    setOrderCreationDialog(undefined);
+
+    // Keep returned orders even if assignment or the final refresh fails.
+    if (createdOrders.length) {
+      setSelectedOrder(createdOrders[0].orderId);
+      notify(`Se crearon ${createdOrders.length} órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.`, "error");
+      await refresh();
+      return;
+    }
+
+    if (isActiveOrderConflict(error)) {
+      try {
+        const refreshedOrders = await refresh();
+        if (!isActiveSession()) return;
+        const firstDebtorId = dialog.debtorIds[0];
+        const debtor = debtors.find((candidate) => candidate.debtorId === firstDebtorId);
+        const activeOrder = findActiveOrderForSupply(refreshedOrders, firstDebtorId, debtor?.accountId);
+        if (activeOrder) {
+          setSelectedOrder(activeOrder.orderId);
+          notify("Este suministro ya tiene una orden activa. Revise su ficha para asignarla.", "info");
+          return;
         }
-        notify(readableError(error), "error");
+      } catch {
+        // Preserve original conflict message when refresh cannot complete.
       }
-    } finally { if (isActiveSession()) setBusy(false); }
+    }
+    notify(readableError(error), "error");
   }
 
   async function confirmOrderAssignment(): Promise<void> {
