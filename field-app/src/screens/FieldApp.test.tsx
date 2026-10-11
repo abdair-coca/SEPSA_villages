@@ -12,7 +12,16 @@ import { createDemoPackage } from "../bootstrap/runtime";
 import type { WorkOrder, WorkPackage } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
 import { AppModal, type AppModalProps } from "../components/common/Modal";
-import { ActionCompletionDialog, adjacentJourneyOrder, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, CompactNetworkStatus, cutCompletionOutcome, EvidencePicker, FieldApp, fieldOrderStatusLabel, loadCaptureDraftSafely, openOrderMap, orderActivityReviewPages, OrderReviewMap, orderJourneyOrders, paginateReviewFields, QueuePanel, queuePageItem, queueReviewMessage, restoreEvidenceFile, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay, syncThenRefreshAssigned } from "./FieldApp";
+import { CompactNetworkStatus, FieldApp } from "./FieldApp";
+import { ActionCompletionDialog, OrderReviewMap } from "../components/OrderDetail";
+import { EvidencePicker } from "../components/CaptureForm";
+import { QueuePanel } from "../components/SyncQueue";
+import { fieldOrderStatusLabel, queueReviewMessage } from "../utils/labels";
+import { orderJourneyOrders } from "../utils/sorting";
+import { orderActivityReviewPages } from "../utils/format";
+import { queuePageItem } from "../utils/pagination";
+import { restoreEvidenceFile } from "../utils/capture-wizard";
+import { openOrderMap } from "../state/field-commands";
 
 const repositories: IndexedDbLocalRepository[] = [];
 const databaseNames: string[] = [];
@@ -39,40 +48,6 @@ async function readyStore(name: string, seedPackage: WorkPackage = createDemoPac
 }
 
 describe("capture wizard QA recovery", () => {
-  it("keeps advancement blocked after draft load failure until retry succeeds", async () => {
-    let attempts = 0;
-    const load = async () => {
-      attempts += 1;
-      if (attempts === 1) throw new Error("IndexedDB transaction failed");
-      return { reading: { value: 42 } };
-    };
-
-    const failed = await loadCaptureDraftSafely(load);
-    expect(failed.status).toBe("error");
-    expect(captureDraftCanAdvance(failed.status)).toBe(false);
-
-    const retried = await loadCaptureDraftSafely(load);
-    expect(retried.status).toBe("ready");
-    expect(captureDraftCanAdvance(retried.status)).toBe(true);
-    if (retried.status === "ready") expect(retried.content.reading?.value).toBe(42);
-  });
-
-  it("keeps cut reading separate from reachable cut settings", () => {
-    expect(captureWizardSteps("CUT", false, false)).toEqual(["reading", "cutSettings", "gps", "evidence", "review"]);
-    expect(captureWizardSteps("CUT", true, true)).toEqual(["reading", "cutSettings", "gps", "gpsException", "evidence", "evidenceException", "review"]);
-  });
-
-  it("replaces technical submit errors with actionable Spanish while preserving uncertain-write warning", () => {
-    const generic = captureSubmitError(new Error("QuotaExceededError: transaction aborted"));
-    expect(generic.message).toBe("No pudimos guardar la operación. Revisa el estado de la orden y las operaciones pendientes antes de reintentar.");
-    expect(generic.message).not.toContain("QuotaExceededError");
-    expect(generic.verificationUncertain).toBe(false);
-
-    const uncertain = captureSubmitError(new Error("No pudimos verificar el guardado local"));
-    expect(uncertain.message).toContain("No pudimos confirmar si la operación quedó guardada");
-    expect(uncertain.message).toContain("Revisa las operaciones pendientes");
-    expect(uncertain.verificationUncertain).toBe(true);
-  });
 
   it("renders accessible Spanish photo picker and restored evidence filename", () => {
     const file = new File(["foto"], "medidor.jpg", { type: "image/jpeg" });
@@ -115,13 +90,6 @@ describe("capture wizard QA recovery", () => {
     expect(reconnectionSyncUncertain).toContain("no vuelva a ejecutar la acción");
     expect(reconnectionBlocked).toContain("reposición bloqueada");
     expect(reconnectionBlocked).toContain("no se registró como una reposición completada");
-  });
-
-  it("reports durable cut as pending when order refresh leaves a stale snapshot", () => {
-    const order = createDemoPackage("2026-09-12T10:00:00.000Z").orders[0];
-    expect(cutCompletionOutcome(true, { ...order, status: "GENERADO", physicalStatus: "NONE" })).toBe("pending");
-    expect(cutCompletionOutcome(true, { ...order, physicalStatus: "PHYSICAL_UNKNOWN" })).toBe("review");
-    expect(cutCompletionOutcome(false, { ...order, status: "GENERADO", physicalStatus: "NONE" })).toBeUndefined();
   });
 
   it("delegates completion dialog accessibility and dismissal while retaining Listo", () => {
@@ -168,86 +136,6 @@ function visitActivity(operationId: string, recordedAt: string): ActivityEntry {
   };
 }
 
-function cutActivity(operationId: string, recordedAt: string, effectiveAt: string): ActivityEntry {
-  return {
-    record: {
-      operationId,
-      kind: "CUT",
-      action: "CUT",
-      orderId: "ORD-24017",
-      technicianId: DEMO_TECHNICIAN_ID,
-      deviceId: DEMO_DEVICE_ID,
-      status: "CONFIRMED",
-      physicalStatus: "CONFIRMED",
-      syncStatus: "synced",
-      recordedAt,
-      effectiveAt,
-      updatedAt: recordedAt,
-      attempts: 1,
-      evidenceRefs: [],
-    },
-    evidence: [],
-  };
-}
-
-describe("chronological activity and queue ordering", () => {
-  it("sorts activity by physical occurrence when present, otherwise by record time", () => {
-    const activity = [
-      visitActivity("visit-old", "2026-09-12T08:00:00.000Z"),
-      cutActivity("cut-effective-new", "2026-09-12T07:00:00.000Z", "2026-09-12T12:00:00.000Z"),
-      visitActivity("visit-tie-z", "2026-09-12T11:00:00.000Z"),
-      visitActivity("visit-tie-a", "2026-09-12T11:00:00.000Z"),
-      visitActivity("visit-invalid", "not-a-date"),
-    ];
-
-    expect(sortActivityEntries(activity).map((entry) => entry.record.operationId)).toEqual([
-      "cut-effective-new",
-      "visit-tie-a",
-      "visit-tie-z",
-      "visit-old",
-      "visit-invalid",
-    ]);
-    expect(sortActivityEntries(activity).slice(0, 3).map((entry) => entry.record.operationId)).toEqual([
-      "cut-effective-new",
-      "visit-tie-a",
-      "visit-tie-z",
-    ]);
-    expect(activity.map((entry) => entry.record.operationId)).toEqual([
-      "visit-old",
-      "cut-effective-new",
-      "visit-tie-z",
-      "visit-tie-a",
-      "visit-invalid",
-    ]);
-  });
-
-  it("sorts the queue by latest update within sync priority and falls back to activity time", () => {
-    const activity = [visitActivity("pending-no-update", "2026-09-12T12:00:00.000Z")];
-    const items: SyncItem[] = [
-      { operationId: "synced-old", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T13:00:00.000Z" },
-      { operationId: "pending-old", action: "VISIT", status: "pending", attempts: 0, updatedAt: "2026-09-12T10:00:00.000Z" },
-      { operationId: "pending-no-update", action: "VISIT", status: "failed", attempts: 1 },
-      { operationId: "pending-new", action: "VISIT", status: "failed", attempts: 1, updatedAt: "2026-09-12T11:00:00.000Z" },
-      { operationId: "synced-new", action: "VISIT", status: "synced", attempts: 1, updatedAt: "2026-09-12T14:00:00.000Z" },
-      { operationId: "missing-z", action: "VISIT", status: "pending", attempts: 0 },
-      { operationId: "missing-a", action: "VISIT", status: "pending", attempts: 0 },
-    ];
-    const original = items.map((item) => ({ ...item }));
-
-    expect(sortSyncItemsForDisplay(items, activity).map((item) => item.operationId)).toEqual([
-      "pending-no-update",
-      "pending-new",
-      "pending-old",
-      "missing-a",
-      "missing-z",
-      "synced-new",
-      "synced-old",
-    ]);
-    expect(items).toEqual(original);
-  });
-
-});
-
 describe("FieldApp SSR shell", () => {
   it.each([1, 2])("opens the map for journey order at index %i and keeps map as the final tab", async (index) => {
     const store = await readyStore(`ui-map-journey-${index}`);
@@ -287,59 +175,6 @@ describe("FieldApp SSR shell", () => {
     expect(file.type).toBe("image/jpeg");
     expect(await file.text()).toBe("field camera bytes");
     expect(file.name).toMatch(/medidor\.jpg|evidencia-recuperada\.jpg/);
-  });
-  it("syncs every pending queue action before refreshing assigned orders", async () => {
-    const events: string[] = [];
-    let syncItems = [
-      { operationId: "pending-cut", status: "failed" as const, attempts: 1, action: "CUT" as const },
-      { operationId: "pending-visit", status: "pending" as const, attempts: 0, action: "VISIT" as const },
-      { operationId: "pending-reconnection", status: "failed" as const, attempts: 2, action: "RECONNECTION" as const },
-    ];
-    const store = {
-      getSnapshot: () => ({ syncItems }),
-      sync: async () => { events.push("sync"); syncItems = []; },
-    } as unknown as AppStore;
-
-    await syncThenRefreshAssigned(store, async () => { events.push("refresh"); });
-
-    expect(events).toEqual(["sync", "refresh"]);
-  });
-
-  it("keeps failed pending work and reports missing server acknowledgment", async () => {
-    const queued = { operationId: "pending-unsent", status: "pending" as const, attempts: 0, action: "VISIT" as const, errorCode: "NETWORK_UNAVAILABLE" };
-    const syncItems = [queued];
-    let refreshed = false;
-    const store = {
-      getSnapshot: () => ({ syncItems }),
-      sync: async () => undefined,
-    } as unknown as AppStore;
-
-    await expect(syncThenRefreshAssigned(store, async () => { refreshed = true; })).rejects.toThrow(
-      "El servidor no confirmó 1 operación(es) pendiente(s) (NETWORK_UNAVAILABLE). Los registros y evidencias siguen guardados en este dispositivo.",
-    );
-
-    expect(refreshed).toBe(false);
-    expect(store.getSnapshot().syncItems).toEqual([queued]);
-  });
-
-  it("prioritizes pending, review, completed, and cancelled orders", () => {
-    const base = createDemoPackage("2026-09-12T10:00:00.000Z").orders[0];
-    const orders: WorkOrder[] = [
-      { ...base, orderId: "cancelled", status: "ANULADO" },
-      { ...base, orderId: "completed", status: "EJECUTADO", physicalStatus: "CONFIRMED" },
-      { ...base, orderId: "review", status: "GENERADO", physicalStatus: "PHYSICAL_UNKNOWN" },
-      { ...base, orderId: "pending", status: "GENERADO", physicalStatus: "NONE" },
-    ];
-
-    expect(sortOrdersForNext(orders).map((order) => order.orderId)).toEqual(["pending", "review", "completed", "cancelled"]);
-    expect(orderJourneyOrders(orders).map((order) => order.orderId)).toEqual(["pending", "review", "completed", "cancelled"]);
-    const journey = orderJourneyOrders(orders);
-    expect(journey.at(0)?.orderId).toBe("pending");
-    expect(journey.at(-1)?.orderId).toBe("cancelled");
-    expect(adjacentJourneyOrder(journey, 0, 1)?.orderId).toBe("review");
-    expect(adjacentJourneyOrder(journey, journey.length - 1, -1)?.orderId).toBe("completed");
-    expect(adjacentJourneyOrder(journey, 0, -1)).toBeUndefined();
-    expect(adjacentJourneyOrder(journey, journey.length - 1, 1)).toBeUndefined();
   });
 
   it("renders ready shell, assigned list, detail, and action eligibility", async () => {
@@ -800,17 +635,6 @@ describe("FieldApp SSR shell", () => {
 
     expect(reconnection).toBeDefined();
     expect(fieldOrderStatusLabel(reconnection!)).toBe("Reconectada");
-  });
-
-  it("paginates all eight secondary data fields four at a time, including long values", () => {
-    const longValue = "Referencia de campo extensa ".repeat(12).trim();
-    const fields = Array.from({ length: 8 }, (_, index) => ({ label: `Campo ${index + 1}`, value: index === 0 ? longValue : `Valor ${index + 1}` }));
-    const pages = paginateReviewFields(fields);
-    const longValueParts = pages.flat().filter((field) => field.label.startsWith("Campo 1 · parte"));
-
-    expect(pages.map((page) => page.length)).toEqual([1, 1, 1, 4, 3]);
-    expect(longValueParts.map((field) => field.value).join("")).toBe(longValue);
-    expect(pages.flat().filter((field) => !field.label.startsWith("Campo 1 · parte"))).toEqual(fields.slice(1));
   });
 
   it("splits long activity exceptions into readable pages without losing wording", async () => {

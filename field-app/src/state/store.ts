@@ -1,5 +1,12 @@
 import { DomainError } from "../domain/errors";
-import type { EvidenceReference, ConnectivityMode, FieldCapture, WorkOrder, WorkPackage } from "../domain/types";
+import type {
+  EvidenceReference,
+  ConnectivityMode,
+  FieldCapture,
+  WorkOrder,
+  WorkPackage,
+  ActionKind,
+} from "../domain/types";
 import type { AuthorizationAdapter, EnablementAdapter } from "../ports/authorization";
 import type { CaptureDraftContent, CaptureDraftKey, LocalRepository, StoredRecord } from "../ports/repository";
 import type { ConnectivityPort } from "../ports/connectivity";
@@ -20,7 +27,6 @@ export const DEMO_SIMULATION_LABEL = "Simulación, sin conexión a SEPSA";
 
 export type OrderFilter = "ALL" | WorkOrder["status"] | "REVIEW";
 export type AppTab = "home" | "orders" | "map" | "queue";
-export type ActionKind = "VISIT" | "CUT" | "RECONNECTION";
 
 export interface ActionInput {
   evidence?: EvidenceDraft;

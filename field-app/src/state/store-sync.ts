@@ -1,7 +1,8 @@
 import { executeReconnection as runReconnection } from "../use-cases/reconnection";
 import { SyncEngine } from "../use-cases/sync";
-import type { ActionKind, AppState, AppStoreDependencies } from "./store";
+import type { AppState, AppStoreDependencies } from "./store";
 import { formatSyncMessage } from "./store-results";
+import type { ActionKind } from "../domain/types";
 
 export interface SyncCoordinatorContext {
   dependencies: AppStoreDependencies;

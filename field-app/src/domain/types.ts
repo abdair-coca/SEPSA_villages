@@ -130,6 +130,12 @@ export interface FieldCapture {
 
 export interface DebtorRecord extends OperationalContext {}
 
+/** Acción de campo que el técnico puede registrar sobre una orden. */
+export type ActionKind = "VISIT" | "CUT" | "RECONNECTION";
+
+/** Valor de filtro que selecciona registros sin dato en ese campo ("Sin dato" en la UI). */
+export const NO_DATA_FILTER_VALUE = "__NO_DATA__";
+
 export interface DebtorQuery {
   query?: string;
   area?: string;

@@ -1,29 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { ActionInput, ActionResult, ActionKind, ActivityEntry, AppState, AppStore } from "../state/store";
-import type { ConnectivityMode, WorkOrder } from "../domain/types";
+import type { ActionInput, ActionResult, ActivityEntry, AppState, AppStore } from "../state/store";
+import type { ConnectivityMode, WorkOrder, ActionKind } from "../domain/types";
 import { FieldMap } from "./FieldMap";
 import { IconAlertTriangle, IconCheckCircle, IconDocument, IconExpand, IconMap, IconPin, IconRoute, IconScissors, IconUser } from "./common/Icons";
 import { AppModal } from "./common/Modal";
 import { CaptureForm } from "./CaptureForm";
-import {
-  activityDetail,
-  activityException,
-  activityLabel,
-  displayValue,
-  fieldOrderStatusLabel,
-  formatDate,
-  formatDebt,
-  hasCadastralCoordinates,
-  isManualVisitAllowed,
-  orderActivityReviewPages,
-  orderStatusLabel,
-  orderStatusTone,
-  physicalStatusLabel,
-  shortHash,
-  shortTechnicalId,
-  splitReviewText,
-  syncStatusLabel,
-} from "../utils/field-app-utils";
+import { isManualVisitAllowed, hasCadastralCoordinates } from "../domain/policies";
+import { activityLabel, activityDetail, activityException, orderStatusLabel, fieldOrderStatusLabel, physicalStatusLabel, orderStatusTone, syncStatusLabel } from "../utils/labels";
+import { displayValue, formatDebt, formatDate, shortHash, shortTechnicalId, orderActivityReviewPages } from "../utils/format";
+import { paginateReviewFields } from "../utils/pagination";
 
 export type OrderReviewView = "review" | "details" | "map" | "activity";
 
@@ -236,12 +221,6 @@ function completionDialogContent(result: ActionResult): { title: string; message
   return { title: "Datos del corte guardados", message: "La información quedó guardada en este dispositivo. El servidor todavía no la confirmó. No repita la acción." };
 }
 
-export function cutCompletionOutcome(durable: boolean, order?: WorkOrder): "confirmed" | "pending" | "review" | undefined {
-  if (order?.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED") return "confirmed";
-  if (order?.physicalStatus === "PHYSICAL_UNKNOWN") return "review";
-  return durable ? "pending" : undefined;
-}
-
 function MobileOrderReview({
   order, mode, entries, view, onViewChange, onBack, canCut, canRegisterVisit, canReconnect, busy,
   onCut, onVisit, onReconnect, kardexIndex, onKardexIndexChange, detailsPageIndex, onDetailsPageIndexChange,
@@ -352,24 +331,6 @@ function ReviewData({ label, value }: { label: string; value?: string }) {
   return <div className="order-review-fact"><span>{label}</span><strong>{displayValue(value)}</strong></div>;
 }
 
-export function paginateReviewFields(fields: readonly { label: string; value?: string }[], pageSize = 4): Array<Array<{ label: string; value?: string }>> {
-  const pages: Array<Array<{ label: string; value?: string }>> = [];
-  let currentPage: Array<{ label: string; value?: string }> = [];
-  const flush = () => { if (!currentPage.length) return; pages.push(currentPage); currentPage = []; };
-  for (const field of fields) {
-    if ((field.value?.length ?? 0) > 120) {
-      flush();
-      const chunks = splitReviewText(field.value ?? "");
-      chunks.forEach((value, index) => pages.push([{ label: `${field.label} · parte ${index + 1} de ${chunks.length}`, value }]));
-      continue;
-    }
-    currentPage.push(field);
-    if (currentPage.length === pageSize) flush();
-  }
-  flush();
-  return pages;
-}
-
 function OperationalContext({ context }: { context: NonNullable<WorkOrder["context"]> }) {
   return (
     <section className="order-detail-context" aria-label="Cliente y suministro">
@@ -392,4 +353,3 @@ function ActivityPanel({ entries }: { entries: ActivityEntry[] }) {
   );
 }
 
-export { orderActivityReviewPages };

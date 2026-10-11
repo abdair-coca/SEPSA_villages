@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createDemoPackage } from "../bootstrap/runtime";
 import {
   assertAssignedOrder,
   assertCan,
@@ -10,6 +11,8 @@ import {
   nextOrderState,
   validateEvidence,
   validateFieldCapture,
+  cutCompletionOutcome,
+  findActiveOrderForSupply,
 } from "./policies";
 import { DomainError } from "./errors";
 import type { FieldCapture, OperationRecord, Session, WorkOrder } from "./types";
@@ -134,5 +137,26 @@ describe("field domain policies", () => {
   it("preserves historical operation identity", () => {
     expect(() => assertHistoricalOperationImmutable(operation, { ...operation, status: "PHYSICAL_UNKNOWN" })).not.toThrow();
     expect(() => assertHistoricalOperationImmutable(operation, { ...operation, orderId: "other-order" })).toThrowError(DomainError);
+  });
+});
+
+describe("cut completion outcome", () => {
+  it("reports durable cut as pending when order refresh leaves a stale snapshot", () => {
+    const order = createDemoPackage("2026-09-12T10:00:00.000Z").orders[0];
+    expect(cutCompletionOutcome(true, { ...order, status: "GENERADO", physicalStatus: "NONE" })).toBe("pending");
+    expect(cutCompletionOutcome(true, { ...order, physicalStatus: "PHYSICAL_UNKNOWN" })).toBe("review");
+    expect(cutCompletionOutcome(false, { ...order, status: "GENERADO", physicalStatus: "NONE" })).toBeUndefined();
+  });
+});
+
+describe("admin active order lookup", () => {
+  it("finds active order by debtor or account and ignores cancelled orders", () => {
+    const baseOrder = createDemoPackage("2026-09-12T10:00:00.000Z").orders[0];
+    const activeOrder = { ...baseOrder, debtorId: "debtor-1", accountId: "account-1" };
+    const cancelledOrder = { ...activeOrder, status: "ANULADO" as const };
+
+    expect(findActiveOrderForSupply([activeOrder], "debtor-1")).toBe(activeOrder);
+    expect(findActiveOrderForSupply([activeOrder], "other-debtor", "account-1")).toBe(activeOrder);
+    expect(findActiveOrderForSupply([cancelledOrder], "debtor-1", "account-1")).toBeUndefined();
   });
 });

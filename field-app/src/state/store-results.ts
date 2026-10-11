@@ -4,7 +4,7 @@ import type { SyncItem } from "../ports/sync";
 import type { CutProcessResult } from "../use-cases/process";
 import type { OfflineVisitResult } from "../use-cases/visit";
 import type { ReconnectionResult } from "../use-cases/reconnection";
-import type { ActionKind, ActionResult, ActionResultOutcome, AppMessage, AppState } from "./store";
+import type { ActionResult, ActionResultOutcome, AppMessage, AppState } from "./store";
 
 export function formatSyncMessage(synced: number): string {
   const count = Number.isFinite(synced) ? Math.max(0, Math.trunc(synced)) : 0;

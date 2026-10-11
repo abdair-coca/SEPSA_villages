@@ -15,6 +15,10 @@ import { AppStateCard } from "../components/common/UiState";
 import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "../components/common/Notification";
 import { SearchField } from "../components/common/SearchField";
 import { PaginationControls } from "../components/common/PaginationControls";
+import { findActiveOrderForSupply } from "../domain/policies";
+import { formatAdminCoordinates } from "../utils/format";
+import { ADMIN_SUPPLIES_PAGE_SIZE, getAdminOrderPage } from "../utils/pagination";
+import { getAdminFilterOptions, matchesFilterValue, getMissingOrderCreationDebtorIds } from "../utils/filters";
 
 interface OperationsAppProps {
   authority: OperationsAuthorityPort;
@@ -41,19 +45,6 @@ type MessageTone = "info" | "success" | "error";
 type SupplyDataIconKind = "client" | "address" | "account" | "circuit" | "supply" | "area" | "meter" | "status" | "route" | "tariff" | "coordinates" | "phone" | "debt";
 
 const DEFAULT_SEARCH_FILTERS: SearchFilters = { query: "", area: "", locality: "", route: "", minMonthsPending: "2", supplyStatus: "A" };
-export const NO_DATA_FILTER_VALUE = "__NO_DATA__";
-export const ADMIN_ORDERS_PAGE_SIZE = 4;
-export const ADMIN_SUPPLIES_PAGE_SIZE = 7;
-
-export function getAdminOrderPage<T>(items: readonly T[], requestedPage: number, pageSize = ADMIN_ORDERS_PAGE_SIZE): { items: T[]; page: number; totalPages: number } {
-  const safePageSize = Number.isSafeInteger(pageSize) && pageSize > 0 ? pageSize : ADMIN_ORDERS_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(items.length / safePageSize));
-  const page = Math.min(Math.max(1, Math.trunc(requestedPage)), totalPages);
-  const start = (page - 1) * safePageSize;
-  return { items: items.slice(start, start + safePageSize), page, totalPages };
-}
-
-export function formatAdminCoordinates(latitude?: number, longitude?: number): string | undefined { return latitude !== undefined && longitude !== undefined ? `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` : undefined; }
 
 export function OperationsApp({ authority, session, onLogout, roleSwitch }: OperationsAppProps) {
   const [debtors, setDebtors] = useState<DebtorRecord[]>([]);
@@ -458,11 +449,6 @@ export function AdminSelectionSummary({ selectedCount, visibleSelectedCount }: {
   return <div className="admin-selection-summary" role="status" aria-live="polite"><strong>{selectedCount} suministros seleccionados</strong><span>{visibleSelectedCount} en esta página · La selección se conserva al cambiar de página.</span></div>;
 }
 
-export function getMissingOrderCreationDebtorIds(debtorIds: readonly string[], debtors: readonly DebtorRecord[]): string[] {
-  const availableDebtorIds = new Set(debtors.map((debtor) => debtor.debtorId));
-  return debtorIds.filter((debtorId) => !availableDebtorIds.has(debtorId));
-}
-
 function AdminLoadingState() {
   return <AppStateCard as="div" className="admin-state-card" tone="loading" title="Cargando suministros" description="Estamos consultando información operativa." />;
 }
@@ -598,10 +584,6 @@ function formatMoney(cents: number): string { return (cents / 100).toFixed(2); }
 function formatDate(value?: string): string { if (!value) return "Dato no disponible"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "Dato no disponible" : new Intl.DateTimeFormat("es-BO", { dateStyle: "short", timeStyle: "short" }).format(date); }
 function formatOrderHeaderDate(value?: string): string { if (!value) return "fecha no disponible"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "fecha no disponible" : new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "numeric", year: "2-digit", hour: "numeric", minute: "2-digit" }).format(date); }
 function formatRelativeDate(value?: string): string { if (!value) return "en fecha no disponible"; const date = new Date(value); if (Number.isNaN(date.getTime())) return "en fecha no disponible"; return new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(date).replace(",", " ·"); }
-function isActiveOrder(order: WorkOrder): boolean { return order.status === "GENERADO"; }
-export function findActiveOrderForSupply(orders: readonly WorkOrder[], debtorId: string, accountId?: string): WorkOrder | undefined {
-  return orders.find((order) => isActiveOrder(order) && (order.debtorId === debtorId || (Boolean(accountId) && order.accountId === accountId)));
-}
 function orderDomainStatusLabel(status: WorkOrder["status"]): string { return status === "GENERADO" ? "Generada" : status === "EJECUTADO" ? "Ejecutada" : status === "RECONEXIÓN" ? "Reconectada" : "Anulada"; }
 function orderStatusLabel(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "Físico incierto"; return orderDomainStatusLabel(order.status); }
 function statusTone(order: WorkOrder): string { if (order.physicalStatus === "PHYSICAL_UNKNOWN") return "review"; return order.status === "GENERADO" ? "ready" : order.status === "EJECUTADO" ? "done" : order.status === "ANULADO" ? "muted" : "active"; }
@@ -615,46 +597,6 @@ function errorCode(error: unknown): string | undefined {
 function readableError(error: unknown): string {
   if (isActiveOrderConflict(error)) return "Este suministro ya tiene una orden activa. Revise su ficha para asignarla.";
   return error instanceof Error ? error.message : "No pudimos completar la operación administrativa.";
-}
-export interface AdminFilterOption { value: string; label: string; }
-export interface AdminFilterOptions { areas: AdminFilterOption[]; localities: AdminFilterOption[]; routes: AdminFilterOption[]; statuses: AdminFilterOption[]; }
-export function getAdminFilterOptions(records: readonly DebtorRecord[], selectedArea = "", selectedLocality = "", selectedRoute = "", selectedStatus = ""): AdminFilterOptions {
-  const areaRecords = records.filter((record) => matchesFilterValue(record.area, selectedArea));
-  return {
-    areas: filterOptionEntries(records.map((record) => ({ value: record.area, label: record.areaName })), selectedArea),
-    localities: filterOptionEntries(areaRecords.map((record) => ({ value: record.locality })), selectedLocality),
-    routes: filterOptionEntries(records.map((record) => ({ value: record.route, label: record.routeName })), selectedRoute),
-    statuses: filterOptionEntries(records.map((record) => ({ value: record.supplyStatus ?? "" })), selectedStatus),
-  };
-}
-export function filterOptions(values: string[], selected: string): string[] {
-  return filterOptionEntries(values.map((value) => ({ value })), selected).map((option) => option.value);
-}
-function filterOptionEntries(values: readonly { value: string; label?: string }[], selected: string): AdminFilterOption[] {
-  const options = new Map<string, AdminFilterOption>();
-  for (const entry of selected ? [...values, { value: selected }] : values) {
-    if (entry.value === NO_DATA_FILTER_VALUE) {
-      options.set(NO_DATA_FILTER_VALUE, { value: NO_DATA_FILTER_VALUE, label: "Sin dato" });
-      continue;
-    }
-    const displayValue = entry.value.trim().replace(/\s+/g, " ");
-    const normalizedValue = normalizeFilterValue(displayValue);
-    if (normalizedValue && !options.has(normalizedValue)) options.set(normalizedValue, { value: displayValue, label: entry.label?.trim() || displayValue });
-    if (!normalizedValue) options.set(NO_DATA_FILTER_VALUE, { value: NO_DATA_FILTER_VALUE, label: "Sin dato" });
-  }
-  return [...options.values()].sort((left, right) => {
-    if (left.value === NO_DATA_FILTER_VALUE) return 1;
-    if (right.value === NO_DATA_FILTER_VALUE) return -1;
-    return left.label.localeCompare(right.label, "es");
-  });
-}
-export function matchesFilterValue(value: string | undefined, expected: string | undefined): boolean {
-  if (!expected) return true;
-  if (expected === NO_DATA_FILTER_VALUE) return !normalizeFilterValue(value ?? "");
-  return normalizeFilterValue(value ?? "") === normalizeFilterValue(expected);
-}
-function normalizeFilterValue(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
 function parseMinMonths(value: string): number | undefined { const parsed = Number(value); return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined; }
 function joinAdminValues(...values: Array<string | number | undefined>): string | undefined { const available = values.filter((value) => value !== undefined && value !== ""); return available.length ? available.join(" · ") : undefined; }

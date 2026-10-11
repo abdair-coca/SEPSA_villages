@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { activateDialog, getDialogControls, handleDialogKeyDown, resolveDialogTheme } from "./dialog-lifecycle";
+import {
+  activateDialog,
+  getDialogControls,
+  handleDialogKeyDown,
+  handleFullscreenMapKeyDown,
+  resolveDialogTheme,
+  restoreFullscreenMapFocus,
+} from "./dialog-lifecycle";
 
 function control({ visible = true, disabled = false, tabIndex = 0, visibility = "visible" } = {}) {
   return {
@@ -358,5 +365,62 @@ describe("dialog owner theme", () => {
     const owner = { getAttribute: () => null, matches: (value: string) => value === selector };
     const doc = { activeElement: null, querySelector: () => owner };
     expect(resolveDialogTheme(doc as unknown as Document)).toBe(theme);
+  });
+});
+
+describe("fullscreen map focus", () => {
+  it("wraps Tab in both directions and closes on Escape", () => {
+    const first = { focus: vi.fn(), getClientRects: () => [{}] } as unknown as HTMLElement;
+    const last = { focus: vi.fn(), getClientRects: () => [{}] } as unknown as HTMLElement;
+    const dialog = { querySelectorAll: () => [first, last], focus: vi.fn() } as unknown as HTMLElement;
+    vi.stubGlobal("getComputedStyle", () => ({ visibility: "visible" }));
+
+    const tabForward = {
+      key: "Tab",
+      shiftKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent;
+    vi.stubGlobal("document", { activeElement: last });
+    handleFullscreenMapKeyDown(tabForward, dialog);
+    expect(tabForward.preventDefault).toHaveBeenCalledOnce();
+    expect(first.focus).toHaveBeenCalledOnce();
+
+    const tabBackward = {
+      key: "Tab",
+      shiftKey: true,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent;
+    vi.stubGlobal("document", { activeElement: first });
+    handleFullscreenMapKeyDown(tabBackward, dialog);
+    expect(tabBackward.preventDefault).toHaveBeenCalledOnce();
+    expect(last.focus).toHaveBeenCalledOnce();
+
+    const onClose = vi.fn();
+    const escape = {
+      key: "Escape",
+      shiftKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent;
+    handleFullscreenMapKeyDown(escape, dialog, onClose);
+    expect(escape.preventDefault).toHaveBeenCalledOnce();
+    expect(escape.stopPropagation).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("returns focus to the opener, with a dialog fallback", () => {
+    const opener = { isConnected: true, focus: vi.fn() } as unknown as HTMLElement;
+    const fallback = { focus: vi.fn() } as unknown as HTMLButtonElement;
+    const dialog = { querySelector: () => fallback } as unknown as HTMLElement;
+
+    restoreFullscreenMapFocus(opener, dialog);
+    expect(opener.focus).toHaveBeenCalledOnce();
+
+    restoreFullscreenMapFocus(null, dialog);
+    expect(fallback.focus).toHaveBeenCalledOnce();
   });
 });

@@ -57,7 +57,7 @@ field-app/src/
 │   ├── indexeddb/           Persistencia local y cola durable
 │   ├── browser/             Conectividad, almacenamiento de sesión, Service Worker
 │   └── mock/                Autorización y transporte simulados
-├── state/                   (antes app/) Store de la app de campo: store, acciones, sync, resultados, evidencia
+├── state/                   (antes app/) Store de la app de campo: store, acciones, sync, resultados, evidencia, comandos compuestos
 ├── bootstrap/               (antes app/runtime.ts) Construcción de stores y paquetes demo/autenticados
 ├── services/                Servicios de navegador sin UI: caché de mapas, petición GPS
 ├── screens/                 Pantallas completas (una por rol/ruta)
@@ -76,10 +76,13 @@ field-app/src/
 │       ├── PaginationControls.tsx · UiState.tsx · Icons.tsx
 │       └── BrandLockup.tsx · ExitConfirmationModal.tsx
 ├── utils/                   Funciones puras de presentación
-│   ├── format.ts            Fechas, montos, ids cortos, valores vacíos
+│   ├── format.ts            Fechas, montos, ids cortos, coordenadas, valores vacíos, textos largos
 │   ├── labels.ts            Etiquetas de estados y acciones
-│   ├── sorting.ts           Ordenamientos de órdenes, actividad y cola
-│   └── dialog-lifecycle.ts  Foco, teclado y tema de diálogos
+│   ├── sorting.ts           Ordenamientos y conteos de órdenes, actividad y cola
+│   ├── pagination.ts        Paginación de listas en pantalla
+│   ├── filters.ts           Opciones y coincidencia de filtros del administrador
+│   ├── capture-wizard.ts    Pasos y recuperación del asistente de captura
+│   └── dialog-lifecycle.ts  Foco, teclado y tema de diálogos (incluido el mapa a pantalla completa)
 └── styles/                  CSS por tipo: tokens, controles, shell, y un archivo por pantalla/componente
 ```
 
@@ -143,7 +146,7 @@ El detalle de reglas sigue en `docs/`; el comentario enlaza al documento en vez 
 |---|---|---|---|---|
 | 0 | Cierre del refactor actual y limpieza | ambos | Bajo | Hecha |
 | 1 | Reorganización por tipo de field-app | field-app | Bajo | Hecha |
-| 2 | Utilidades y reglas en su capa | field-app | Bajo | Pendiente |
+| 2 | Utilidades y reglas en su capa | field-app | Bajo | Hecha |
 | 3 | Comentarios y mapa del código | ambos | Nulo | Pendiente |
 | 4 | División de componentes grandes | field-app | Medio | Pendiente |
 | 5 | Backend por tipo (controller/service/repository) | backend | Medio | Pendiente |

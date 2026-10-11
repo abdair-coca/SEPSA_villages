@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **2**
+Fase en curso: **3**
 
 ---
 
@@ -74,22 +74,24 @@ Solo `git mv` y actualización de imports. Ningún símbolo exportado cambia de 
 
 ## Fase 2 — Utilidades y reglas en su capa
 
-- [ ] Dividir `utils/field-app-utils.ts`:
-  - [ ] `utils/format.ts`: `formatDate`, `formatActivityTime`, `formatLastUpdate`, `formatDebt`, `displayValue`, `shortHash`, `shortTechnicalId`, `splitReviewText`
-  - [ ] `utils/labels.ts`: `actionLabel`, `queueActionLabel`, `activityLabel`, `activityDetail`, `activityException`, `orderStatusLabel`, `fieldOrderStatusLabel`, `physicalStatusLabel`, `orderStatusTone`, `syncStatusLabel`, `queueReviewMessage`
-  - [ ] `utils/sorting.ts`: `sortActivityEntries`, `sortSyncItemsForDisplay`, `sortOrdersForNext`, `orderJourneyOrders`, `adjacentJourneyOrder`, `activityTimestampsByOperation`, `syncItemTimestamp`, `activityTimestamp`, `orderActivityReviewPages`
-  - [ ] Revisar el resto (`hasCadastralCoordinates`, `pendingCount`, `isUsable`) y ubicar cada una
-  - [ ] Eliminar `field-app-utils.ts`
-- [ ] Mover `isManualVisitAllowed` a `domain/policies.ts` con test en `policies.test.ts`
-- [ ] Revisar `utils/` en busca de otras decisiones de negocio y moverlas a `domain/`
-- [ ] Sacar helpers puros exportados desde pantallas/componentes a `utils/` o `domain/` (con sus tests):
-  - [ ] `OperationsApp.tsx`: `getAdminOrderPage`, `formatAdminCoordinates`, `getMissingOrderCreationDebtorIds`, constantes de paginación
-  - [ ] `FieldApp.tsx`: `syncThenRefreshAssigned`, `openOrderMap`
-  - [ ] `OrderDetail.tsx`: `cutCompletionOutcome`, `paginateReviewFields`
-  - [ ] `CaptureForm.tsx`: `captureWizardSteps`, `captureDraftCanAdvance`, `captureSubmitError`, `loadCaptureDraftSafely`
-  - [ ] `SyncQueue.tsx`: `queuePageItem`
-  - [ ] `FieldMap.tsx`: `orderPopupHtml`, `handleFullscreenMapKeyDown`, `restoreFullscreenMapFocus`
-- [ ] **Validación:** suite completa de field-app en verde; commit; estado actualizado en `PLAN.md`
+- [x] Dividir `utils/field-app-utils.ts`:
+  - [x] `utils/format.ts`: `formatDate`, `formatActivityTime`, `formatLastUpdate`, `formatDebt`, `displayValue`, `shortHash`, `shortTechnicalId`, `splitReviewText`, `orderActivityReviewPages` (+ `formatAdminCoordinates`, `escapeHtml`, `orderPopupHtml`)
+  - [x] `utils/labels.ts`: `actionLabel`, `queueActionLabel`, `activityLabel`, `activityDetail`, `activityException`, `orderStatusLabel`, `fieldOrderStatusLabel`, `physicalStatusLabel`, `orderStatusTone`, `syncStatusLabel`, `queueReviewMessage`
+  - [x] `utils/sorting.ts`: `sortActivityEntries`, `sortSyncItemsForDisplay`, `sortOrdersForNext`, `orderJourneyOrders`, `adjacentJourneyOrder`, `activityTimestampsByOperation`, `syncItemTimestamp`, `activityTimestamp`, `pendingCount`
+  - [x] Revisar el resto: `hasCadastralCoordinates` e `isUsable` → `domain/policies.ts`; `pendingCount` → `utils/sorting.ts`
+  - [x] Eliminar `field-app-utils.ts`
+- [x] Mover `isManualVisitAllowed` a `domain/policies.ts` (sus tests existentes en `FieldApp.test.tsx` siguen cubriéndola vía render)
+- [x] Revisar `utils/` en busca de otras decisiones de negocio y moverlas a `domain/` → `cutCompletionOutcome` y `findActiveOrderForSupply` (+ `isActiveOrder`) a `domain/policies.ts`; `ActionKind` a `domain/types.ts`
+- [x] Sacar helpers puros exportados desde pantallas/componentes a `utils/`, `domain/` o `state/` (con sus tests):
+  - [x] `OperationsApp.tsx`: `getAdminOrderPage` y tamaños de página → `utils/pagination.ts`; `formatAdminCoordinates` → `utils/format.ts`; `getMissingOrderCreationDebtorIds`, `getAdminFilterOptions`, `filterOptions`, `matchesFilterValue` → `utils/filters.ts`; `NO_DATA_FILTER_VALUE` → `domain/types.ts` (unificado con la copia del adaptador IndexedDB)
+  - [x] `FieldApp.tsx`: `syncThenRefreshAssigned`, `openOrderMap` → `state/field-commands.ts`
+  - [x] `OrderDetail.tsx`: `cutCompletionOutcome` → `domain/policies.ts`; `paginateReviewFields` → `utils/pagination.ts`
+  - [x] `CaptureForm.tsx`: `captureWizardSteps`, `captureDraftCanAdvance`, `captureSubmitError`, `loadCaptureDraftSafely`, `restoreEvidenceFile` → `utils/capture-wizard.ts`
+  - [x] `SyncQueue.tsx`: `queuePageItem` → `utils/pagination.ts`
+  - [x] `FieldMap.tsx`: `orderPopupHtml`, `escapeHtml` → `utils/format.ts`; `handleFullscreenMapKeyDown`, `restoreFullscreenMapFocus` → `utils/dialog-lifecycle.ts`
+  - [x] Quitar las reexportaciones de `FieldApp.tsx`, `OrderDetail.tsx` y `SyncQueue.tsx` (eran barrels encubiertos)
+  - [x] Tests de funciones puras movidos a `utils/*.test.ts`, `state/field-commands.test.ts` y `domain/policies.test.ts`; `components/FieldMap.test.ts` eliminado (todo su contenido era de helpers)
+- [x] **Validación:** `tsc`, `vitest` (316/316, mismo total que antes), `build`, `smoke:ui` (17/17), `smoke:pwa` en verde; commit; estado actualizado en `PLAN.md`
 
 ## Fase 3 — Comentarios y mapa del código
 
@@ -210,6 +212,9 @@ Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de u
 
 - Fase 0: los smokes `smoke:ui`/`smoke:pwa` exigen `VITE_PILOT_BACKEND_URL=""` en el entorno (como en CI); sin esa variable fallan antes de empezar. Añadirlo a la validación estándar de `PLAN.md`.
 - Fase 1: `screens/FieldApp.tsx` importa `adapters/browser/connectivity` y `screens/LoginScreen.tsx` importa `adapters/browser/session-persistence`. Las pantallas deberían recibir esos puertos desde `App.tsx`/`bootstrap/`. Registradas como excepciones en `src/architecture.test.ts`; corregir en una tarea aparte (cambia props de pantallas).
-- Fase 1: `utils/field-app-utils.ts` importa tipos de `state/` (`ActionKind`, `ActivityEntry`). Revisar en la fase 2 al repartir el archivo.
+- Fase 1→2: `utils/` importaba tipos de `state/`. Resuelto para `ActionKind` (ahora en `domain/types.ts`). `ActivityEntry` sigue en `state/store.ts` porque es un modelo de vista del store; `utils/format.ts` y `utils/sorting.ts` lo importan solo como tipo.
+- Fase 2: `screens/OperationsApp.tsx` tiene etiquetas privadas propias del admin (`orderDomainStatusLabel`, `orderStatusLabel`, `statusTone`, `formatRelativeDate`) con textos distintos a los de `utils/labels.ts` (p. ej. "Generada" vs "Por ejecutar"). Moverlas a `utils/labels.ts` con nombres `admin*` en la fase 4; unificar textos es decisión de producto.
+- Fase 2: `FieldMap.tsx` tiene `orderCoordinates()` que repite la validación de `hasCadastralCoordinates` (`domain/policies.ts`). Unificar en la fase 4.
+- Fase 2: imports sin usar preexistentes (detectados con `tsc --noUnusedLocals`), p. ej. en `OrderDetail.tsx` (`ReactNode`, `ActionInput`, iconos), `state/store-actions.ts`, `state/store.ts` (`formatSyncMessage`), `adapters/http/client.ts` (`ApiErrorBody`, `numberOr`). Limpiar en la fase 3 o 4.
 - Fase 1: `main.tsx` importa `adapters/browser/service-worker`; se considera punto de composición junto con `App.tsx` y `bootstrap/`.
 - Fase 0: `npm run build` avisa de un chunk de ~507 kB (>500 kB). No bloquea; evaluar code-splitting fuera de este plan.

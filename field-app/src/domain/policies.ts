@@ -1,5 +1,6 @@
 import { DomainError } from "./errors";
 import type {
+  ConnectivityMode,
   EvidenceReference,
   FieldCapture,
   OperationRecord,
@@ -285,4 +286,31 @@ export function copyOrderForOperationalUse(order: WorkOrder): WorkOrder {
   const projected = structuredClone(order) as WorkOrder & { cancellation?: unknown };
   delete projected.cancellation;
   return { ...projected, context: order.context ? copyOperationalContext(order.context) : undefined };
+}
+
+export function isManualVisitAllowed(order: WorkOrder): boolean {
+  return order.status === "GENERADO" && order.physicalStatus === "NONE";
+}
+
+export function hasCadastralCoordinates(context?: WorkOrder["context"]): boolean {
+  return typeof context?.cadastralLatitude === "number"
+    && Number.isFinite(context.cadastralLatitude)
+    && typeof context?.cadastralLongitude === "number"
+    && Number.isFinite(context.cadastralLongitude);
+}
+
+export function isUsable(mode: ConnectivityMode): boolean {
+  return mode !== "offline";
+}
+
+export function cutCompletionOutcome(durable: boolean, order?: WorkOrder): "confirmed" | "pending" | "review" | undefined {
+  if (order?.status === "EJECUTADO" && order.physicalStatus === "CONFIRMED") return "confirmed";
+  if (order?.physicalStatus === "PHYSICAL_UNKNOWN") return "review";
+  return durable ? "pending" : undefined;
+}
+
+function isActiveOrder(order: WorkOrder): boolean { return order.status === "GENERADO"; }
+
+export function findActiveOrderForSupply(orders: readonly WorkOrder[], debtorId: string, accountId?: string): WorkOrder | undefined {
+  return orders.find((order) => isActiveOrder(order) && (order.debtorId === debtorId || (Boolean(accountId) && order.accountId === accountId)));
 }

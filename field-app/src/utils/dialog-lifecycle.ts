@@ -162,3 +162,43 @@ export function activateDialog(dialog: HTMLElement, portalRoot: HTMLElement, get
     else if (top) focusFirstControl(top.dialog);
   };
 }
+
+const FOCUSABLE_MAP_CONTROLS = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+export function handleFullscreenMapKeyDown(event: KeyboardEvent, dialog: HTMLElement, onClose?: () => void): void {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose?.();
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const controls = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_MAP_CONTROLS))
+    .filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
+  if (controls.length === 0) {
+    event.preventDefault();
+    dialog.focus();
+    return;
+  }
+
+  const active = document.activeElement;
+  if (!controls.some((element) => element === active)) {
+    event.preventDefault();
+    (event.shiftKey ? controls[controls.length - 1] : controls[0]).focus();
+  } else if (event.shiftKey && active === controls[0]) {
+    event.preventDefault();
+    controls[controls.length - 1].focus();
+  } else if (!event.shiftKey && active === controls[controls.length - 1]) {
+    event.preventDefault();
+    controls[0].focus();
+  }
+}
+
+export function restoreFullscreenMapFocus(opener: HTMLElement | null, dialog: HTMLElement | null): void {
+  if (opener?.isConnected) {
+    opener.focus();
+  } else {
+    dialog?.querySelector<HTMLButtonElement>(".btn-expand-map")?.focus();
+  }
+}

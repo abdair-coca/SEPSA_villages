@@ -34,6 +34,7 @@ import type { RemoteResult } from "../../ports/authorization";
 import { createSimulatedPackageEnvelope } from "./package-validation";
 import { deleteAuthorityDatabase, openAuthorityDatabase } from "./authority-database";
 import { requestResult, transactionComplete } from "./database";
+import { NO_DATA_FILTER_VALUE } from "../../domain/types";
 
 interface StoredUser extends SimulatedUser {
   credentialHash: string;
@@ -721,8 +722,6 @@ async function hashCredential(credential: string): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-
-const NO_DATA_FILTER_VALUE = "__NO_DATA__";
 
 function matchesOptional(value: string, expected: string | undefined): boolean {
   if (!expected) return true;

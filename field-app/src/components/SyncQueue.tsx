@@ -4,7 +4,11 @@ import type { WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
 import { PaginationControls } from "./common/PaginationControls";
 import { AppStateCard } from "./common/UiState";
-import { activityTimestampsByOperation, formatDate, isUsable, queueActionLabel, queueReviewMessage, shortTechnicalId, sortSyncItemsForDisplay, syncItemTimestamp, syncStatusLabel } from "../utils/field-app-utils";
+import { isUsable } from "../domain/policies";
+import { queueActionLabel, syncStatusLabel, queueReviewMessage } from "../utils/labels";
+import { sortSyncItemsForDisplay, activityTimestampsByOperation, syncItemTimestamp } from "../utils/sorting";
+import { formatDate, shortTechnicalId } from "../utils/format";
+import { queuePageItem } from "../utils/pagination";
 
 export function QueuePanel({ state, store }: { state: AppState; store: AppStore }) {
   const [requestedPage, setRequestedPage] = useState(1);
@@ -26,12 +30,6 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
       </> : <AppStateCard layout="inline" tone="empty" className="empty-state" title="Cola despejada" description="No hay operaciones locales para mostrar." />}
     </section>
   );
-}
-
-export function queuePageItem(items: SyncItem[], requestedPage: number) {
-  const pageCount = Math.max(1, items.length);
-  const page = Number.isFinite(requestedPage) ? Math.min(pageCount, Math.max(1, Math.trunc(requestedPage))) : 1;
-  return { page, pageCount, item: items[page - 1] };
 }
 
 function QueueItem({ item, displayedAt, order, onRetry, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: SyncItem; displayedAt?: string; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
@@ -57,4 +55,3 @@ function QueueItem({ item, displayedAt, order, onRetry, onViewOrder, onViewFullD
   );
 }
 
-export { queueReviewMessage } from "../utils/field-app-utils";

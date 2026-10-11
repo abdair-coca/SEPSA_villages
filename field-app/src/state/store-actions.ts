@@ -5,8 +5,9 @@ import { generateOperationId, type FieldCapture, type WorkOrder } from "../domai
 import type { CaptureDraftKey, StoredRecord } from "../ports/repository";
 import type { SyncItem } from "../ports/sync";
 import { prepareEvidence } from "./evidence";
-import type { ActionInput, ActionKind, ActionResult, AppState, AppStoreDependencies } from "./store";
+import type { ActionInput, ActionResult, AppState, AppStoreDependencies } from "./store";
 import { actionResultForCut, actionResultForReconnection, actionResultForVisit, messageForCut, messageForReconnection } from "./store-results";
+import type { ActionKind } from "../domain/types";
 
 export interface ActionCoordinatorContext {
   dependencies: AppStoreDependencies;

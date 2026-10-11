@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { ActionKind, AppMessage, AppStore, AppState, OrderFilter } from "../state/store";
+import type { AppMessage, AppStore, AppState, OrderFilter } from "../state/store";
 import { selectVisibleOrders } from "../state/store";
 import { downloadRouteMap, isRouteMapCached, type CacheProgress } from "../services/map-cache";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
-import type { ConnectivityMode, WorkOrder } from "../domain/types";
+import type { ConnectivityMode, WorkOrder, ActionKind } from "../domain/types";
 import { AppHeader, type AppHeaderRoleSwitch } from "../components/AppHeader";
 import { FieldMap } from "../components/FieldMap";
 import { IconAlertTriangle, IconBan, IconCheck, IconCheckCircle, IconClock, IconCrosshair, IconDatabase, IconDevice, IconDocument, IconDownload, IconExpand, IconMap, IconPin, IconRefresh, IconRoute, IconUser } from "../components/common/Icons";
@@ -13,12 +13,12 @@ import { PaginationControls } from "../components/common/PaginationControls";
 import { AppStateCard } from "../components/common/UiState";
 import { OrderDetail } from "../components/OrderDetail";
 import { QueuePanel } from "../components/SyncQueue";
-import { activityLabel, activityTimestamp, adjacentJourneyOrder, displayValue, fieldOrderStatusLabel, formatActivityTime, formatDebt, formatLastUpdate, hasCadastralCoordinates, isManualVisitAllowed, orderJourneyOrders, orderStatusTone, pendingCount, shortTechnicalId, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay } from "../utils/field-app-utils";
+import { isManualVisitAllowed, hasCadastralCoordinates } from "../domain/policies";
+import { activityLabel, fieldOrderStatusLabel, orderStatusTone } from "../utils/labels";
+import { sortActivityEntries, sortSyncItemsForDisplay, sortOrdersForNext, orderJourneyOrders, adjacentJourneyOrder, pendingCount, activityTimestamp } from "../utils/sorting";
+import { displayValue, formatDebt, formatActivityTime, formatLastUpdate, shortTechnicalId } from "../utils/format";
+import { syncThenRefreshAssigned, openOrderMap } from "../state/field-commands";
 
-export { ActionCompletionDialog, cutCompletionOutcome, OrderReviewMap, orderActivityReviewPages, paginateReviewFields } from "../components/OrderDetail";
-export { EvidencePicker, captureDraftCanAdvance, captureSubmitError, captureWizardSteps, loadCaptureDraftSafely, restoreEvidenceFile } from "../components/CaptureForm";
-export { QueuePanel, queuePageItem, queueReviewMessage } from "../components/SyncQueue";
-export { adjacentJourneyOrder, fieldOrderStatusLabel, orderJourneyOrders, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay } from "../utils/field-app-utils";
 
 export interface FieldAppProps {
   store: AppStore;
@@ -254,18 +254,6 @@ export function FieldApp({
     </div>
   );
 }
-export async function syncThenRefreshAssigned(store: AppStore, refreshAssigned: () => Promise<void>): Promise<void> {
-  const hasPending = store.getSnapshot().syncItems.some((item) => item.status !== "synced");
-  if (hasPending) await store.sync();
-  const remaining = store.getSnapshot().syncItems.filter((item) => item.status !== "synced");
-  if (remaining.length) {
-    const code = remaining.find((item) => item.errorCode)?.errorCode;
-    throw new Error(code
-      ? `El servidor no confirmó ${remaining.length} operación(es) pendiente(s) (${code}). Los registros y evidencias siguen guardados en este dispositivo.`
-      : `El servidor no confirmó ${remaining.length} operación(es) pendiente(s). Los registros y evidencias siguen guardados en este dispositivo.`);
-  }
-  await refreshAssigned();
-}
 
 function Workbench({
   state,
@@ -372,11 +360,6 @@ function FieldHome({ state, store, orders, onOpenIncident, onReviewOrder }: { st
       <HomeSecondaryCards state={state} store={store} />
     </section>
   );
-}
-
-export function openOrderMap(store: AppStore, orderId?: string): void {
-  if (orderId) store.selectOrder(orderId);
-  store.setTab("map");
 }
 
 function OperationalSummary({ state }: { state: AppState }) {

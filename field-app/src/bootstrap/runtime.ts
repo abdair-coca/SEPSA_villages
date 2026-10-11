@@ -3,7 +3,7 @@ import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/mock/authorization";
 import { MockConnectivity } from "../adapters/mock/connectivity";
 import { MockSyncTransport } from "../adapters/mock/transport";
-import type { ActionKind, AppStore, PrepareExternalValidation } from "../state/store";
+import type { AppStore, PrepareExternalValidation } from "../state/store";
 import { createAppStore, DEMO_DEVICE_ID, DEMO_PACKAGE_ID, DEMO_TECHNICIAN_ID } from "../state/store";
 import type {
   AuthorizationAdapter,
@@ -22,7 +22,7 @@ import type {
   RemoteResult,
 } from "../ports/authorization";
 import type { OperationsAuthorityPort } from "../ports/authority";
-import type { WorkOrder, WorkPackage, Session } from "../domain/types";
+import type { WorkOrder, WorkPackage, Session, ActionKind } from "../domain/types";
 import type { SyncPayload, SyncTransport, SyncTransportResponse } from "../ports/sync";
 import { NetworkUnknownError, withRetries } from "../adapters/mock/retry";
 
