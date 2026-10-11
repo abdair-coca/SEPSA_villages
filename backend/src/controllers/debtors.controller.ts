@@ -1,29 +1,16 @@
 /**
- * Búsqueda paginada de suministros morosos (solo ADMIN) con filtros de texto, área, localidad, ruta,
- * meses pendientes y estado del suministro.
+ * HTTP de la búsqueda de morosos (`GET /v1/debtors`, solo ADMIN): lee y valida los filtros y la paginación de la
+ * URL y responde la página. No tiene servicio propio: la búsqueda no aplica reglas de negocio más allá del rol,
+ * así que el controlador llama directo a `repositories/debtors.repository.ts`, que arma y ejecuta el SQL.
  */
 import type { ServerResponse } from "node:http";
 import { HttpError, sendJson } from "../http/responses.js";
-import type { SessionUser } from "../types.js";
+import { toDebtor } from "../mappers/debtor.mapper.js";
+import { buildDebtorSearchCriteria, countDebtors, searchDebtors, type DebtorSearchFilters } from "../repositories/debtors.repository.js";
 import { PROVISIONAL_SOURCE, type ApplicationContext } from "../shared/application-context.js";
-import { toDebtor, type DebtorRow } from "../mappers/debtor.mapper.js";
-import { debtorColumns, kardexColumns, NO_DATA_FILTER_VALUE } from "../repositories/debtors.repository.js";
 import { pageRequest, pageResponse } from "../shared/pagination.js";
 import { requireRole } from "../shared/request-validation.js";
-
-export interface DebtorSearchFilters {
-  search: string;
-  area: string;
-  locality: string;
-  route: string;
-  minMonthsPending: number;
-  supplyStatus: string;
-}
-
-export interface DebtorSearchCriteria {
-  where: string;
-  values: [string, string, string, string, string, number, string];
-}
+import type { SessionUser } from "../types.js";
 
 export interface DebtorHandlers {
   listDebtors(response: ServerResponse, user: SessionUser, url: URL): Promise<void>;
@@ -35,20 +22,12 @@ export function createDebtorHandlers(context: ApplicationContext): DebtorHandler
     const filters = parseDebtorSearchFilters(url);
     const criteria = buildDebtorSearchCriteria(filters);
     const page = pageRequest(url);
-    const result = await context.pool.query<DebtorRow>(
-      `SELECT ${debtorColumns()}
-       FROM debtors WHERE ${criteria.where}
-       ORDER BY updated_at DESC NULLS LAST, debtor_id ASC LIMIT $8 OFFSET $9`,
-      [...criteria.values, page.limit, page.offset],
-    );
-    const count = await context.pool.query<{ total: string }>(
-      `SELECT COUNT(*)::text AS total FROM debtors WHERE ${criteria.where}`,
-      criteria.values,
-    );
+    const debtors = await searchDebtors(context.pool, criteria, page);
+    const total = await countDebtors(context.pool, criteria);
     sendJson(response, 200, {
       source: PROVISIONAL_SOURCE,
-      debtors: result.rows.map(toDebtor),
-      ...pageResponse(page, Number(count.rows[0]?.total ?? 0), result.rows.length),
+      debtors: debtors.map(toDebtor),
+      ...pageResponse(page, total, debtors.length),
     });
   }
 
@@ -68,21 +47,5 @@ export function parseDebtorSearchFilters(url: URL): DebtorSearchFilters {
     route: (url.searchParams.get("route") ?? "").trim(),
     minMonthsPending,
     supplyStatus: (url.searchParams.get("supply_status") ?? "").trim(),
-  };
-}
-
-export function buildDebtorSearchCriteria(filters: DebtorSearchFilters): DebtorSearchCriteria {
-  return {
-    where: `source = $1 AND ($2 = '' OR concat_ws(' ', debtor_id, account_id, supply_id, customer_name, address, reference_text,
-           meter_id, area, locality, route, debt_cents::text, months_pending::text, updated_at::text, ${kardexColumns("kardex")}::text, circuit,
-           customer_ci, contact_phone, tariff, supply_status, enabling_title, route_order::text, cadastral_latitude::text,
-           cadastral_longitude::text, meter_brand, meter_index, meter_multiplier::text, claims::text,
-           suspension_date::text, reconnection_manual::text, reconnection_date::text, reconnection_technician) ILIKE '%' || $2 || '%')
-        AND ($3 = '' OR ($3 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(area), '') IS NULL) OR regexp_replace(LOWER(BTRIM(area)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($3)), '\\s+', ' ', 'g'))
-        AND ($4 = '' OR ($4 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(locality), '') IS NULL) OR regexp_replace(LOWER(BTRIM(locality)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($4)), '\\s+', ' ', 'g'))
-        AND ($5 = '' OR ($5 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(route), '') IS NULL) OR regexp_replace(LOWER(BTRIM(route)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($5)), '\\s+', ' ', 'g'))
-        AND ($6 = 0 OR months_pending >= $6)
-        AND ($7 = '' OR ($7 = '${NO_DATA_FILTER_VALUE}' AND NULLIF(BTRIM(supply_status), '') IS NULL) OR regexp_replace(LOWER(BTRIM(supply_status)), '\\s+', ' ', 'g') = regexp_replace(LOWER(BTRIM($7)), '\\s+', ' ', 'g'))`,
-    values: [PROVISIONAL_SOURCE, filters.search, filters.area, filters.locality, filters.route, filters.minMonthsPending, filters.supplyStatus],
   };
 }
