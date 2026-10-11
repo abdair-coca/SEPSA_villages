@@ -27,17 +27,12 @@ import type { IdentityPort } from "./ports/identity";
 import type { OperationsAuthorityPort } from "./ports/authority";
 import { clearStoredSession, persistSession, readStoredSession } from "./adapters/browser/session-persistence";
 import { AppHeader, type AppHeaderRoleSwitch } from "./components/AppHeader";
+import { installMobileBackNavigationGuard, type MobileBackNavigationGuard } from "./services/mobile-back-guard";
+import { getStableDeviceId, resolvePilotBackendUrl } from "./bootstrap/environment";
 
 const authority = typeof indexedDB === "undefined" ? undefined : new IndexedDbAuthorityRepository();
 const pilotBackendUrl = resolvePilotBackendUrl();
 const remoteAuthority = pilotBackendUrl ? new HttpPilotClient({ baseUrl: pilotBackendUrl }) : undefined;
-
-const MOBILE_BACK_GUARD_KEY = "sepsa-mobile-back-guard";
-
-interface MobileBackNavigationGuard {
-  confirmExit: () => void;
-  dispose: () => void;
-}
 
 /** Componente raíz. */
 export function App() {
@@ -93,41 +88,6 @@ export function App() {
     {content}
     {isExitConfirmationOpen ? <ExitConfirmationModal onStay={() => setIsExitConfirmationOpen(false)} onExit={() => { setIsExitConfirmationOpen(false); backGuardRef.current?.confirmExit(); }} /> : null}
   </>;
-}
-
-/**
- * En pantallas móviles, intercepta el botón atrás del navegador para pedir confirmación antes de salir
- * (y no perder la jornada por un toque accidental). En escritorio no hace nada.
- */
-export function installMobileBackNavigationGuard(target: Window, onRequestExit: () => void): MobileBackNavigationGuard | undefined {
-  if (!target.matchMedia("(max-width: 760px)").matches) return undefined;
-
-  const currentState = isRecord(target.history.state) ? target.history.state : {};
-  if (!currentState[MOBILE_BACK_GUARD_KEY]) target.history.pushState({ ...currentState, [MOBILE_BACK_GUARD_KEY]: true }, "", target.location.href);
-
-  let released = false;
-  const handlePopState = (): void => {
-    if (released) return;
-    onRequestExit();
-    const state = isRecord(target.history.state) ? target.history.state : {};
-    target.history.pushState({ ...state, [MOBILE_BACK_GUARD_KEY]: true }, "", target.location.href);
-  };
-  target.addEventListener("popstate", handlePopState);
-
-  return {
-    confirmExit() {
-      if (released) return;
-      released = true;
-      target.history.go(-2);
-    },
-    dispose() {
-      target.removeEventListener("popstate", handlePopState);
-    },
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Modo backend piloto: valida la sesión guardada contra el backend y permite cambiar de rol. */
@@ -270,32 +230,7 @@ async function loadPackage(authority: IdentityPort & OperationsAuthorityPort, se
   }
 }
 
-/** Identificador estable de este dispositivo, generado una vez y guardado en `localStorage`. */
-function getStableDeviceId(): string {
-  const storageKey = "sepsa.simulated.device-id";
-  if (typeof localStorage === "undefined") throw new Error("No se pudo identificar este dispositivo.");
-  const existing = localStorage.getItem(storageKey)?.trim();
-  if (existing) return existing;
-  const randomUuid = globalThis.crypto?.randomUUID?.();
-  if (!randomUuid) throw new Error("No se pudo generar una identidad segura para este dispositivo.");
-  const deviceId = `device-${randomUuid}`;
-  localStorage.setItem(storageKey, deviceId);
-  return deviceId;
-}
-
 function isValidFutureDate(value?: string): boolean {
   const timestamp = value ? Date.parse(value) : Number.NaN;
   return Number.isFinite(timestamp) && timestamp > Date.now();
-}
-
-/**
- * URL del backend piloto: `VITE_PILOT_BACKEND_URL` si está definida; en producción (fuera de localhost),
- * el mismo origen de la página. En desarrollo sin variable, modo simulado.
- */
-function resolvePilotBackendUrl(): string | undefined {
-  const configured = import.meta.env.VITE_PILOT_BACKEND_URL?.trim();
-  if (configured) return configured;
-  if (!import.meta.env.PROD || typeof window === "undefined") return undefined;
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") return undefined;
-  return window.location.origin;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { installMobileBackNavigationGuard } from "./App";
+import { installMobileBackNavigationGuard } from "./mobile-back-guard";
 
 interface FakeHistory {
   state: unknown;
