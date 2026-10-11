@@ -6,3 +6,11 @@
 .DS_Store
 Thumbs.db
 *.log
+# Artefactos locales
+__pycache__/
+*.pyc
+cookies*.txt
+
+# Configuración local de agentes
+.agents/
+.opencode/

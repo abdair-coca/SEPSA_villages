@@ -31,16 +31,28 @@ For every task, read only:
 
 Read `docs/ARCHITECTURE.md`, `docs/DOMAIN.md` or `docs/DECISIONS.md` only when the task touches those areas. Do not read `docs/archive/` by default.
 
+## Active plan: structural cleanup
+
+A multi-phase cleanup is in progress. While `.dev/PLAN.md` exists:
+
+- `.dev/PLAN.md` is the source of truth for the target structure, naming conventions, dependency rules, comment policy and phases. `.dev/TASK.md` is its checklist; the current phase is written at its top.
+- Work on one phase at a time, in order. Mark `[x]` in `.dev/TASK.md` as each task is done and update the phase status table in `.dev/PLAN.md` when a phase closes.
+- Cleanup phases never change behavior: only move (`git mv`), rename, split or comment. Do not change visible texts, endpoints, HTTP contracts, IndexedDB schemas or applied SQL. Record any bug or improvement found under "Hallazgos" in `.dev/TASK.md` instead of fixing it.
+- Organization is **by type**, not by feature (field-app: `domain/`, `ports/`, `use-cases/`, `adapters/`, `state/`, `bootstrap/`, `services/`, `screens/`, `components/`, `components/common/`, `utils/`, `styles/`; backend: `http/`, `controllers/`, `services/`, `repositories/`, `mappers/`, `shared/`, `logging/`). New code follows the target structure of `.dev/PLAN.md` even before its phase runs.
+- A phase is done only when its **Validación** block passes.
+- A feature or bugfix requested during the plan does not replace `.dev/TASK.md`: add it as a separate section at the end of that file and remove the section when done.
+- When every phase is done, follow "Cierre del plan" in `.dev/TASK.md`, which removes this section.
+
 ## Development workflow
 
-For each feature or bugfix, replace `.dev/TASK.md` with the current task before editing. Use it as temporary working memory only; do not create feature plans, debug notes, changelogs or other temporary Markdown files.
+For each feature or bugfix, replace `.dev/TASK.md` with the current task before editing (while a plan is active, see the section above). Use it as temporary working memory only; do not create feature plans, debug notes, changelogs or other temporary Markdown files. The only exception is `.dev/PLAN.md` for a user-approved multi-phase plan.
 
 1. Read this router, `docs/PROJECT.md`, `docs/RULES.md`, then relevant code/docs.
 2. Record goal, current/expected behavior, constraints, files, plan, findings and validation in `.dev/TASK.md`.
 3. Implement the smallest valid change; update the task file only when useful.
 4. Run relevant tests and verify final behavior.
 5. Move only durable knowledge to an existing `docs/` source of truth; keep implementation notes temporary.
-6. Finish by replacing `.dev/TASK.md` with:
+6. Finish by replacing `.dev/TASK.md` with the following (skip this while `.dev/PLAN.md` exists; only remove your own section):
 
 ```yaml
 # Current Task
@@ -60,6 +72,7 @@ No active task.
 | Order creation and assignment | `docs/features/assignments.md` |
 | Cut, visit, GPS, photo or field capture | `docs/features/cuts.md` + `docs/features/readings.md` |
 | Offline queue or retry | `docs/features/synchronization.md` |
+| Structural cleanup, folder layout, naming or code comments | `.dev/PLAN.md` + `.dev/TASK.md` |
 
 ## Before editing
 
