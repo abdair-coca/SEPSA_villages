@@ -1,6 +1,8 @@
 # Plan de limpieza estructural
 
-Estado: **activo**. Checklist de ejecución: [`.dev/TASK.md`](TASK.md).
+> Archivado al cerrar el plan. Estado exacto del repositorio: etiqueta `limpieza-estructural-cerrada`.
+
+Estado: **cerrado**. Checklist de ejecución: [`TASK.md`](TASK.md), archivado junto a este plan.
 
 ## Objetivo
 
