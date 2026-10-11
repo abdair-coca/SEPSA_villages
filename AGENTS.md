@@ -1,23 +1,3 @@
-<!-- gentle-ai:agent-routing -->
-## Implementation Routing
-
-Route work with the smallest useful topology: direct inline, delegated direct, or optional SDD.
-
-- **Direct inline:** decide or verify from 1–3 files; use only for a mechanical, understood change.
-- **Delegated direct:** delegate one narrow exploration when understanding needs 4+ files; delegate one writer for 2+ non-trivial files.
-- **Optional SDD:** propose it only when durable proposal/spec/design/tasks would reduce substantial ambiguity and the user accepts it.
-- File count or perceived risk alone never selects SDD. Direct/delegated work does not create SDD artifacts.
-
-### Receipt-driven development is user-owned
-
-The user controls the switch with `gentle-ai review mode enable|disable|status`.
-
-- `status` is read-only.
-- If the user asks to stop it, run `disable` and do not restart or work around it.
-- While disabled, implement normally and report `disabled/unmanaged`.
-- Never enable it without an explicit request.
-<!-- /gentle-ai:agent-routing -->
-
 # AGENTS.md — Context router
 
 ## Start here
