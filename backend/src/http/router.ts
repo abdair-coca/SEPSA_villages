@@ -16,8 +16,6 @@ import type { DebtorHandlers } from "../controllers/debtors.controller.js";
 import type { EvidenceHandlers } from "../controllers/evidence.controller.js";
 import type { OrderHandlers } from "../controllers/orders.controller.js";
 import type { SyncHandlers } from "../controllers/sync.controller.js";
-import { sessionBody } from "../mappers/session.mapper.js";
-import { sendJson } from "./responses.js";
 
 export type RouteParams = Record<string, string | undefined>;
 
@@ -56,7 +54,7 @@ export function createRoutes(c: RouteControllers): Route[] {
     { method: "POST", pattern: "/v1/auth/login", access: "public", handler: ({ request, response }) => c.auth.login(request, response) },
     { method: "POST", pattern: "/v1/auth/logout", access: "public", handler: ({ request, response }) => c.auth.logout(request, response) },
 
-    { method: "GET", pattern: "/v1/auth/session", access: "session", handler: async ({ response, user }) => sendJson(response, 200, sessionBody(user)) },
+    { method: "GET", pattern: "/v1/auth/session", access: "session", handler: ({ response, user }) => c.auth.currentSession(response, user) },
     { method: "POST", pattern: "/v1/auth/role", access: "session", handler: ({ request, response, user }) => c.auth.switchRole(request, response, user) },
     { method: "GET", pattern: "/v1/technicians", access: "session", handler: ({ response, user }) => c.orders.listTechnicians(response, user) },
     { method: "GET", pattern: "/v1/debtors", access: "session", handler: ({ response, user, url }) => c.debtors.listDebtors(response, user, url) },
