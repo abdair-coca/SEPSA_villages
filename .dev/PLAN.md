@@ -149,7 +149,7 @@ El detalle de reglas sigue en `docs/`; el comentario enlaza al documento en vez 
 | 2 | Utilidades y reglas en su capa | field-app | Bajo | Hecha |
 | 3 | Comentarios y mapa del código | ambos | Nulo | Hecha |
 | 4 | División de componentes grandes | field-app | Medio | Hecha |
-| 5 | Backend por tipo (controller/service/repository) | backend | Medio | Pendiente |
+| 5 | Backend por tipo (controller/service/repository) | backend | Medio | Hecha |
 | 6 | CSS por tipo y deduplicación | field-app | **Alto** | Pendiente |
 | 7 | Higiene del repositorio y migraciones | repo | Medio | Pendiente |
 

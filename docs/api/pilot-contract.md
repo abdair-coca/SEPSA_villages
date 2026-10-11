@@ -1,6 +1,6 @@
 # Contrato HTTP provisional del piloto
 
-El OpenAPI describe lo que `backend/src/application.ts` expone hoy. Es `PROVISIONAL`, `NO OFICIAL` y `PILOT_PROVISIONAL`; no está aprobado por SEPSA. Los clientes deben tratarlo como línea base de integración, no como garantía de compatibilidad oficial.
+El OpenAPI describe lo que `backend/src/http/router.ts` (tabla de rutas) expone hoy. Es `PROVISIONAL`, `NO OFICIAL` y `PILOT_PROVISIONAL`; no está aprobado por SEPSA. Los clientes deben tratarlo como línea base de integración, no como garantía de compatibilidad oficial.
 
 ## Revisión rápida
 

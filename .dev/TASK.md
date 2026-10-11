@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **5**
+Fase en curso: **6**
 
 ---
 
@@ -141,36 +141,36 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 ## Fase 5 — Backend por tipo
 
 **Movimiento sin cambios**
-- [ ] `src/application.ts` → `src/http/application.ts`
-- [ ] `src/http.ts` → `src/http/responses.ts`; `http-contracts.ts`, `application/http-policy.ts`, `application/auth/cookies.ts` → `src/http/`
-- [ ] `application/projections/` → `src/mappers/` (`order.mapper.ts`, `debtor.mapper.ts`, `session.mapper.ts`, `command-response.mapper.ts`)
-- [ ] `application/shared/` + `application/auth/rate-limiter.ts` → `src/shared/`
-- [ ] `security-logger.ts` → `src/logging/`
-- [ ] Handlers de cada módulo → `src/controllers/<modulo>.controller.ts`
-- [ ] Decidir ubicación de `src/auth.ts` (hash/sesión → `services/` o `shared/`)
-- [ ] Actualizar `package.json` (`start`, scripts), `Dockerfile`, `tsconfig.json` y tests con las rutas nuevas
-- [ ] Validación + commit
+- [x] `src/application.ts` → `src/http/application.ts`
+- [x] `src/http.ts` → `src/http/responses.ts`; `http-contracts.ts`, `application/http-policy.ts`, `application/auth/cookies.ts` → `src/http/`
+- [x] `application/projections/` → `src/mappers/` (`order.mapper.ts`, `debtor.mapper.ts`, `session.mapper.ts`, `command-response.mapper.ts`)
+- [x] `application/shared/` + `application/auth/rate-limiter.ts` → `src/shared/` (la idempotencia terminó en `services/command-idempotency.service.ts`)
+- [x] `security-logger.ts` → `src/logging/`
+- [x] Handlers de cada módulo → `src/controllers/<modulo>.controller.ts` (un controlador por módulo tras la fase 5c)
+- [x] Ubicación de `src/auth.ts`: `src/shared/auth-crypto.ts` (lo usan servicios y scripts; no es regla de negocio). `application-context.ts` → `src/shared/` (lo importan todas las capas; en `http/` crearía dependencias de repositorios hacia transporte)
+- [x] `package.json` (`start` sigue en `dist/src/server.js`), `Dockerfile`, `tsconfig.json`, CI y tests con las rutas nuevas (`npm run build` y el test del servidor compilado en verde)
+- [x] Validación + commit
 
 **Router**
-- [ ] Reemplazar la cadena de `if` por una tabla `{ method, pattern, handler }` en `src/http/router.ts`
-- [ ] Test que compare la tabla con los endpoints de `openapi/pilot-provisional.openapi.json`
-- [ ] Validación + commit
+- [x] Tabla `{ method, pattern, access, handler }` en `src/http/router.ts` (incluye `/healthz`)
+- [x] `test/router.test.ts` compara la tabla con `openapi/pilot-provisional.openapi.json` (método + ruta, y rutas públicas)
+- [x] Validación + commit
 
 **Separación controller / service / repository** (un módulo por commit)
-- [ ] `orders`
-- [ ] `debtors`
-- [ ] `audit`
-- [ ] `auth`
-- [ ] `evidence`
-- [ ] `authorizations` (cut + reconexión)
-- [ ] `sync`
-- [ ] Verificar: ningún archivo de `controllers/` contiene `.query(`; ningún archivo de `repositories/` importa `node:http`
-- [ ] Actualizar la tabla del backend y el recorrido de la orden en `docs/ARCHITECTURE.md` → "Mapa del código"
+- [x] `orders`
+- [x] `debtors` (sin servicio: controlador + repositorio)
+- [x] `audit` (sin servicio: controlador + repositorio)
+- [x] `auth`
+- [x] `evidence`
+- [x] `authorizations` (cut + reconexión)
+- [x] `sync`
+- [x] Verificar: ningún archivo de `controllers/` contiene `.query(`; ningún archivo de `repositories/` importa `node:http` ni `HttpError` (lo comprueba `test/architecture.test.ts`)
+- [x] Actualizar la tabla del backend y el recorrido de la orden en `docs/ARCHITECTURE.md` → "Mapa del código"
 
 **Validación**
-- [ ] `npx tsc --noEmit` · `npm run test:unit` · `npm run test:integration` · `npm run e2e:browser` en verde
-- [ ] No existe `src/application/`
-- [ ] Commit; estado actualizado en `PLAN.md`
+- [x] `npx tsc --noEmit` · `npm run test:unit` (55/55) · `npm run test:integration` (1/1) · `npm run e2e:browser` (9 checks, `"result":"passed"`) en verde
+- [x] No existe `src/application/`
+- [x] Commit; estado actualizado en `PLAN.md`
 
 ## Fase 6 — CSS por tipo y deduplicación
 
@@ -222,3 +222,10 @@ Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de u
 - Fase 4: `adapters/indexeddb/repository.ts` (940) y `authority-repository.ts` (797) se mantienen: son una sola clase por puerto (`LocalRepository`, `IdentityPort`/`OperationsAuthorityPort`) cuyos métodos comparten la base, las transacciones atómicas y helpers privados; no hay corte limpio por agregado sin cambiar transacciones. Corte opcional barato: los datos de demostración de `authority-repository.ts` (`simulatedDebtors`, `createExtraSimulatedDebtor`, ~90 líneas) a un archivo `simulated-data.ts`.
 - Fase 4: `OperationsApp.requests.test.tsx` recorre el árbol de elementos sin expandir componentes; al extraer `DebtorSearchPanel` (antes JSX en línea) el helper `elements()` lo expande explícitamente. Cualquier otro panel en línea que se extraiga requerirá lo mismo.
 - Fase 4: `npm run smoke:pwa` falló una vez (exit 1) justo después de `smoke:ui` en la misma shell y pasó en el reintento sin cambios (posible condición de carrera de puerto/servidor); revisar su robustez.
+- Fase 5: `services/command-idempotency.service.ts` mezcla regla (replay/conflicto/"en curso" con `HttpError`) y lectura de `command_operations`; el SQL está en `repositories/commands.repository.ts` pero el servicio lo ejecuta dentro de la transacción del comando. No se separó más para no alterar el orden `INSERT ... ON CONFLICT` → `SELECT ... FOR UPDATE`.
+- Fase 5: `debtors` y `audit` no tienen servicio (controlador + repositorio): son una consulta paginada sin reglas más allá del rol. Si aparecen reglas de negocio, crear `*.service.ts`.
+- Fase 5: `lookupOperation` (sync) decide la forma de la respuesta (`confirmed`/`unknown`/`not_found`) en el servicio y devuelve un objeto JSON ya armado; es presentación de contrato mezclada con la regla "recibo completo". Separarlo cambiaría el contrato del servicio sin ganancia hoy.
+- Fase 5: `parseSyncPayload`/`validateSyncPayload` (forma + reglas de captura de CUT) viven juntos en `services/sync-payload-validation.service.ts` y el controlador los invoca; mezclan validación de forma (400) con reglas de dominio (lectura final real, GPS o excepción). Separar la forma del dominio sería un cambio de diseño aparte.
+- Fase 5: `/healthz` pasó a ser una ruta pública de la tabla; antes se respondía antes de `validateOrigin`. Es equivalente porque `validateOrigin` ignora los GET, pero queda anotado. `POST /v1/auth/logout` figura como pública en la tabla (valida la sesión dentro del controlador) aunque el OpenAPI declare seguridad; el test lo documenta.
+- Fase 5: la tabla de rutas hace que una ruta desconocida sin sesión responda 401 (no 404), igual que antes: la sesión se exige antes de buscar rutas protegidas. Conservado a propósito.
+- Fase 5: `tsc --noUnusedLocals` en backend baja de 10 a 9 errores (se quitó un import sin usar en `mappers/debtor.mapper.ts`); los 9 restantes son de `test/application.test.ts` y `test/reconnection.test.ts` (preexistentes, fuera del alcance).

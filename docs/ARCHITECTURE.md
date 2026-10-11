@@ -105,25 +105,26 @@ La regla de dependencias entre carpetas la verifica `field-app/src/architecture.
 
 | Archivo o carpeta | Responsabilidad |
 |---|---|
-| `server.ts`, `application.ts` | Arranque, pipeline HTTP (seguridad, CORS, CSRF, sesión) y tabla de rutas |
-| `application/auth/` | Login, logout, sesión, cambio de rol y límite de intentos |
-| `application/debtors/`, `application/orders/` | Búsqueda de morosos; crear, asignar y listar órdenes; paquete del técnico |
-| `application/authorizations/` | Autorización de corte y habilitación de reconexión |
-| `application/evidence/` | Subida y verificación de fotos |
-| `application/sync/` | Recepción, consulta y revisión humana de operaciones sincronizadas |
-| `application/audit/` | Registro y consulta de auditoría |
-| `application/shared/`, `application/projections/` | Idempotencia, paginación y validación; conversión de filas SQL a JSON |
-| `auth.ts`, `db.ts`, `http.ts`, `config.ts` | Criptografía, transacciones, utilidades HTTP y configuración |
+| `server.ts`, `config.ts`, `db.ts`, `types.ts` | Arranque del servidor, configuración, pool/transacciones de PostgreSQL (`withTransaction`) y tipos de sesión |
+| `http/` | Transporte: `application.ts` (request id, cabeceras, CORS, CSRF, sesión, errores), `router.ts` (tabla única método + ruta → controlador, comparada con el OpenAPI en `test/router.test.ts`), `responses.ts` (`HttpError`, JSON, cuerpo), `http-policy.ts`, `cookies.ts`, `http-contracts.ts` |
+| `controllers/` | Solo HTTP, uno por módulo (`auth`, `orders`, `debtors`, `authorizations`, `evidence`, `sync`, `audit`): leen y validan la forma de la petición, comprueban el rol, llaman al servicio y responden. Nunca ejecutan SQL |
+| `services/` | Reglas de negocio: roles, duplicados, versiones, idempotencia (`command-idempotency.service.ts`), autorización de un solo uso, aceptación de CUT/RECONNECTION, auditoría. Abren las transacciones y pasan el `client` a los repositorios |
+| `repositories/` | Solo SQL (`orders`, `debtors`, `users`, `authorizations`, `evidence`, `sync`, `audit`, `commands`); no conocen HTTP ni `HttpError` |
+| `mappers/` | Filas SQL → JSON de la API (`order`, `debtor`, `session`, `command-response`) |
+| `shared/` | `application-context.ts` (pool, config, log y `PROVISIONAL_SOURCE`), `auth-crypto.ts` (scrypt y tokens), `rate-limiter.ts`, paginación, validación de petición, digest JSON |
+| `logging/` | `security-logger.ts`: eventos de seguridad sin cuerpos ni datos personales |
+
+Regla de dependencias: `controllers → services → repositories → db`. Excepción documentada: `debtors` y `audit` son consultas sin reglas de negocio y no tienen servicio; su controlador llama directo al repositorio. `test/architecture.test.ts` verifica que ningún controlador contenga SQL, que los repositorios no importen HTTP ni `HttpError` y que `src/application/` no exista.
 
 ### Recorrido de una orden de punta a punta
 
-1. **Admin busca morosos.** `screens/OperationsApp.tsx` → `refresh()` → `HttpPilotClient.findDebtors` → `GET /v1/debtors` → `application/debtors/search.ts` `listDebtors`.
-2. **Admin crea y asigna.** `screens/OperationsApp.tsx` `confirmOrderCreation()` (diálogos en `components/AdminOrderModals.tsx`) → `createOrder` / `createOrdersBatch` + `assignOrder` → `POST /v1/orders` y `POST /v1/orders/{id}/assignment` → `application/orders/order-command-handlers.ts` (idempotencia en `application/shared/command-idempotency.ts`).
-3. **Técnico descarga su jornada.** `App.tsx` `TechnicianRuntime` → `loadPackage()` → `use-cases/download.ts` `downloadAssigned` → `GET /v1/technician/orders` → `application/orders/work-package-handlers.ts`; se guarda con `IndexedDbLocalRepository.savePackage`.
+1. **Admin busca morosos.** `screens/OperationsApp.tsx` → `refresh()` → `HttpPilotClient.findDebtors` → `GET /v1/debtors` → `controllers/debtors.controller.ts` `listDebtors` → `repositories/debtors.repository.ts` `searchDebtors`.
+2. **Admin crea y asigna.** `screens/OperationsApp.tsx` `confirmOrderCreation()` (diálogos en `components/AdminOrderModals.tsx`) → `createOrder` / `createOrdersBatch` + `assignOrder` → `POST /v1/orders` y `POST /v1/orders/{id}/assignment` → `controllers/orders.controller.ts` → `services/orders.service.ts` `createOrder` / `createOrdersBatch` / `assignOrder` (idempotencia en `services/command-idempotency.service.ts`, SQL en `repositories/orders.repository.ts`).
+3. **Técnico descarga su jornada.** `App.tsx` `TechnicianRuntime` → `loadPackage()` → `use-cases/download.ts` `downloadAssigned` → `GET /v1/technician/orders` → `controllers/orders.controller.ts` `technicianOrders` → `services/orders.service.ts` `buildWorkPackage`; se guarda con `IndexedDbLocalRepository.savePackage`.
 4. **Técnico captura el corte.** `components/OrderDetail.tsx` → `components/CaptureForm.tsx` → `state/store-actions.ts` `executeCut` → `state/evidence.ts` `prepareEvidence`.
-5. **Autorización online y guardado local.** `use-cases/process.ts` `executeCut` → `HttpPilotClient.requestCut` → `POST /v1/authorizations/cut` → `application/authorizations/cut.ts` `authorizeCut`; luego `IndexedDbLocalRepository.claimCut` guarda operación, orden y cola en una transacción.
-6. **Sincronización.** `state/store-sync.ts` `requestSync` → `use-cases/sync.ts` `SyncEngine.syncOnce` → subida de fotos (`POST /v1/evidence/assets` → `application/evidence/upload.ts`) → `markCutSendStarted` → `POST /v1/sync/operations` → `application/sync/apply-sync.ts` `applySync` → `application/sync/physical-operations.ts` (consume la autorización y confirma la orden).
-7. **Auditoría.** Cada cambio del backend inserta su evento en la misma transacción (`application/audit/record.ts` `insertAudit`); el admin lo consulta con `GET /v1/audit` → `application/audit/handlers.ts` `listAudit`.
+5. **Autorización online y guardado local.** `use-cases/process.ts` `executeCut` → `HttpPilotClient.requestCut` → `POST /v1/authorizations/cut` → `controllers/authorizations.controller.ts` → `services/authorizations.service.ts` `authorizeCut`; luego `IndexedDbLocalRepository.claimCut` guarda operación, orden y cola en una transacción.
+6. **Sincronización.** `state/store-sync.ts` `requestSync` → `use-cases/sync.ts` `SyncEngine.syncOnce` → subida de fotos (`POST /v1/evidence/assets` → `controllers/evidence.controller.ts` → `services/evidence.service.ts` `uploadEvidence`) → `markCutSendStarted` → `POST /v1/sync/operations` → `controllers/sync.controller.ts` → `services/sync.service.ts` → `services/sync-apply.service.ts` `applySync` → `services/sync-physical-operations.service.ts` (consume la autorización y confirma la orden).
+7. **Auditoría.** Cada cambio del backend inserta su evento en la misma transacción (`repositories/audit.repository.ts` `insertAudit`); el admin lo consulta con `GET /v1/audit` → `controllers/audit.controller.ts` `listAudit`.
 
 En modo simulado, los pasos remotos los resuelve `adapters/indexeddb/authority-repository.ts` en lugar del backend.
 
