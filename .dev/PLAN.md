@@ -12,7 +12,7 @@ Que un ingeniero pueda entender y mantener el sistema **manualmente, sin agentes
 
 ## Reglas para todas las fases
 
-1. Una fase = una rama o una serie de commits pequeños; cada commit deja todo en verde.
+1. Una fase = una serie de commits pequeños; cada commit deja todo en verde.
 2. Mover archivos con `git mv` para conservar el historial.
 3. No cambiar nombres de símbolos exportados (componentes, funciones, tipos) salvo que la fase lo indique.
 4. No cambiar textos visibles, endpoints, contratos HTTP, esquemas de IndexedDB ni SQL aplicado.
