@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **4**
+Fase en curso: **5**
 
 ---
 
@@ -128,20 +128,15 @@ Política en `PLAN.md` → "Política de comentarios". Comentarios en español, 
 
 Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni textos.
 
-- [ ] `screens/OperationsApp.tsx` → extraer a `components/`:
-  - [ ] `DebtorSearchPanel.tsx` (búsqueda, filtros, selección)
-  - [ ] `OrderCreationDialog.tsx` (creación individual/lote + asignación)
-  - [ ] `AdminOrderPanel.tsx` (ficha de orden)
-  - [ ] `AuditLogPanel.tsx`
-- [ ] `screens/FieldApp.tsx` → extraer a `components/`:
-  - [ ] `FieldHome.tsx` (inicio/resumen)
-  - [ ] `OrderList.tsx` (lista y filtros)
-  - [ ] `FieldBottomNav.tsx` (pestañas)
-  - [ ] `CompactNetworkStatus.tsx`
-- [ ] `components/FieldMap.tsx` → separar popup y controles de pantalla completa
-- [ ] `App.tsx` → extraer guardia del botón atrás a `services/mobile-back-guard.ts` y resolución de modo/URL a `bootstrap/`
-- [ ] Evaluar `adapters/indexeddb/repository.ts` (884) y `authority-repository.ts` (751); dividir solo si hay corte obvio por agregado, si no, anotar en "Hallazgos"
-- [ ] **Validación:** suite completa de field-app + `smoke:ui` en verde; commit; estado actualizado en `PLAN.md`
+- [x] `screens/OperationsApp.tsx` (607 → 425) → extraer a `components/`:
+  - [x] `AdminOverview.tsx` (resumen), `DebtorSearchPanel.tsx` (búsqueda, filtros, selección, `AdminSelectionSummary`), `AdminSupplyPanel.tsx` (suministro seleccionado + órdenes recientes), `AdminOrderDetail.tsx` (ficha de orden), `AdminOrderModals.tsx` (creación y asignación), `AdminData.tsx` (campos e iconos compartidos)
+  - [x] Etiquetas/formatos privados del admin → `utils/labels.ts` (`adminOrder*`) y `utils/format.ts` (`formatAdmin*`, `joinAdminValues`)
+  - [x] El estado y los handlers se quedan en la pantalla (por eso supera 300 líneas; ver Hallazgos)
+- [x] `screens/FieldApp.tsx` (705 → 323) → extraer a `components/`: `FieldHome.tsx` (inicio, resumen, orden actual, tarjetas), `OrderList.tsx` (`OrdersPanel`: lista y filtros), `FieldBottomNav.tsx` (navegación de escritorio e inferior), `CompactNetworkStatus.tsx`, `FieldMapPanel.tsx`, `LastUpdateDisplay.tsx`
+- [x] `components/FieldMap.tsx` (504 → 416) → `FieldMapLayers.ts` (capa satelital con caché y marcadores/popup) y `FieldMapFullscreenHeader.tsx`; `orderCoordinates()` ahora usa `hasCadastralCoordinates`
+- [x] `App.tsx` (301 → 236) → `services/mobile-back-guard.ts` (+ test movido desde `App.test.tsx`) y `bootstrap/environment.ts` (`resolvePilotBackendUrl`, `getStableDeviceId`)
+- [x] Evaluar `adapters/indexeddb/repository.ts` (940) y `authority-repository.ts` (797): se mantienen enteros (ver Hallazgos)
+- [x] **Validación:** `tsc` (con `--noUnusedLocals`), `vitest` (316/316), `build`, `smoke:ui` (17/17), `smoke:pwa` en verde; commits; estado actualizado en `PLAN.md`
 
 ## Fase 5 — Backend por tipo
 
@@ -223,3 +218,7 @@ Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de u
 - Fase 3: `HttpPilotClient.requestCut` relanza un `HttpError` del backend (p. ej. 409 `VERSION_CONFLICT`) y `use-cases/process.ts` solo convierte en visita los errores inciertos; un rechazo explícito del backend llega a la UI como error en vez de registrarse como visita bloqueada. Revisar si es el comportamiento deseado.
 - Fase 1: `main.tsx` importa `adapters/browser/service-worker`; se considera punto de composición junto con `App.tsx` y `bootstrap/`.
 - Fase 0: `npm run build` avisa de un chunk de ~507 kB (>500 kB). No bloquea; evaluar code-splitting fuera de este plan.
+- Fase 4: `screens/OperationsApp.tsx` (425) y `components/FieldMap.tsx` (416) siguen sobre ~300 líneas: lo restante es estado, handlers y efectos de una sola pieza (peticiones con propiedad de sesión en la pantalla; GPS/Leaflet en el mapa) que no se separan sin cambiar el flujo de datos. Revisar con un hook propio en una tarea aparte.
+- Fase 4: `adapters/indexeddb/repository.ts` (940) y `authority-repository.ts` (797) se mantienen: son una sola clase por puerto (`LocalRepository`, `IdentityPort`/`OperationsAuthorityPort`) cuyos métodos comparten la base, las transacciones atómicas y helpers privados; no hay corte limpio por agregado sin cambiar transacciones. Corte opcional barato: los datos de demostración de `authority-repository.ts` (`simulatedDebtors`, `createExtraSimulatedDebtor`, ~90 líneas) a un archivo `simulated-data.ts`.
+- Fase 4: `OperationsApp.requests.test.tsx` recorre el árbol de elementos sin expandir componentes; al extraer `DebtorSearchPanel` (antes JSX en línea) el helper `elements()` lo expande explícitamente. Cualquier otro panel en línea que se extraiga requerirá lo mismo.
+- Fase 4: `npm run smoke:pwa` falló una vez (exit 1) justo después de `smoke:ui` en la misma shell y pasó en el reintento sin cambios (posible condición de carrera de puerto/servidor); revisar su robustez.

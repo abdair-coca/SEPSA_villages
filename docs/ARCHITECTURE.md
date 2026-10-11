@@ -86,7 +86,7 @@ Dónde vive cada responsabilidad. Cada archivo empieza con un comentario que exp
 
 | Carpeta | Responsabilidad | Empezar por |
 |---|---|---|
-| `main.tsx`, `App.tsx` | Arranque, modo (simulado o piloto), sesión y pantalla según rol | `App.tsx` |
+| `main.tsx`, `App.tsx` | Arranque, modo (simulado o piloto), sesión y pantalla según rol (`bootstrap/environment.ts` resuelve URL del backend y dispositivo) | `App.tsx` |
 | `domain/` | Tipos y reglas de negocio puras; no importa nada del proyecto | `policies.ts`, `types.ts` |
 | `ports/` | Contratos entre casos de uso y adaptadores | `repository.ts`, `authorization.ts`, `sync.ts` |
 | `use-cases/` | Corte, reconexión, visita, sincronización, descarga y comandos de admin | `process.ts`, `sync.ts` |
@@ -95,9 +95,9 @@ Dónde vive cada responsabilidad. Cada archivo empieza con un comentario que exp
 | `adapters/browser/`, `adapters/mock/` | Conectividad, sesión y Service Worker; adaptadores simulados | — |
 | `state/` | Store de la jornada del técnico (acciones, sync, mensajes) | `store.ts` |
 | `bootstrap/` | Construcción de stores con sus adaptadores | `runtime.ts` |
-| `screens/` | Pantallas: técnico (`FieldApp`), administrador (`OperationsApp`), login | — |
-| `components/`, `components/common/` | Componentes con lógica visible; primitivas genéricas | `OrderDetail.tsx`, `CaptureForm.tsx` |
-| `services/`, `utils/`, `styles/` | Servicios del navegador sin UI; funciones puras de presentación; CSS | — |
+| `screens/` | Pantallas: técnico (`FieldApp`), administrador (`OperationsApp`), login; guardan estado y handlers, y componen `components/` | — |
+| `components/`, `components/common/` | Componentes con lógica visible (técnico: `FieldHome`, `OrderList`, `FieldMap`, `OrderDetail`, `CaptureForm`; admin: `Admin*`, `DebtorSearchPanel`); primitivas genéricas | `OrderDetail.tsx`, `CaptureForm.tsx` |
+| `services/`, `utils/`, `styles/` | Servicios del navegador sin UI (`mobile-back-guard.ts`, `map-cache.ts`); funciones puras de presentación; CSS | — |
 
 La regla de dependencias entre carpetas la verifica `field-app/src/architecture.test.ts`.
 
@@ -118,7 +118,7 @@ La regla de dependencias entre carpetas la verifica `field-app/src/architecture.
 ### Recorrido de una orden de punta a punta
 
 1. **Admin busca morosos.** `screens/OperationsApp.tsx` → `refresh()` → `HttpPilotClient.findDebtors` → `GET /v1/debtors` → `application/debtors/search.ts` `listDebtors`.
-2. **Admin crea y asigna.** `OperationsApp` `confirmOrderCreation()` → `createOrder` / `createOrdersBatch` + `assignOrder` → `POST /v1/orders` y `POST /v1/orders/{id}/assignment` → `application/orders/order-command-handlers.ts` (idempotencia en `application/shared/command-idempotency.ts`).
+2. **Admin crea y asigna.** `screens/OperationsApp.tsx` `confirmOrderCreation()` (diálogos en `components/AdminOrderModals.tsx`) → `createOrder` / `createOrdersBatch` + `assignOrder` → `POST /v1/orders` y `POST /v1/orders/{id}/assignment` → `application/orders/order-command-handlers.ts` (idempotencia en `application/shared/command-idempotency.ts`).
 3. **Técnico descarga su jornada.** `App.tsx` `TechnicianRuntime` → `loadPackage()` → `use-cases/download.ts` `downloadAssigned` → `GET /v1/technician/orders` → `application/orders/work-package-handlers.ts`; se guarda con `IndexedDbLocalRepository.savePackage`.
 4. **Técnico captura el corte.** `components/OrderDetail.tsx` → `components/CaptureForm.tsx` → `state/store-actions.ts` `executeCut` → `state/evidence.ts` `prepareEvidence`.
 5. **Autorización online y guardado local.** `use-cases/process.ts` `executeCut` → `HttpPilotClient.requestCut` → `POST /v1/authorizations/cut` → `application/authorizations/cut.ts` `authorizeCut`; luego `IndexedDbLocalRepository.claimCut` guarda operación, orden y cola en una transacción.
