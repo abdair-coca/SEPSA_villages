@@ -122,3 +122,16 @@ export async function findOrderAssignmentForUpdate(client: Queryable, orderId: s
   const orderResult = await client.query<{ assigned_technician_id: string | null }>("SELECT assigned_technician_id FROM orders WHERE order_id = $1 AND source = $2 FOR UPDATE", [orderId, PROVISIONAL_SOURCE]);
   return orderResult.rows[0];
 }
+
+export interface OrderState {
+  assigned_technician_id: string | null;
+  status: string;
+  physical_status: string;
+  version: number;
+}
+
+/** Estado de la orden (asignación, estado, estado físico y versión) bloqueando su fila. */
+export async function findOrderStateForUpdate(client: Queryable, orderId: string): Promise<OrderState | undefined> {
+  const orderResult = await client.query<OrderState>("SELECT assigned_technician_id, status, physical_status, version FROM orders WHERE order_id = $1 AND source = $2 FOR UPDATE", [orderId, PROVISIONAL_SOURCE]);
+  return orderResult.rows[0];
+}

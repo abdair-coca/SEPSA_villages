@@ -1,0 +1,252 @@
+/**
+ * Reglas de las autorizaciones de corte y las habilitaciones de reconexión. No conoce HTTP ni escribe SQL
+ * (`repositories/authorizations.repository.ts`).
+ * - Corte: reserva una autorización de un solo uso ligada a operación, orden, técnico, dispositivo y versión,
+ *   con vencimiento (`AUTHORIZATION_TTL_SECONDS`). Exige orden asignada, versión vigente, `GENERADO` y estado
+ *   físico `NONE`. El token solo se devuelve una vez; se guarda su hash. Se consume al aceptar el sync del CUT
+ *   (`sync-physical-operations.service.ts`).
+ * - Reconexión (contrato provisional del piloto): igual que la de corte, pero exige orden `EJECUTADO` con corte
+ *   `CONFIRMED` y exactamente un ciclo de corte confirmado. Una reserva sin consumir se reemplaza (y se audita).
+ * - Consumo: verifica token (por hash), operación, orden, técnico, dispositivo y versión, y marca la habilitación
+ *   `CONSUMED` una sola vez. Repetir el consumo con la misma operación es un replay aceptado; con otra operación,
+ *   vencida o con la orden cambiada, responde `not_enabled`. Todo intento queda auditado.
+ */
+import { randomUUID } from "node:crypto";
+import { withTransaction } from "../db.js";
+import { HttpError } from "../http/responses.js";
+import type { OrderRow } from "../mappers/order.mapper.js";
+import { insertAudit } from "../repositories/audit.repository.js";
+import {
+  consumeReconnectionAuthorization,
+  expireReservedAuthorization,
+  expireStaleReconnectionReservations,
+  findActiveReconnectionForUpdate,
+  findAuthorizationByOperationForUpdate,
+  findCutAuthorizationByOperation,
+  findReconnectionByOperationForUpdate,
+  findReconnectionGrantForUpdate,
+  insertCutAuthorization,
+  insertReconnectionAuthorization,
+  rejectReservedAuthorization,
+  type ExistingCutAuthorization,
+  type ExistingReconnectionAuthorization,
+  type ReconnectionGrant,
+} from "../repositories/authorizations.repository.js";
+import { findOrderForUpdate, findOrderStateForUpdate, type OrderState } from "../repositories/orders.repository.js";
+import { listAcknowledgedCutOperationsShared } from "../repositories/sync.repository.js";
+import { PROVISIONAL_SOURCE, type ServiceContext } from "../shared/application-context.js";
+import { createOpaqueToken, hashToken } from "../shared/auth-crypto.js";
+import type { SessionUser } from "../types.js";
+
+export interface AuthorizationRequest {
+  operationId: string;
+  orderId: string;
+  deviceId: string;
+  orderVersion: number;
+}
+
+export interface ConsumeReconnectionRequest {
+  enablementId: string;
+  token: string;
+  orderId: string;
+  technicianId: string;
+  deviceId: string;
+  operationId: string;
+  version: number;
+}
+
+export interface CutAuthorizationResult {
+  authorization_id: string;
+  token: string;
+  order_id: string;
+  technician_id: string;
+  technician_name_snapshot: string;
+  device_id: string;
+  operation_id: string;
+  version: number;
+  issued_at: string;
+  expires_at: string;
+  source: string;
+}
+
+export interface ReconnectionEnablementResult {
+  enablement_id: string;
+  token: string;
+  order_id: string;
+  technician_id: string;
+  technician_name_snapshot: string;
+  device_id: string;
+  operation_id: string;
+  version: number;
+  issued_at: string;
+  expires_at: string;
+  source: string;
+}
+
+export interface ReconnectionConsumeResult {
+  status: "consumed" | "not_enabled";
+  operation_id: string;
+  source: string;
+}
+
+export interface ReconnectionLookupResult {
+  status: "not_found" | "consumed" | "reserved" | "expired" | "unknown";
+  operation_id: string;
+  source: string;
+}
+
+export interface AuthorizationService {
+  authorizeCut(user: SessionUser, request: AuthorizationRequest): Promise<CutAuthorizationResult>;
+  authorizeReconnection(user: SessionUser, request: AuthorizationRequest): Promise<ReconnectionEnablementResult>;
+  consumeReconnectionEnablement(user: SessionUser, request: ConsumeReconnectionRequest): Promise<ReconnectionConsumeResult>;
+  lookupReconnectionEnablement(user: SessionUser, operationId: string): Promise<ReconnectionLookupResult>;
+}
+
+export function createAuthorizationService(context: ServiceContext): AuthorizationService {
+  async function authorizeCut(user: SessionUser, authorizationRequest: AuthorizationRequest): Promise<CutAuthorizationResult> {
+    return withTransaction(context.pool, async (client) => {
+      const prior = await findCutAuthorizationByOperation(client, authorizationRequest.operationId);
+      // Un operation_id solo puede tener una autorización: no se emite otra para el mismo intento.
+      if (prior) {
+        if (belongsToAnotherCutAuthorization(prior, user.userId)) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another action or technician.");
+        throw new HttpError(409, "AUTHORIZATION_OPERATION_REPLAY", "Authorization operation already has a reservation; use saved response.");
+      }
+
+      const order = await findOrderForUpdate(client, authorizationRequest.orderId);
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found.");
+      if (order.assigned_technician_id !== user.userId) throw new HttpError(403, "ORDER_NOT_ASSIGNED", "Order is not assigned to current technician.");
+      if (order.version !== authorizationRequest.orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
+      if (order.status !== "GENERADO") throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "Order is not eligible for a cut authorization.");
+      if (order.physical_status !== "NONE") throw new HttpError(409, "PHYSICAL_STATUS_NOT_ELIGIBLE", "Physical status must be NONE before a new cut authorization.");
+
+      const authorizationId = randomUUID();
+      const token = createOpaqueToken();
+      const expiresAt = new Date(Date.now() + context.config.authorizationTtlSeconds * 1000).toISOString();
+      await insertCutAuthorization(client, { authorizationId, operationId: authorizationRequest.operationId, orderId: authorizationRequest.orderId, technicianId: user.userId, deviceId: authorizationRequest.deviceId, orderVersion: authorizationRequest.orderVersion, tokenHash: hashToken(token), expiresAt, technicianNameSnapshot: user.displayName });
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "AUTHORIZE_CUT", result: "accepted", entityId: authorizationId, orderId: authorizationRequest.orderId, operationId: authorizationRequest.operationId, deviceId: authorizationRequest.deviceId });
+      return { authorization_id: authorizationId, token, order_id: authorizationRequest.orderId, technician_id: user.userId, technician_name_snapshot: user.displayName, device_id: authorizationRequest.deviceId, operation_id: authorizationRequest.operationId, version: authorizationRequest.orderVersion, issued_at: new Date().toISOString(), expires_at: expiresAt, source: PROVISIONAL_SOURCE };
+    });
+  }
+
+  async function authorizeReconnection(user: SessionUser, authorizationRequest: AuthorizationRequest): Promise<ReconnectionEnablementResult> {
+    return withTransaction(context.pool, async (client) => {
+      const order = await findOrderForUpdate(client, authorizationRequest.orderId);
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found.");
+      if (order.assigned_technician_id !== user.userId) throw new HttpError(403, "ORDER_NOT_ASSIGNED", "Order is not assigned to current technician.");
+      if (order.version !== authorizationRequest.orderVersion) throw new HttpError(409, "VERSION_CONFLICT", "Order version is stale.");
+      if (!isEligibleReconnectionOrder(order)) throw new HttpError(409, "ORDER_NOT_ELIGIBLE", "Reconnection requires a confirmed cut on an executed order.");
+
+      const cuts = await listAcknowledgedCutOperationsShared(client, authorizationRequest.orderId);
+      if (cuts.length !== 1) throw new HttpError(409, "CUT_CYCLE_AMBIGUOUS", "The order does not identify exactly one remotely confirmed cut cycle.");
+      await expireStaleReconnectionReservations(client, authorizationRequest.orderId);
+
+      const prior = await findAuthorizationByOperationForUpdate(client, authorizationRequest.operationId);
+      if (prior) {
+        if (belongsToAnotherReconnection(prior, authorizationRequest, user.userId)) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another context.");
+        throw new HttpError(409, "ENABLEMENT_OPERATION_REPLAY", "This operation already has a habilitation reservation; verify its status before starting another operation.");
+      }
+
+      const activeAuthorization = await findActiveReconnectionForUpdate(client, authorizationRequest.orderId);
+      if (activeAuthorization?.status === "CONSUMED") throw new HttpError(409, "RECONNECTION_ALREADY_CONSUMED", "A reconnection operation is already consumed for this order.");
+      if (activeAuthorization?.status === "RESERVED") {
+        await rejectReservedAuthorization(client, activeAuthorization.authorization_id);
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "RECONNECTION_ENABLEMENT_REPLACED", result: "accepted", entityId: activeAuthorization.authorization_id, orderId: authorizationRequest.orderId, operationId: activeAuthorization.operation_id, deviceId: authorizationRequest.deviceId, reason: "UNCONSUMED_RESERVATION_REPLACED", metadata: { replacement_operation_id: authorizationRequest.operationId, source: PROVISIONAL_SOURCE } });
+      }
+
+      const authorizationId = randomUUID();
+      const token = createOpaqueToken();
+      const expiresAt = new Date(Date.now() + context.config.authorizationTtlSeconds * 1000).toISOString();
+      await insertReconnectionAuthorization(client, { authorizationId, operationId: authorizationRequest.operationId, orderId: authorizationRequest.orderId, technicianId: user.userId, deviceId: authorizationRequest.deviceId, orderVersion: authorizationRequest.orderVersion, tokenHash: hashToken(token), expiresAt, technicianNameSnapshot: user.displayName });
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "AUTHORIZE_RECONNECTION", result: "accepted", entityId: authorizationId, orderId: authorizationRequest.orderId, operationId: authorizationRequest.operationId, deviceId: authorizationRequest.deviceId, metadata: { version: authorizationRequest.orderVersion, technician_name_snapshot: user.displayName, source: PROVISIONAL_SOURCE } });
+      return { enablement_id: authorizationId, token, order_id: authorizationRequest.orderId, technician_id: user.userId, technician_name_snapshot: user.displayName, device_id: authorizationRequest.deviceId, operation_id: authorizationRequest.operationId, version: authorizationRequest.orderVersion, issued_at: new Date().toISOString(), expires_at: expiresAt, source: PROVISIONAL_SOURCE };
+    });
+  }
+
+  async function consumeReconnectionEnablement(user: SessionUser, consumeRequest: ConsumeReconnectionRequest): Promise<ReconnectionConsumeResult> {
+    return withTransaction(context.pool, async (client) => {
+      const order = await findOrderStateForUpdate(client, consumeRequest.orderId);
+      if (!order || order.assigned_technician_id !== user.userId) throw new HttpError(404, "ORDER_SCOPE_NOT_FOUND", "Order and assigned technician were not found.");
+
+      const grant = await findReconnectionGrantForUpdate(client, consumeRequest.enablementId);
+      if (!hasExpectedBinding(grant, consumeRequest, user.userId, hashToken(consumeRequest.token))) {
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", orderId: consumeRequest.orderId, operationId: consumeRequest.operationId, deviceId: consumeRequest.deviceId, reason: "ENABLEMENT_BINDING_CONFLICT", metadata: { version: consumeRequest.version, source: PROVISIONAL_SOURCE } });
+        return notEnabled(consumeRequest.operationId);
+      }
+      if (grant.status === "CONSUMED") {
+        if (grant.consumed_operation_id !== consumeRequest.operationId) {
+          await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", entityId: consumeRequest.enablementId, orderId: consumeRequest.orderId, operationId: consumeRequest.operationId, deviceId: consumeRequest.deviceId, reason: "ENABLEMENT_ALREADY_CONSUMED", metadata: { version: consumeRequest.version, source: PROVISIONAL_SOURCE } });
+          return notEnabled(consumeRequest.operationId);
+        }
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION_REPLAY", result: "accepted", entityId: consumeRequest.enablementId, orderId: consumeRequest.orderId, operationId: consumeRequest.operationId, deviceId: consumeRequest.deviceId, metadata: { version: consumeRequest.version, source: PROVISIONAL_SOURCE } });
+        return consumed(consumeRequest.operationId);
+      }
+      if (grant.status !== "RESERVED" || Date.parse(grant.expires_at) <= Date.now()) {
+        if (grant.status === "RESERVED") await expireReservedAuthorization(client, consumeRequest.enablementId);
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", entityId: consumeRequest.enablementId, orderId: consumeRequest.orderId, operationId: consumeRequest.operationId, deviceId: consumeRequest.deviceId, reason: "ENABLEMENT_EXPIRED_OR_UNAVAILABLE", metadata: { version: consumeRequest.version, source: PROVISIONAL_SOURCE } });
+        return notEnabled(consumeRequest.operationId);
+      }
+      if (!isCurrentReconnectionOrder(order, consumeRequest.version)) {
+        await rejectReservedAuthorization(client, consumeRequest.enablementId);
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", entityId: consumeRequest.enablementId, orderId: consumeRequest.orderId, operationId: consumeRequest.operationId, deviceId: consumeRequest.deviceId, reason: "ORDER_STATE_CONFLICT", metadata: { version: consumeRequest.version, source: PROVISIONAL_SOURCE } });
+        return notEnabled(consumeRequest.operationId);
+      }
+      const consumedCount = await consumeReconnectionAuthorization(client, consumeRequest.enablementId, consumeRequest.operationId);
+      if (consumedCount !== 1) {
+        await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "rejected", entityId: consumeRequest.enablementId, orderId: consumeRequest.orderId, operationId: consumeRequest.operationId, deviceId: consumeRequest.deviceId, reason: "ENABLEMENT_EXPIRED_OR_UNAVAILABLE", metadata: { version: consumeRequest.version, source: PROVISIONAL_SOURCE } });
+        return notEnabled(consumeRequest.operationId);
+      }
+      await insertAudit(client, { actorId: user.userId, actorRole: user.role, action: "CONSUME_RECONNECTION", result: "accepted", entityId: consumeRequest.enablementId, orderId: consumeRequest.orderId, operationId: consumeRequest.operationId, deviceId: consumeRequest.deviceId, metadata: { version: consumeRequest.version, technician_name_snapshot: grant.technician_name_snapshot, source: PROVISIONAL_SOURCE } });
+      return consumed(consumeRequest.operationId);
+    });
+  }
+
+  async function lookupReconnectionEnablement(user: SessionUser, operationId: string): Promise<ReconnectionLookupResult> {
+    return withTransaction(context.pool, async (client) => {
+      const grant = await findReconnectionByOperationForUpdate(client, operationId);
+      if (!grant || grant.technician_id !== user.userId) return { status: "not_found" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
+      let status = reconnectionStatus(grant.status);
+      if (status === "reserved" && Date.parse(grant.expires_at) <= Date.now()) {
+        await expireReservedAuthorization(client, grant.authorization_id);
+        status = "expired";
+      }
+      return { status, operation_id: operationId, source: PROVISIONAL_SOURCE };
+    });
+  }
+
+  return { authorizeCut, authorizeReconnection, consumeReconnectionEnablement, lookupReconnectionEnablement };
+}
+
+function belongsToAnotherCutAuthorization(prior: ExistingCutAuthorization, userId: string): boolean {
+  return prior.technician_id !== userId || prior.action !== "CUT";
+}
+
+function isEligibleReconnectionOrder(order: OrderRow): boolean {
+  return order.status === "EJECUTADO" && order.physical_status === "CONFIRMED";
+}
+
+function belongsToAnotherReconnection(prior: ExistingReconnectionAuthorization, request: AuthorizationRequest, userId: string): boolean {
+  return prior.technician_id !== userId || prior.order_id !== request.orderId || prior.device_id !== request.deviceId || prior.action !== "RECONNECTION";
+}
+
+function hasExpectedBinding(grant: ReconnectionGrant | undefined, request: ConsumeReconnectionRequest, userId: string, tokenHash: string): grant is ReconnectionGrant {
+  return Boolean(grant && grant.action === "RECONNECTION" && grant.operation_id === request.operationId && grant.order_id === request.orderId && grant.technician_id === userId && grant.device_id === request.deviceId && grant.order_version === request.version && grant.token_hash === tokenHash);
+}
+
+function isCurrentReconnectionOrder(order: OrderState, version: number): boolean {
+  return order.status === "EJECUTADO" && order.physical_status === "CONFIRMED" && order.version === version;
+}
+
+function reconnectionStatus(status: string): "consumed" | "reserved" | "expired" | "unknown" {
+  if (status === "CONSUMED") return "consumed";
+  if (status === "RESERVED") return "reserved";
+  if (status === "EXPIRED") return "expired";
+  return "unknown";
+}
+
+function notEnabled(operationId: string): ReconnectionConsumeResult {
+  return { status: "not_enabled", operation_id: operationId, source: PROVISIONAL_SOURCE };
+}
+
+function consumed(operationId: string): ReconnectionConsumeResult {
+  return { status: "consumed", operation_id: operationId, source: PROVISIONAL_SOURCE };
+}
