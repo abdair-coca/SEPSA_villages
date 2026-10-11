@@ -14,10 +14,10 @@ import { createAuditHandlers } from "../controllers/audit.controller.js";
 import { createAuthorizationHandlers } from "../controllers/authorizations.controller.js";
 import { createSyncHandlers } from "../controllers/sync.controller.js";
 import { PROVISIONAL_SOURCE } from "../shared/application-context.js";
-import { sessionBody } from "../mappers/session.mapper.js";
 import { setCorsHeaders, setSecurityHeaders, validateOrigin, validRequestId } from "./http-policy.js";
 import { type Config } from "../config.js";
 import { HttpError, errorBody, sendJson, sendNoContent } from "./responses.js";
+import { Router, createRoutes, type RouteControllers, type SessionRouteContext } from "./router.js";
 import { ConsoleSecurityLogger, type SecurityEvent, type SecurityLogger } from "../logging/security-logger.js";
 
 export class Application {
@@ -28,6 +28,7 @@ export class Application {
   private readonly authorizations: ReturnType<typeof createAuthorizationHandlers>;
   private readonly sync: ReturnType<typeof createSyncHandlers>;
   private readonly audit: ReturnType<typeof createAuditHandlers>;
+  readonly router: Router;
 
   constructor(
     private readonly pool: Pool,
@@ -46,6 +47,12 @@ export class Application {
     this.authorizations = createAuthorizationHandlers(context);
     this.sync = createSyncHandlers(context);
     this.audit = createAuditHandlers(context);
+    const controllers: RouteControllers = {
+      auth: this.auth, orders: this.orders, debtors: this.debtors, evidence: this.evidence,
+      authorizations: this.authorizations, sync: this.sync, audit: this.audit,
+      health: (response) => this.health(response),
+    };
+    this.router = new Router(createRoutes(controllers));
   }
 
   async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -58,7 +65,6 @@ export class Application {
         if (request.headers.origin !== this.config.corsOrigin) throw new HttpError(403, "CORS_ORIGIN_REJECTED", "Request origin is not allowed.");
         return sendNoContent(response);
       }
-      if (request.method === "GET" && url.pathname === "/healthz") return await this.health(response);
       validateOrigin(request, this.config.corsOrigin);
       await this.route(request, response, url);
     } catch (error) {
@@ -76,32 +82,15 @@ export class Application {
 
   private async route(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
     const path = url.pathname;
-    if (request.method === "POST" && path === "/v1/auth/login") return await this.auth.login(request, response);
-    if (request.method === "POST" && path === "/v1/auth/logout") return await this.auth.logout(request, response);
+    const publicRoute = this.router.match(request.method, path, "public");
+    if (publicRoute?.route.access === "public") return await publicRoute.route.handler({ request, response, url });
 
     const user = await this.auth.requireSession(request);
-    if (request.method === "GET" && path === "/v1/auth/session") return sendJson(response, 200, sessionBody(user));
-    if (request.method === "POST" && path === "/v1/auth/role") return await this.auth.switchRole(request, response, user);
-    if (request.method === "GET" && path === "/v1/technicians") return await this.orders.listTechnicians(response, user);
-    if (request.method === "GET" && path === "/v1/debtors") return await this.debtors.listDebtors(response, user, url);
-    if (request.method === "GET" && path === "/v1/orders") return await this.orders.listOrders(response, user);
-    if (request.method === "POST" && path === "/v1/orders/batch") return await this.orders.createOrdersBatch(request, response, user);
-    if (request.method === "POST" && path === "/v1/orders") return await this.orders.createOrder(request, response, user);
-    const assignment = /^\/v1\/orders\/([^/]+)\/assignment$/.exec(path);
-    if (request.method === "POST" && assignment) return await this.orders.assignOrder(request, response, user, assignment[1]);
-    if (request.method === "GET" && path === "/v1/technician/orders") return await this.orders.technicianOrders(response, user, url);
-    if (request.method === "POST" && path === "/v1/authorizations/cut") return await this.authorizations.authorizeCut(request, response, user);
-    if (request.method === "POST" && path === "/v1/authorizations/reconnection") return await this.authorizations.authorizeReconnection(request, response, user);
-    if (request.method === "POST" && path === "/v1/authorizations/reconnection/consume") return await this.authorizations.consumeReconnectionEnablement(request, response, user);
-    const reconnectionEnablementLookup = /^\/v1\/authorizations\/reconnection\/([^/]+)$/.exec(path);
-    if (request.method === "GET" && reconnectionEnablementLookup) return await this.authorizations.lookupReconnectionEnablement(response, user, reconnectionEnablementLookup[1]);
-    if (request.method === "POST" && path === "/v1/evidence/assets") return await this.evidence.uploadEvidence(request, response, user);
-    if (request.method === "POST" && path === "/v1/sync/operations") return await this.sync.syncOperation(request, response, user);
-    const operationReview = /^\/v1\/sync\/operations\/([^/]+)\/review$/.exec(path);
-    if (request.method === "POST" && operationReview) return await this.sync.recordHumanReview(request, response, user, operationReview[1] ?? "");
-    const operationLookup = /^\/v1\/sync\/operations\/([^/]+)$/.exec(path);
-    if (request.method === "GET" && operationLookup) return await this.sync.lookupOperation(response, user, operationLookup[1]);
-    if (request.method === "GET" && path === "/v1/audit") return await this.audit.listAudit(response, user, url);
+    const sessionRoute = this.router.match(request.method, path, "session");
+    if (sessionRoute?.route.access === "session") {
+      const context: SessionRouteContext = { request, response, url, user, params: sessionRoute.params };
+      return await sessionRoute.route.handler(context);
+    }
     throw new HttpError(404, "NOT_FOUND", "Endpoint not found.");
   }
 
