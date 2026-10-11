@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **1**
+Fase en curso: **2**
 
 ---
 
@@ -28,49 +28,49 @@ Fase en curso: **1**
 Solo `git mv` y actualización de imports. Ningún símbolo exportado cambia de nombre.
 
 **Casos de uso** (`application/` → `use-cases/`)
-- [ ] `process.ts`, `sync.ts`, `reconnection.ts`, `visit.ts`, `download.ts`, `admin.ts`, `auth.ts` y sus tests → `use-cases/`
-- [ ] `session-persistence.ts` (+test) → `adapters/browser/session-persistence.ts`
-- [ ] Eliminar `application/index.ts`
+- [x] `process.ts`, `sync.ts`, `reconnection.ts`, `visit.ts`, `download.ts`, `admin.ts`, `auth.ts` y sus tests → `use-cases/`
+- [x] `session-persistence.ts` (+test) → `adapters/browser/session-persistence.ts`
+- [x] Eliminar `application/index.ts`
 
 **Estado, arranque y servicios** (`app/` → varios)
-- [ ] `store.ts`, `store-actions.ts`, `store-sync.ts`, `store-results.ts`, `evidence.ts`, `store.test.tsx` → `state/`
-- [ ] `runtime.ts` (+test) → `bootstrap/runtime.ts`
-- [ ] `map-cache.ts` (+test) → `services/map-cache.ts`
-- [ ] `pwa.ts` → `adapters/browser/service-worker.ts`
-- [ ] Eliminar `app/index.ts`
+- [x] `store.ts`, `store-actions.ts`, `store-sync.ts`, `store-results.ts`, `evidence.ts`, `store.test.tsx` → `state/`
+- [x] `runtime.ts` (+test) → `bootstrap/runtime.ts`
+- [x] `map-cache.ts` (+test) → `services/map-cache.ts`
+- [x] `pwa.ts` → `adapters/browser/service-worker.ts`
+- [x] Eliminar `app/index.ts`
 
 **Pantallas** (`ui/` → `screens/`)
-- [ ] `FieldApp.tsx` (+`FieldApp.test.tsx`) → `screens/`
-- [ ] `OperationsApp.tsx` (+`OperationsApp.test.tsx`, `OperationsApp.requests.test.tsx`) → `screens/`
-- [ ] `LoginScreen.tsx` (+test) → `screens/`
+- [x] `FieldApp.tsx` (+`FieldApp.test.tsx`) → `screens/`
+- [x] `OperationsApp.tsx` (+`OperationsApp.test.tsx`, `OperationsApp.requests.test.tsx`) → `screens/`
+- [x] `LoginScreen.tsx` (+test) → `screens/`
 
 **Componentes** (`ui/` → `components/`)
-- [ ] `AppHeader.tsx` (+test) → `components/`
-- [ ] `order-detail.tsx` → `components/OrderDetail.tsx`
-- [ ] `capture-form.tsx` → `components/CaptureForm.tsx`
-- [ ] `sync-queue.tsx` → `components/SyncQueue.tsx`
-- [ ] `FieldMap.tsx` (+`FieldMap.test.ts`) → `components/`
-- [ ] `Modal`, `Notification`, `SearchField`, `PaginationControls`, `UiState`, `Icons`, `BrandLockup`, `ExitConfirmationModal` (+tests) → `components/common/`
+- [x] `AppHeader.tsx` (+test) → `components/`
+- [x] `order-detail.tsx` → `components/OrderDetail.tsx`
+- [x] `capture-form.tsx` → `components/CaptureForm.tsx`
+- [x] `sync-queue.tsx` → `components/SyncQueue.tsx`
+- [x] `FieldMap.tsx` (+`FieldMap.test.ts`) → `components/`
+- [x] `Modal`, `Notification`, `SearchField`, `PaginationControls`, `UiState`, `Icons`, `BrandLockup`, `ExitConfirmationModal` (+tests) → `components/common/`
 
 **Utilidades, servicios y estilos**
-- [ ] `field-app-utils.ts` → `utils/field-app-utils.ts` (se divide en la fase 2)
-- [ ] `dialog-lifecycle.ts` (+test) → `utils/dialog-lifecycle.ts`
-- [ ] `capture-gps-request.ts` (+test) → `services/capture-gps-request.ts`
-- [ ] `ui/styles.css` → `styles/app.css`; `ui/styles/*.css` → `styles/`; actualizar `@import` y `main.tsx`
-- [ ] Eliminar `ui/index.ts` y la carpeta `ui/`
+- [x] `field-app-utils.ts` → `utils/field-app-utils.ts` (se divide en la fase 2)
+- [x] `dialog-lifecycle.ts` (+test) → `utils/dialog-lifecycle.ts`
+- [x] `capture-gps-request.ts` (+test) → `services/capture-gps-request.ts`
+- [x] `ui/styles.css` → `styles/app.css`; `ui/styles/*.css` → `styles/`; actualizar `@import` y `main.tsx`
+- [x] Eliminar `ui/index.ts` y la carpeta `ui/`
 
 **Barrels y referencias externas**
-- [ ] Reemplazar imports de `adapters/index.ts`, `adapters/*/index.ts`, `domain/index.ts`, `ports/index.ts` por imports al archivo real y eliminar esos barrels
-- [ ] Buscar rutas viejas (`src/ui`, `src/app`, `src/application`) en `vite.config.ts`, `index.html`, `tsconfig.json`, `scripts/*.mjs`, `public/` y `docs/`, y actualizarlas
+- [x] Reemplazar imports de `adapters/index.ts`, `adapters/*/index.ts`, `domain/index.ts`, `ports/index.ts` por imports al archivo real y eliminar esos barrels
+- [x] Buscar rutas viejas (`src/ui`, `src/app`, `src/application`) en `vite.config.ts`, `index.html`, `tsconfig.json`, `scripts/*.mjs`, `public/` y `docs/`, y actualizarlas
 
 **Regla de dependencias**
-- [ ] Añadir `src/architecture.test.ts` que recorra los imports y falle si: `domain` importa algo del proyecto; `use-cases` importa algo fuera de `domain`/`ports`; `components/common` importa `domain`/`state`/`use-cases`; algo distinto de `App.tsx`/`bootstrap/` importa `adapters/`
-- [ ] Si el test detecta violaciones existentes, listarlas en "Hallazgos" y marcarlas como excepciones explícitas en el test (no corregir lógica en esta fase)
+- [x] Añadir `src/architecture.test.ts` que recorra los imports y falle si: `domain` importa algo del proyecto; `use-cases` importa algo fuera de `domain`/`ports`; `components/common` importa `domain`/`state`/`use-cases`; algo distinto de `App.tsx`/`bootstrap/` importa `adapters/`
+- [x] Si el test detecta violaciones existentes, listarlas en "Hallazgos" y marcarlas como excepciones explícitas en el test (no corregir lógica en esta fase) → 2 excepciones en `KNOWN_ADAPTER_EXCEPTIONS`
 
 **Validación**
-- [ ] `npx tsc --noEmit` · `npx vitest run` · `npm run build` · `npm run smoke:ui` en verde
-- [ ] No existen `src/ui/`, `src/app/`, `src/application/`
-- [ ] Commit + estado de fase 1 actualizado en `PLAN.md`
+- [x] `npx tsc --noEmit` · `npx vitest run` (316/316) · `npm run build` · `npm run smoke:ui` (17/17) · `npm run smoke:pwa` en verde
+- [x] No existen `src/ui/`, `src/app/`, `src/application/`
+- [x] Commit + estado de fase 1 actualizado en `PLAN.md`
 
 ## Fase 2 — Utilidades y reglas en su capa
 
@@ -209,4 +209,7 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de una fase de limpieza.
 
 - Fase 0: los smokes `smoke:ui`/`smoke:pwa` exigen `VITE_PILOT_BACKEND_URL=""` en el entorno (como en CI); sin esa variable fallan antes de empezar. Añadirlo a la validación estándar de `PLAN.md`.
+- Fase 1: `screens/FieldApp.tsx` importa `adapters/browser/connectivity` y `screens/LoginScreen.tsx` importa `adapters/browser/session-persistence`. Las pantallas deberían recibir esos puertos desde `App.tsx`/`bootstrap/`. Registradas como excepciones en `src/architecture.test.ts`; corregir en una tarea aparte (cambia props de pantallas).
+- Fase 1: `utils/field-app-utils.ts` importa tipos de `state/` (`ActionKind`, `ActivityEntry`). Revisar en la fase 2 al repartir el archivo.
+- Fase 1: `main.tsx` importa `adapters/browser/service-worker`; se considera punto de composición junto con `App.tsx` y `bootstrap/`.
 - Fase 0: `npm run build` avisa de un chunk de ~507 kB (>500 kB). No bloquea; evaluar code-splitting fuera de este plan.

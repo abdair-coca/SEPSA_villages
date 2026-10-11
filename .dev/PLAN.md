@@ -94,7 +94,9 @@ screens → components → (state, utils, services) → use-cases → ports ← 
 - `domain` no importa nada del proyecto.
 - `use-cases` importan solo `domain` y `ports`.
 - `components/common` no importa `domain`, `state` ni `use-cases`.
-- Solo `App.tsx` y `bootstrap/` conocen adaptadores concretos.
+- Solo los puntos de composición (`main.tsx`, `App.tsx`, `bootstrap/`) conocen adaptadores concretos.
+- Ninguna capa interna (`domain`, `ports`, `use-cases`, `adapters`, `state`, `bootstrap`, `services`, `utils`) importa `screens/` ni `components/`.
+- Lo verifica `field-app/src/architecture.test.ts`; las excepciones conocidas están listadas allí con su motivo.
 
 ### Estructura objetivo — backend
 
@@ -140,7 +142,7 @@ El detalle de reglas sigue en `docs/`; el comentario enlaza al documento en vez 
 | # | Fase | Paquete | Riesgo | Estado |
 |---|---|---|---|---|
 | 0 | Cierre del refactor actual y limpieza | ambos | Bajo | Hecha |
-| 1 | Reorganización por tipo de field-app | field-app | Bajo | Pendiente |
+| 1 | Reorganización por tipo de field-app | field-app | Bajo | Hecha |
 | 2 | Utilidades y reglas en su capa | field-app | Bajo | Pendiente |
 | 3 | Comentarios y mapa del código | ambos | Nulo | Pendiente |
 | 4 | División de componentes grandes | field-app | Medio | Pendiente |
