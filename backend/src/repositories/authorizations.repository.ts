@@ -122,3 +122,53 @@ export async function findReconnectionByOperationForUpdate(client: Queryable, op
   const rows = await client.query<ReconnectionLookupGrant>("SELECT authorization_id, technician_id, status, expires_at FROM cut_authorizations WHERE operation_id = $1 AND action = 'RECONNECTION' FOR UPDATE", [operationId]);
   return rows.rows[0];
 }
+
+export interface SyncReconnectionAuthorizationRow {
+  authorization_id: string;
+  operation_id: string;
+  order_id: string;
+  technician_id: string;
+  technician_name_snapshot: string | null;
+  device_id: string;
+  order_version: number;
+  status: string;
+  consumed_operation_id: string | null;
+  action: string;
+}
+
+export interface SyncCutAuthorizationRow {
+  authorization_id: string;
+  operation_id: string;
+  token_hash: string;
+  status: string;
+  order_id: string;
+  technician_id: string;
+  technician_name_snapshot: string | null;
+  device_id: string;
+  order_version: number;
+  action: string;
+}
+
+/** Habilitación de reconexión ya consumida, leída al aceptar el sync de la reconexión. */
+export async function findReconnectionAuthorizationForSyncForUpdate(client: Queryable, authorizationId: string): Promise<SyncReconnectionAuthorizationRow | undefined> {
+  const authorization = await client.query<SyncReconnectionAuthorizationRow>(
+    "SELECT authorization_id, operation_id, order_id, technician_id, technician_name_snapshot, device_id, order_version, status, consumed_operation_id, action FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE",
+    [authorizationId],
+  );
+  return authorization.rows[0];
+}
+
+/** Autorización de corte reservada, leída al aceptar el sync del CUT. */
+export async function findCutAuthorizationForSyncForUpdate(client: Queryable, authorizationId: string): Promise<SyncCutAuthorizationRow | undefined> {
+  const authorization = await client.query<SyncCutAuthorizationRow>(
+    "SELECT authorization_id, operation_id, token_hash, status, order_id, technician_id, technician_name_snapshot, device_id, order_version, action FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE",
+    [authorizationId],
+  );
+  return authorization.rows[0];
+}
+
+/** Consumo de un solo uso: pasa de RESERVED a CONSUMED solo si no venció (hora de la base, no del cliente). Devuelve las filas afectadas. */
+export async function consumeCutAuthorization(client: Queryable, authorizationId: string, operationId: string): Promise<number | null> {
+  const consumedAuthorization = await client.query("UPDATE cut_authorizations SET status = 'CONSUMED', consumed_at = clock_timestamp(), consumed_operation_id = $2 WHERE authorization_id = $1 AND action = 'CUT' AND status = 'RESERVED' AND expires_at > clock_timestamp()", [authorizationId, operationId]);
+  return consumedAuthorization.rowCount;
+}

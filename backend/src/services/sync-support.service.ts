@@ -1,25 +1,18 @@
 /**
  * Apoyo del sync: rechazo con conflicto auditado, detección de replays, recibo de respuesta y payload sin
- * el token de autorización (que nunca se guarda ni se audita).
+ * el token de autorización (que nunca se guarda ni se audita). No escribe SQL propio: usa
+ * `repositories/sync.repository.ts` y `repositories/audit.repository.ts`.
  */
 import type { PoolClient } from "pg";
 import { insertAudit } from "../repositories/audit.repository.js";
+import { markSyncOperationConflict, type StoredOperationRow } from "../repositories/sync.repository.js";
 import { digestJson } from "../shared/json-digest.js";
 import type { SessionUser, SyncPayload } from "../types.js";
-
-export interface StoredOperationRow {
-  operation_id: string;
-  technician_id: string;
-  device_id: string;
-  status: string;
-  payload_hash: string;
-  conflict_reason: string | null;
-}
 
 export type SyncResult = { status: "acknowledged" } | { status: "conflict"; message: string };
 
 export async function rejectSync(client: PoolClient, user: SessionUser, payload: SyncPayload, message: string): Promise<{ status: "conflict"; message: string }> {
-  await client.query("UPDATE sync_operations SET status = 'conflict', conflict_reason = $2 WHERE operation_id = $1", [payload.operation_id, message]);
+  await markSyncOperationConflict(client, payload.operation_id, message);
   await insertAudit(client, {
     actorId: user.userId,
     actorRole: user.role,

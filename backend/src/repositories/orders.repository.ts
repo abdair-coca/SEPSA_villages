@@ -135,3 +135,37 @@ export async function findOrderStateForUpdate(client: Queryable, orderId: string
   const orderResult = await client.query<OrderState>("SELECT assigned_technician_id, status, physical_status, version FROM orders WHERE order_id = $1 AND source = $2 FOR UPDATE", [orderId, PROVISIONAL_SOURCE]);
   return orderResult.rows[0];
 }
+
+export interface HumanReviewOrderRow {
+  order_id: string;
+  version: number;
+  status: string;
+  physical_status: string;
+  assigned_technician_id: string | null;
+}
+
+export async function findOrderForReviewForUpdate(client: Queryable, orderId: string): Promise<HumanReviewOrderRow | undefined> {
+  const orderResult = await client.query<HumanReviewOrderRow>(
+    "SELECT order_id, version, status, physical_status, assigned_technician_id FROM orders WHERE order_id = $1 AND source = $2 FOR UPDATE",
+    [orderId, PROVISIONAL_SOURCE],
+  );
+  return orderResult.rows[0];
+}
+
+/** Marca el resultado físico como incierto (`PHYSICAL_UNKNOWN`) y sube la versión, salvo que ya esté confirmado. Devuelve las filas afectadas. */
+export async function markOrderPhysicalUnknown(client: Queryable, orderId: string, expectedVersion: number): Promise<number | null> {
+  const update = await client.query("UPDATE orders SET physical_status = 'PHYSICAL_UNKNOWN', version = version + 1, updated_at = now() WHERE order_id = $1 AND version = $2 AND physical_status <> 'CONFIRMED'", [orderId, expectedVersion]);
+  return update.rowCount;
+}
+
+/** Confirma el corte: la orden pasa a `EJECUTADO`/`CONFIRMED` y sube la versión. Devuelve las filas afectadas. */
+export async function markOrderCutExecuted(client: Queryable, orderId: string, version: number): Promise<number | null> {
+  const updatedOrder = await client.query("UPDATE orders SET status = 'EJECUTADO', physical_status = 'CONFIRMED', version = version + 1, updated_at = now() WHERE order_id = $1 AND version = $2", [orderId, version]);
+  return updatedOrder.rowCount;
+}
+
+/** Registra la reconexión: la orden pasa de `EJECUTADO`/`CONFIRMED` a `RECONEXIÓN` y sube la versión. Devuelve las filas afectadas. */
+export async function markOrderReconnected(client: Queryable, orderId: string, version: number): Promise<number | null> {
+  const updatedOrder = await client.query("UPDATE orders SET status = 'RECONEXIÓN', physical_status = 'CONFIRMED', version = version + 1, updated_at = now() WHERE order_id = $1 AND status = 'EJECUTADO' AND physical_status = 'CONFIRMED' AND version = $2", [orderId, version]);
+  return updatedOrder.rowCount;
+}
