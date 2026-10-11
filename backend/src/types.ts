@@ -16,6 +16,6 @@ export interface SessionUser extends AuthenticatedUser {
   expiresAt: string;
 }
 
-import type { SyncOperationRequestDto } from "./http-contracts.js";
+import type { SyncOperationRequestDto } from "./http/http-contracts.js";
 
 export type SyncPayload = SyncOperationRequestDto;

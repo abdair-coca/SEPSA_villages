@@ -4,8 +4,8 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { Pool } from "pg";
-import { Application } from "../src/application.js";
-import { hashToken } from "../src/auth.js";
+import { Application } from "../src/http/application.js";
+import { hashToken } from "../src/shared/auth-crypto.js";
 import type { Config } from "../src/config.js";
 
 const databaseUrl = process.env.DATABASE_URL;

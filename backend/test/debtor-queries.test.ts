@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDebtorSearchCriteria } from "../src/application/debtors/search.js";
+import { buildDebtorSearchCriteria } from "../src/controllers/debtors.controller.js";
 
 test("debtor search criteria keeps shared WHERE placeholders and values aligned", () => {
   const criteria = buildDebtorSearchCriteria({

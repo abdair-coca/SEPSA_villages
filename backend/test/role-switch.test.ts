@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 import type { Pool } from "pg";
-import { Application } from "../src/application.js";
+import { Application } from "../src/http/application.js";
 import type { Role } from "../src/types.js";
 
 const config = { host: "127.0.0.1", port: 0, databaseUrl: "postgres://test", sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, maxBodyBytes: 1024, corsOrigin: "http://localhost:5173" };

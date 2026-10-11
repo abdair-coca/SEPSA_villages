@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hashPassword, verifyPassword, createOpaqueToken, hashToken } from "../src/auth.js";
+import { hashPassword, verifyPassword, createOpaqueToken, hashToken } from "../src/shared/auth-crypto.js";
 
 test("scrypt password hashes verify without storing the password", async () => {
   const encoded = await hashPassword("PILOT_PROVISIONAL_TEST_PASSWORD");

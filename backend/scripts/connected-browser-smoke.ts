@@ -8,8 +8,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Pool } from "pg";
-import { Application } from "../src/application.js";
-import { hashPassword } from "../src/auth.js";
+import { Application } from "../src/http/application.js";
+import { hashPassword } from "../src/shared/auth-crypto.js";
 import { loadConfig } from "../src/config.js";
 
 const databaseUrl = process.env.DATABASE_URL;

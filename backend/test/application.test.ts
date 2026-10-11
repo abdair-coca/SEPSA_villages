@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import test from "node:test";
 import type { Pool } from "pg";
-import { Application } from "../src/application.js";
-import { hashToken } from "../src/auth.js";
-import type { SecurityEvent } from "../src/security-logger.js";
+import { Application } from "../src/http/application.js";
+import { hashToken } from "../src/shared/auth-crypto.js";
+import type { SecurityEvent } from "../src/logging/security-logger.js";
 import { assertSchema } from "./contract-schema.js";
 
 const config = {

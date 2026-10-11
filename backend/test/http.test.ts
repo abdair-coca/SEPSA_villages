@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import { HttpError, parseBearerToken, parseJsonBody, sendJson, sendNoContent } from "../src/http.js";
+import { HttpError, parseBearerToken, parseJsonBody, sendJson, sendNoContent } from "../src/http/responses.js";
 
 test("JSON parser accepts object and enforces byte limit", async () => {
   const request = Readable.from([Buffer.from('{"operation_id":"PILOT_PROVISIONAL-1"}')]);

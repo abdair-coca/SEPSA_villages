@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
 import type { Pool, PoolClient } from "pg";
-import { Application } from "../src/application.js";
-import { hashToken } from "../src/auth.js";
+import { Application } from "../src/http/application.js";
+import { hashToken } from "../src/shared/auth-crypto.js";
 import type { Config } from "../src/config.js";
 
 const config: Config = {

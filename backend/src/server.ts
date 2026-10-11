@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
-import { Application } from "./application.js";
+import { Application } from "./http/application.js";
 
 function createApplication() {
   const config = loadConfig();

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import type { Pool } from "pg";
-import { Application } from "../src/application.js";
+import { Application } from "../src/http/application.js";
 import type { Config } from "../src/config.js";
 import { assertSchema } from "./contract-schema.js";
 
