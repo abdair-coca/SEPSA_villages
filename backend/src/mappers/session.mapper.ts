@@ -32,6 +32,17 @@ export interface SessionRow {
   expires_at: string;
 }
 
+export function toTechnician(technician: TechnicianRow): Record<string, unknown> {
+  return {
+    user_id: technician.user_id,
+    username: technician.username,
+    display_name: technician.display_name,
+    role: technician.role,
+    enabled: technician.enabled,
+    source: PROVISIONAL_SOURCE,
+  };
+}
+
 export function sessionBody(user: SessionUser): Record<string, unknown> {
   return {
     session_id: user.sessionId,

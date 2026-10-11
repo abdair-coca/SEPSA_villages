@@ -26,3 +26,6 @@ export async function withTransaction<T>(pool: Pool, work: (client: PoolClient) 
 export async function query<T extends QueryResultRow>(pool: Pool, text: string, values: unknown[] = []): Promise<QueryResult<T>> {
   return pool.query<T>(text, values);
 }
+
+/** Lo que necesita un repositorio para ejecutar SQL: el pool (consulta suelta) o un cliente dentro de una transacción. */
+export type Queryable = Pool | PoolClient;

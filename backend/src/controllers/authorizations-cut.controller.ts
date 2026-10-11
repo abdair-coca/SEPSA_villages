@@ -12,7 +12,8 @@ import { HttpError, parseJsonBody, requiredInteger, requiredString, sendJson } f
 import type { SessionUser } from "../types.js";
 import { PROVISIONAL_SOURCE, type ApplicationContext } from "../shared/application-context.js";
 import { insertAudit } from "../repositories/audit.repository.js";
-import { orderSelect, type OrderRow } from "../mappers/order.mapper.js";
+import type { OrderRow } from "../mappers/order.mapper.js";
+import { orderSelect } from "../repositories/orders.repository.js";
 import { requireRole } from "../shared/request-validation.js";
 
 interface CutAuthorizationRequest {

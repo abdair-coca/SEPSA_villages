@@ -14,3 +14,6 @@ export interface ApplicationContext {
   config: Config;
   logEvent(event: SecurityEvent["event"], fields: Omit<SecurityEvent, "event">): void;
 }
+
+/** Lo que necesitan los servicios: acceso a la base y configuración, sin el log de seguridad (que es de HTTP). */
+export type ServiceContext = Pick<ApplicationContext, "pool" | "config">;

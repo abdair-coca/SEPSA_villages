@@ -1,11 +1,9 @@
 /**
- * Columnas SQL y conversión de filas de morosos (con kardex y contexto) al JSON de la API.
+ * Fila de moroso (con kardex y contexto) y su conversión al JSON de la API. El SQL que la produce está en
+ * `repositories/debtors.repository.ts`.
  */
 import { isRecord } from "../http/responses.js";
 import { PROVISIONAL_SOURCE } from "../shared/application-context.js";
-import { projectContext } from "./command-response.mapper.js";
-
-export const NO_DATA_FILTER_VALUE = "__NO_DATA__";
 
 export interface DebtorRow {
   debtor_id: string;
@@ -40,24 +38,6 @@ export interface DebtorRow {
   reconnection_date: string | null;
   reconnection_technician: string | null;
   context: unknown;
-}
-
-export function kardexColumns(column: string): string {
-  return `(SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-    'entry_id', COALESCE(invoice->'entry_id', invoice->'entryId'), 'period', invoice->'period',
-    'amount_cents', COALESCE(invoice->'amount_cents', invoice->'amountCents'),
-    'billing_date', COALESCE(invoice->'billing_date', invoice->'billingDate'),
-    'invoice_origin', COALESCE(invoice->'invoice_origin', invoice->'invoiceOrigin'),
-    'days_late', COALESCE(invoice->'days_late', invoice->'daysLate')
-  )) ORDER BY position), '[]'::jsonb) FROM jsonb_array_elements(${column}) WITH ORDINALITY AS entries(invoice, position))`;
-}
-
-export function debtorColumns(): string {
-  return `debtor_id, account_id, supply_id, customer_name, address, reference_text, meter_id, area, locality,
-    route, debt_cents, months_pending, updated_at, ${kardexColumns("kardex")} AS kardex, circuit, customer_ci,
-    contact_phone, tariff, supply_status, enabling_title, route_order, cadastral_latitude, cadastral_longitude,
-    meter_brand, meter_index, meter_multiplier, claims, suspension_date, reconnection_manual, reconnection_date,
-    reconnection_technician, jsonb_build_object('area_name', context->'area_name', 'ruta_name', context->'ruta_name') AS context`;
 }
 
 export function toDebtor(row: DebtorRow): Record<string, unknown> {

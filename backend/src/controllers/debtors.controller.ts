@@ -6,7 +6,8 @@ import type { ServerResponse } from "node:http";
 import { HttpError, sendJson } from "../http/responses.js";
 import type { SessionUser } from "../types.js";
 import { PROVISIONAL_SOURCE, type ApplicationContext } from "../shared/application-context.js";
-import { debtorColumns, kardexColumns, NO_DATA_FILTER_VALUE, toDebtor, type DebtorRow } from "../mappers/debtor.mapper.js";
+import { toDebtor, type DebtorRow } from "../mappers/debtor.mapper.js";
+import { debtorColumns, kardexColumns, NO_DATA_FILTER_VALUE } from "../repositories/debtors.repository.js";
 import { pageRequest, pageResponse } from "../shared/pagination.js";
 import { requireRole } from "../shared/request-validation.js";
 
