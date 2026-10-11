@@ -91,7 +91,7 @@ export interface RemoteOperationReceipt {
 }
 
 export interface AuthorizationAdapter {
-  /** Pide autorización para cortar. Puede lanzar `TimeoutError` o `ResponseLostError`: ninguno autoriza. */
+  /** Pide autorización para cortar. Un rechazo explícito del backend (incluido 401) vuelve como `not_authorized`; una respuesta en duda (5xx, replay, conflicto de identificador) vuelve como `unknown`. Puede lanzar `TimeoutError` o `ResponseLostError`: ninguno autoriza. */
   requestCut(input: AuthRequest): Promise<AuthResponse>;
   /** Consume la autorización (un solo uso). `already_consumed` con la misma operación es un replay, no un segundo corte. */
   consumeCut(input: ConsumeRequest): Promise<ConsumeResponse>;
@@ -165,6 +165,7 @@ export interface EnablementLookupResult {
  * corte: reservar, consumir una vez y consultar por `operationId` si la respuesta se pierde.
  */
 export interface EnablementAdapter {
+  /** Pide habilitación de reconexión con el mismo criterio que `requestCut`: rechazo explícito → `not_enabled`; 5xx, replay o conflicto de identificador → `unknown`. */
   requestReconnection(input: EnablementRequest): Promise<EnablementResponse>;
   consumeReconnection(input: ConsumeEnablementRequest): Promise<ConsumeEnablementResponse>;
   lookupReconnection(operationId: string): Promise<EnablementLookupResult>;

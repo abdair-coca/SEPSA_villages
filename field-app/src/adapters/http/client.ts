@@ -7,6 +7,7 @@
  * - Fallo de red, modo offline o timeout → error `NETWORK_UNKNOWN`: resultado desconocido, nunca éxito.
  * - Respuesta HTTP no OK → `HttpPilotError` con el `code` del backend.
  * - 409 en sync → `conflict` (se conserva); 409 en habilitación → `not_enabled`.
+ * - Autorización de corte y reconexión: rechazo definitivo o 401 → `not_authorized` / `not_enabled` con su código; 5xx, replay o conflicto de identificador → `unknown` (se guarda para revisión).
  * La sesión vive solo en memoria y se envía por cookie (`credentials: "include"`).
  * Contrato HTTP: `docs/api/pilot-contract.md`.
  */
@@ -36,6 +37,25 @@ import type {
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, ConsumeEnablementRequest, ConsumeEnablementResponse, EnablementAdapter, EnablementLookupResult, EnablementRequest, EnablementResponse, RemoteResult } from "../../ports/authorization";
 import type { EvidenceUploadPort, SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
 import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotReconnectionConsumeResponseDto, PilotReconnectionEnablementLookupDto, PilotReconnectionEnablementResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
+
+/**
+ * Rechazos del backend a `POST /v1/authorizations/cut` que ocurren antes de crear cualquier reserva: el corte no
+ * queda autorizado y se registra como visita bloqueada con ese código. Los replays y conflictos de identificador
+ * están en `AUTHORIZATION_REPLAY_CODES`: su resultado es incierto, no un rechazo.
+ */
+const CUT_AUTHORIZATION_REJECTIONS: ReadonlySet<string> = new Set([
+  "ORDER_NOT_FOUND",
+  "ORDER_NOT_ASSIGNED",
+  "VERSION_CONFLICT",
+  "ORDER_NOT_ELIGIBLE",
+  "PHYSICAL_STATUS_NOT_ELIGIBLE",
+]);
+
+/**
+ * Respuestas en las que el backend ya tiene una reserva o una operación ligada a ese identificador. No son rechazos:
+ * el resultado es incierto y se guarda para revisión, como un timeout.
+ */
+const AUTHORIZATION_REPLAY_CODES: ReadonlySet<string> = new Set(["AUTHORIZATION_OPERATION_REPLAY", "ENABLEMENT_OPERATION_REPLAY", "IDEMPOTENCY_CONFLICT"]);
 
 interface HttpClientOptions {
   baseUrl: string;
@@ -169,11 +189,11 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
 
   async downloadAssigned(technicianId: string, deviceId: string, session?: Session, knownVersion?: number): Promise<WorkPackageEnvelope> {
     const authorized = this.requireSession(session);
-    if (authorized.userId !== technicianId) throw new Error("Technician identity does not match session.");
+    if (authorized.userId !== technicianId) throw new Error("La identidad del técnico no coincide con la sesión.");
     const params = new URLSearchParams({ device_id: deviceId });
     if (knownVersion !== undefined) params.set("known_version", String(knownVersion));
     const response = await this.request<PilotPackageResponseDto>(`/v1/technician/orders?${params}`, { method: "GET" }, authorized);
-    if (response.checksum !== await digestJson(response.package)) throw new Error("Server work package integrity validation failed.");
+    if (response.checksum !== await digestJson(response.package)) throw new Error("La validación de integridad del paquete de trabajo del servidor falló.");
     const workPackage = {
       packageId: response.package.package_id,
       technicianId: response.package.technician_id,
@@ -235,10 +255,22 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     });
   }
 
-  /** Pide autorización de corte. En el piloto el consumo es `deferred`: el backend la consume al aceptar el sync. */
+  /**
+   * Pide autorización de corte. En el piloto el consumo es `deferred`: el backend la consume al aceptar el sync.
+   * Un rechazo definitivo (`CUT_AUTHORIZATION_REJECTIONS`) o un 401 vuelve como `not_authorized` con su código, para que
+   * el caso de uso lo registre como visita bloqueada. Un 5xx o un replay vuelve como `unknown`. Cualquier otro error se relanza.
+   */
   async requestCut(input: AuthRequest): Promise<AuthResponse> {
     const session = this.requireActiveSession();
-    const response = await this.request<PilotAuthorizationResponseDto>("/v1/authorizations/cut", { method: "POST", body: { operation_id: input.operationId, order_id: input.orderId, device_id: input.deviceId, order_version: input.orderVersion } }, session);
+    let response: PilotAuthorizationResponseDto;
+    try {
+      response = await this.request<PilotAuthorizationResponseDto>("/v1/authorizations/cut", { method: "POST", body: { operation_id: input.operationId, order_id: input.orderId, device_id: input.deviceId, order_version: input.orderVersion } }, session);
+    } catch (error) {
+      if (!(error instanceof HttpPilotError)) throw error;
+      if (error.status === 401 || CUT_AUTHORIZATION_REJECTIONS.has(error.code)) return { operationId: input.operationId, status: "not_authorized", errorCode: error.code };
+      if (error.status >= 500 || AUTHORIZATION_REPLAY_CODES.has(error.code)) return { operationId: input.operationId, status: "unknown", errorCode: error.code };
+      throw error;
+    }
     return { operationId: response.operation_id, status: "authorized", grant: { authorizationId: response.authorization_id, token: response.token, orderId: response.order_id, technicianId: response.technician_id, technicianNameSnapshot: response.technician_name_snapshot, deviceId: response.device_id, operationId: response.operation_id, version: response.version, issuedAt: response.issued_at, expiresAt: response.expires_at, consumption: "deferred" } };
   }
 
@@ -273,7 +305,8 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
         },
       };
     } catch (error) {
-      if (error instanceof HttpPilotError && error.status === 409) return { operationId: input.operationId, status: "not_enabled", errorCode: error.code };
+      if (error instanceof HttpPilotError && (error.status === 401 || (error.status === 409 && !AUTHORIZATION_REPLAY_CODES.has(error.code)))) return { operationId: input.operationId, status: "not_enabled", errorCode: error.code };
+      if (error instanceof HttpPilotError && (error.status >= 500 || AUTHORIZATION_REPLAY_CODES.has(error.code))) return { operationId: input.operationId, status: "unknown", errorCode: error.code };
       throw error;
     }
   }
@@ -315,7 +348,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
 
   /** Sube los bytes de una foto (base64) y exige que el recibo devuelva el mismo id y SHA-256. */
   async uploadEvidence(evidence: import("../../domain/types").EvidenceReference): Promise<"verified"> {
-    if (!evidence.content || !evidence.contentHash) throw new Error("Evidence bytes and SHA-256 hash are required.");
+    if (!evidence.content || !evidence.contentHash) throw new Error("Se requieren los bytes de la evidencia y su hash SHA-256.");
     const bytes = new Uint8Array(await evidence.content.arrayBuffer());
     let binary = "";
     for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -324,7 +357,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
       technician_id: evidence.technicianId, device_id: evidence.deviceId, mime_type: evidence.mimeType,
       content_hash: evidence.contentHash, content_base64: btoa(binary),
     } }, this.requireActiveSession());
-    if (response.status !== "verified" || response.evidence_id !== evidence.evidenceId || response.content_hash !== evidence.contentHash) throw new Error("Evidence upload receipt does not match local evidence.");
+    if (response.status !== "verified" || response.evidence_id !== evidence.evidenceId || response.content_hash !== evidence.contentHash) throw new Error("El acuse de la carga de evidencia no coincide con la evidencia local.");
     return "verified";
   }
 
@@ -364,7 +397,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   private requireActiveSession(session = this.activeSession): Session {
     if (!session) throw new Error("La sesión no está disponible.");
     if (!isValidFutureDate(session.expiresAt)) throw new Error("La sesión expiró. Ingrese nuevamente.");
-    if (this.activeSession && session.sessionId !== this.activeSession.sessionId) throw new Error("Session is not active in this client.");
+    if (this.activeSession && session.sessionId !== this.activeSession.sessionId) throw new Error("La sesión no está activa en este cliente.");
     return session;
   }
 
@@ -527,4 +560,4 @@ function requiredString(value: unknown, field: string): string {
 }
 function isValidFutureDate(value?: string): boolean { const timestamp = value ? Date.parse(value) : Number.NaN; return Number.isFinite(timestamp) && timestamp > Date.now(); }
 function errorCode(error: unknown, fallback: string): string { return error instanceof HttpPilotError ? error.code : error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : fallback; }
-function networkUnknown(): Error { const error = new Error("Network availability is unknown."); error.name = "NetworkUnknownError"; Object.defineProperty(error, "code", { value: "NETWORK_UNKNOWN" }); return error; }
+function networkUnknown(): Error { const error = new Error("No se sabe si hay conexión de red."); error.name = "NetworkUnknownError"; Object.defineProperty(error, "code", { value: "NETWORK_UNKNOWN" }); return error; }

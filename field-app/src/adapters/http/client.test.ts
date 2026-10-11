@@ -233,6 +233,44 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     expect(JSON.parse(String(requests[2]?.init.body))).toMatchObject({ authorization_id: "auth-1", authorization_token: "opaque-1", order_version: 2, operation_id: "cut-1" });
   });
 
+  it.each([
+    ["ORDER_NOT_FOUND", 404],
+    ["ORDER_NOT_ASSIGNED", 403],
+    ["VERSION_CONFLICT", 409],
+    ["ORDER_NOT_ELIGIBLE", 409],
+    ["PHYSICAL_STATUS_NOT_ELIGIBLE", 409],
+    ["UNAUTHENTICATED", 401],
+  ])("returns explicit %s cut rejection as not_authorized so the cut is recorded as blocked", async (code, status) => {
+    const client = authorizationClient("/authorizations/cut", () => new Response(JSON.stringify({ code, message: "Rechazo del backend." }), { status }));
+    await client.authenticate({ username: "tech", password: "password" });
+
+    await expect(client.requestCut({ orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", operationId: "cut-1", orderVersion: 2 })).resolves.toEqual({ operationId: "cut-1", status: "not_authorized", errorCode: code });
+  });
+
+  it.each([
+    ["AUTHORIZATION_OPERATION_REPLAY", 409],
+    ["IDEMPOTENCY_CONFLICT", 409],
+    ["INTERNAL_ERROR", 500],
+  ])("returns %s cut response as unknown so the cut is kept for review", async (code, status) => {
+    const client = authorizationClient("/authorizations/cut", () => new Response(JSON.stringify({ code, message: "Respuesta en duda." }), { status }));
+    await client.authenticate({ username: "tech", password: "password" });
+
+    await expect(client.requestCut({ orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", operationId: "cut-1", orderVersion: 2 })).resolves.toEqual({ operationId: "cut-1", status: "unknown", errorCode: code });
+  });
+
+  it.each([
+    ["VERSION_CONFLICT", 409, "not_enabled"],
+    ["UNAUTHENTICATED", 401, "not_enabled"],
+    ["ENABLEMENT_OPERATION_REPLAY", 409, "unknown"],
+    ["IDEMPOTENCY_CONFLICT", 409, "unknown"],
+    ["INTERNAL_ERROR", 500, "unknown"],
+  ])("maps reconnection %s (HTTP %s) to %s", async (code, status, expected) => {
+    const client = authorizationClient("/authorizations/reconnection", () => new Response(JSON.stringify({ code, message: "Respuesta de reconexión." }), { status }));
+    await client.authenticate({ username: "tech", password: "password" });
+
+    await expect(client.requestReconnection({ orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", operationId: "reconnect-1", orderVersion: 2 })).resolves.toEqual({ operationId: "reconnect-1", status: expected, errorCode: code });
+  });
+
   it("uses provisional reconnection habilitation and sync contracts without resending the consumed token", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const operationId = "reconnection-http-1";
@@ -274,9 +312,20 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     });
     const session = await client.authenticate({ username: "tech", password: "password" });
 
-    await expect(client.downloadAssigned("tech-1", "device-1", session)).rejects.toThrow("integrity validation failed");
+    await expect(client.downloadAssigned("tech-1", "device-1", session)).rejects.toThrow("La validación de integridad del paquete de trabajo del servidor falló.");
   });
 });
+
+function authorizationClient(endpoint: string, authorizationResponse: () => Response): HttpPilotClient {
+  return new HttpPilotClient({
+    baseUrl: "http://localhost:8080",
+    fetchImpl: async (input) => {
+      if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } });
+      if (String(input).endsWith(endpoint)) return authorizationResponse();
+      throw new Error(`Unexpected request: ${String(input)}`);
+    },
+  });
+}
 
 function json(value: unknown): Response {
   return new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } });

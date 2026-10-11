@@ -305,6 +305,32 @@ describe("cut process integration boundaries", () => {
     });
   });
 
+  it("records a blocked visit with the backend code when authorization rejects the cut", async () => {
+    const repository = new MemoryRepository();
+    const authorization = new StubAuthorization();
+    authorization.requestResponse = { status: "not_authorized", errorCode: "VERSION_CONFLICT" };
+
+    const result = await executeCut(input(repository, authorization, "operation-rejected-00000000-0000-4000-8000-000000000012"));
+
+    expect(result.outcome).toBe("visit_recorded");
+    if (result.outcome !== "visit_recorded") throw new Error("Expected a blocked visit for the explicit rejection");
+    expect(result.visit).toMatchObject({ reason: "NOT_AUTHORIZED", errorCode: "VERSION_CONFLICT", syncStatus: "pending" });
+    expect(authorization.consumeCalls).toHaveLength(0);
+  });
+
+  it("keeps an unknown authorization response with its backend code as a pending visit", async () => {
+    const repository = new MemoryRepository();
+    const authorization = new StubAuthorization();
+    authorization.requestResponse = { status: "unknown", errorCode: "AUTHORIZATION_OPERATION_REPLAY" };
+
+    const result = await executeCut(input(repository, authorization, "operation-replay-00000000-0000-4000-8000-000000000013"));
+
+    expect(result.outcome).toBe("visit_recorded");
+    if (result.outcome !== "visit_recorded") throw new Error("Expected a pending visit for the uncertain response");
+    expect(result.visit).toMatchObject({ reason: "AUTHORIZATION_UNKNOWN", errorCode: "AUTHORIZATION_OPERATION_REPLAY", syncStatus: "pending" });
+    expect(authorization.consumeCalls).toHaveLength(0);
+  });
+
   it("does not consume a second stale operation or overwrite current order state", async () => {
     const repository = new MemoryRepository();
     const authorization = new StubAuthorization();
