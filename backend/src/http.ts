@@ -1,3 +1,8 @@
+/**
+ * Utilidades HTTP: errores con código (`HttpError`), respuestas JSON sin caché, lectura de cuerpo JSON con
+ * límite de tamaño y validación básica de campos. Una violación de unicidad de PostgreSQL (23505) se
+ * responde como `IDEMPOTENCY_CONFLICT`.
+ */
 import type { ServerResponse } from "node:http";
 
 export interface HttpErrorShape {

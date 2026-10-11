@@ -78,6 +78,55 @@ Contrato HTTP provisional, evidencia observada y pendientes: [Contrato del pilot
 6. El backend aplica idempotencia, autorización, conflictos y auditoría.
 7. La cola conserva operaciones fallidas o inciertas para reintento seguro o revisión humana.
 
+## Mapa del código
+
+Dónde vive cada responsabilidad. Cada archivo empieza con un comentario que explica qué hace y qué no hace; los invariantes críticos (autorización de un solo uso, leases de la cola, `cutSendPhase`, idempotencia) están comentados junto al código que los aplica.
+
+### field-app (`field-app/src/`)
+
+| Carpeta | Responsabilidad | Empezar por |
+|---|---|---|
+| `main.tsx`, `App.tsx` | Arranque, modo (simulado o piloto), sesión y pantalla según rol | `App.tsx` |
+| `domain/` | Tipos y reglas de negocio puras; no importa nada del proyecto | `policies.ts`, `types.ts` |
+| `ports/` | Contratos entre casos de uso y adaptadores | `repository.ts`, `authorization.ts`, `sync.ts` |
+| `use-cases/` | Corte, reconexión, visita, sincronización, descarga y comandos de admin | `process.ts`, `sync.ts` |
+| `adapters/indexeddb/` | Almacenamiento local durable y autoridad simulada | `repository.ts` |
+| `adapters/http/` | Cliente del backend piloto (todos los puertos remotos) | `client.ts` |
+| `adapters/browser/`, `adapters/mock/` | Conectividad, sesión y Service Worker; adaptadores simulados | — |
+| `state/` | Store de la jornada del técnico (acciones, sync, mensajes) | `store.ts` |
+| `bootstrap/` | Construcción de stores con sus adaptadores | `runtime.ts` |
+| `screens/` | Pantallas: técnico (`FieldApp`), administrador (`OperationsApp`), login | — |
+| `components/`, `components/common/` | Componentes con lógica visible; primitivas genéricas | `OrderDetail.tsx`, `CaptureForm.tsx` |
+| `services/`, `utils/`, `styles/` | Servicios del navegador sin UI; funciones puras de presentación; CSS | — |
+
+La regla de dependencias entre carpetas la verifica `field-app/src/architecture.test.ts`.
+
+### backend (`backend/src/`)
+
+| Archivo o carpeta | Responsabilidad |
+|---|---|
+| `server.ts`, `application.ts` | Arranque, pipeline HTTP (seguridad, CORS, CSRF, sesión) y tabla de rutas |
+| `application/auth/` | Login, logout, sesión, cambio de rol y límite de intentos |
+| `application/debtors/`, `application/orders/` | Búsqueda de morosos; crear, asignar y listar órdenes; paquete del técnico |
+| `application/authorizations/` | Autorización de corte y habilitación de reconexión |
+| `application/evidence/` | Subida y verificación de fotos |
+| `application/sync/` | Recepción, consulta y revisión humana de operaciones sincronizadas |
+| `application/audit/` | Registro y consulta de auditoría |
+| `application/shared/`, `application/projections/` | Idempotencia, paginación y validación; conversión de filas SQL a JSON |
+| `auth.ts`, `db.ts`, `http.ts`, `config.ts` | Criptografía, transacciones, utilidades HTTP y configuración |
+
+### Recorrido de una orden de punta a punta
+
+1. **Admin busca morosos.** `screens/OperationsApp.tsx` → `refresh()` → `HttpPilotClient.findDebtors` → `GET /v1/debtors` → `application/debtors/search.ts` `listDebtors`.
+2. **Admin crea y asigna.** `OperationsApp` `confirmOrderCreation()` → `createOrder` / `createOrdersBatch` + `assignOrder` → `POST /v1/orders` y `POST /v1/orders/{id}/assignment` → `application/orders/order-command-handlers.ts` (idempotencia en `application/shared/command-idempotency.ts`).
+3. **Técnico descarga su jornada.** `App.tsx` `TechnicianRuntime` → `loadPackage()` → `use-cases/download.ts` `downloadAssigned` → `GET /v1/technician/orders` → `application/orders/work-package-handlers.ts`; se guarda con `IndexedDbLocalRepository.savePackage`.
+4. **Técnico captura el corte.** `components/OrderDetail.tsx` → `components/CaptureForm.tsx` → `state/store-actions.ts` `executeCut` → `state/evidence.ts` `prepareEvidence`.
+5. **Autorización online y guardado local.** `use-cases/process.ts` `executeCut` → `HttpPilotClient.requestCut` → `POST /v1/authorizations/cut` → `application/authorizations/cut.ts` `authorizeCut`; luego `IndexedDbLocalRepository.claimCut` guarda operación, orden y cola en una transacción.
+6. **Sincronización.** `state/store-sync.ts` `requestSync` → `use-cases/sync.ts` `SyncEngine.syncOnce` → subida de fotos (`POST /v1/evidence/assets` → `application/evidence/upload.ts`) → `markCutSendStarted` → `POST /v1/sync/operations` → `application/sync/apply-sync.ts` `applySync` → `application/sync/physical-operations.ts` (consume la autorización y confirma la orden).
+7. **Auditoría.** Cada cambio del backend inserta su evento en la misma transacción (`application/audit/record.ts` `insertAudit`); el admin lo consulta con `GET /v1/audit` → `application/audit/handlers.ts` `listAudit`.
+
+En modo simulado, los pasos remotos los resuelve `adapters/indexeddb/authority-repository.ts` en lugar del backend.
+
 ## Identidad y autorización
 
 El frontend usa permisos para orientar la experiencia; el backend vuelve a validar la sesión y el rol. Un técnico solo recibe y opera órdenes asignadas a su identidad. Las sesiones remotas no deben convertirse en secretos persistidos en almacenamiento de la aplicación.

@@ -1,3 +1,7 @@
+/**
+ * Endpoint de sincronización (`POST /v1/sync/operations`, solo TECHNICIAN). El técnico del payload se fuerza
+ * al de la sesión. Responde 200 con el recibo completo si se aceptó, o 409 si quedó en conflicto.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { withTransaction } from "../../db.js";
 import { HttpError, parseJsonBody, sendJson } from "../../http.js";

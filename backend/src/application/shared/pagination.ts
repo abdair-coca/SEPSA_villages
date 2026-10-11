@@ -1,3 +1,6 @@
+/**
+ * Paginación por `limit` y `offset`/`cursor` (no ambos), con límites máximos.
+ */
 import { HttpError } from "../../http.js";
 import { parseNonNegativeInteger } from "./request-validation.js";
 

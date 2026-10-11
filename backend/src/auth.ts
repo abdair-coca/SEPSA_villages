@@ -1,3 +1,7 @@
+/**
+ * Criptografía de autenticación: contraseñas con scrypt (sal aleatoria, comparación en tiempo constante) y
+ * tokens opacos aleatorios. En la base solo se guarda el SHA-256 del token (`hashToken`), nunca el token.
+ */
 import { createHash, randomBytes, scrypt as nodeScrypt, timingSafeEqual, type ScryptOptions } from "node:crypto";
 
 const SCRYPT_N = 16_384;

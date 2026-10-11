@@ -1,3 +1,7 @@
+/**
+ * Emisión de habilitación de reconexión (contrato provisional del piloto). Igual que la de corte, pero exige
+ * orden `EJECUTADO` con corte `CONFIRMED`. Se guarda en la misma tabla con `action = RECONNECTION`.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createOpaqueToken, hashToken } from "../../auth.js";

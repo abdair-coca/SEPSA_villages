@@ -1,3 +1,12 @@
+/**
+ * Aceptación de cortes y reconexiones sincronizados. En la misma transacción:
+ * - CUT: orden `GENERADO`/`NONE` y versión vigente, evidencia verificada, autorización reservada para esta misma
+ *   operación/orden/técnico/dispositivo/versión con token correcto; se consume (una vez, si no venció) y la
+ *   orden pasa a `EJECUTADO`/`CONFIRMED`.
+ * - RECONNECTION: orden `EJECUTADO`/`CONFIRMED`, exactamente un CUT confirmado en el ciclo, habilitación ya
+ *   consumida por esta operación (sin reenviar el token) y evidencia verificada; la orden pasa a `RECONEXIÓN`.
+ * Cualquier discrepancia deja la operación en conflicto y auditada; nunca se confirma un resultado a medias.
+ */
 import { hashToken } from "../../auth.js";
 import type { PoolClient } from "pg";
 import { HttpError } from "../../http.js";
@@ -75,6 +84,7 @@ async function acceptCut(client: PoolClient, user: SessionUser, payload: SyncPay
   if (!grant || !matchesCutAuthorization(grant, user, payload, authorizationToken)) {
     return rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
   }
+  // Consumo de un solo uso: solo pasa de RESERVED a CONSUMED si no venció (hora de la base, no del cliente).
   const consumedAuthorization = await client.query("UPDATE cut_authorizations SET status = 'CONSUMED', consumed_at = clock_timestamp(), consumed_operation_id = $2 WHERE authorization_id = $1 AND action = 'CUT' AND status = 'RESERVED' AND expires_at > clock_timestamp()", [grant.authorization_id, payload.operation_id]);
   if (consumedAuthorization.rowCount !== 1) return rejectSync(client, user, payload, "Authorization is invalid, expired, consumed, or not bound to this operation.");
   const updatedOrder = await client.query("UPDATE orders SET status = 'EJECUTADO', physical_status = 'CONFIRMED', version = version + 1, updated_at = now() WHERE order_id = $1 AND version = $2", [payload.order_id, payload.order_version]);

@@ -1,3 +1,6 @@
+/**
+ * Tipos compartidos del backend: rol y usuario de la sesión autenticada.
+ */
 export type Role = "ADMIN" | "TECHNICIAN";
 
 export interface AuthenticatedUser {

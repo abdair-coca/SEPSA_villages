@@ -1,3 +1,9 @@
+/**
+ * Subida de fotos de evidencia (`POST /v1/evidence/assets`, solo TECHNICIAN).
+ * El servidor recalcula el SHA-256 de los bytes y lo compara con el declarado, valida la imagen y la guarda
+ * `verified` ligada a orden, operación, técnico y dispositivo. Reenviar la misma foto es idempotente;
+ * reutilizar el id con otro contenido o vínculo es `EVIDENCE_BINDING_CONFLICT`.
+ */
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { withTransaction } from "../../db.js";

@@ -1,3 +1,9 @@
+/**
+ * Consumo y consulta de la habilitación de reconexión.
+ * El consumo verifica token (por hash), operación, orden, técnico, dispositivo y versión, y marca la
+ * habilitación `CONSUMED` una sola vez. Repetir el consumo con la misma operación es un replay aceptado; con
+ * otra operación, vencida o con la orden cambiada, responde `not_enabled`. Todo intento queda auditado.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { hashToken } from "../../auth.js";
 import { withTransaction } from "../../db.js";

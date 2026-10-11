@@ -1,3 +1,6 @@
+/**
+ * Lista de técnicos habilitados para asignar órdenes (solo ADMIN).
+ */
 import type { ServerResponse } from "node:http";
 import type { SessionUser } from "../../types.js";
 import { PROVISIONAL_SOURCE, type ApplicationContext } from "../application-context.js";

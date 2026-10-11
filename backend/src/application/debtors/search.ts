@@ -1,3 +1,7 @@
+/**
+ * Búsqueda paginada de suministros morosos (solo ADMIN) con filtros de texto, área, localidad, ruta,
+ * meses pendientes y estado del suministro.
+ */
 import type { ServerResponse } from "node:http";
 import { HttpError, sendJson } from "../../http.js";
 import type { SessionUser } from "../../types.js";

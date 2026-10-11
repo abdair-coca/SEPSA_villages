@@ -1,3 +1,10 @@
+/**
+ * Aplica una operación sincronizada dentro de una transacción.
+ * - Idempotencia: el mismo `operation_id` con el mismo payload devuelve el mismo recibo; con otro payload o
+ *   dispositivo, conflicto. Una operación que quedó en conflicto no se reprocesa: requiere revisión.
+ * - La orden debe estar asignada al técnico. Las visitas se aceptan sin tocar la orden.
+ * - Cortes y reconexiones se delegan en `physical-operations.ts`.
+ */
 import type { PoolClient } from "pg";
 import type { SessionUser, SyncPayload } from "../../types.js";
 import { PROVISIONAL_SOURCE } from "../application-context.js";
@@ -22,6 +29,7 @@ export async function applySync(client: PoolClient, user: SessionUser, payload: 
       return concurrent.rows[0] ? syncReplay(concurrent.rows[0], user.userId, payload) ?? { status: "conflict", message: "Operation is already in progress." } : { status: "conflict", message: "Operation is already in progress." };
     }
   } else {
+    // Existe pero no es un replay aceptado: quedó en conflicto y solo se resuelve por revisión.
     return { status: "conflict", message: "Operation remains unresolved and requires review." };
   }
 

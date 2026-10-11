@@ -147,7 +147,7 @@ El detalle de reglas sigue en `docs/`; el comentario enlaza al documento en vez 
 | 0 | Cierre del refactor actual y limpieza | ambos | Bajo | Hecha |
 | 1 | Reorganización por tipo de field-app | field-app | Bajo | Hecha |
 | 2 | Utilidades y reglas en su capa | field-app | Bajo | Hecha |
-| 3 | Comentarios y mapa del código | ambos | Nulo | Pendiente |
+| 3 | Comentarios y mapa del código | ambos | Nulo | Hecha |
 | 4 | División de componentes grandes | field-app | Medio | Pendiente |
 | 5 | Backend por tipo (controller/service/repository) | backend | Medio | Pendiente |
 | 6 | CSS por tipo y deduplicación | field-app | **Alto** | Pendiente |

@@ -1,3 +1,6 @@
+/**
+ * Validaciones comunes de la petición: rol requerido, UUID y enteros no negativos.
+ */
 import { HttpError } from "../../http.js";
 import type { Role, SessionUser } from "../../types.js";
 

@@ -1,3 +1,8 @@
+/**
+ * Punto de entrada de cada petición HTTP: request id, cabeceras de seguridad, CORS, verificación de origen,
+ * sesión y enrutado a los módulos de `application/`. Todo error se convierte en `{ code, message }` y se
+ * registra en el log de seguridad sin cuerpos ni datos personales. Contrato: `docs/api/pilot-contract.md`.
+ */
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Pool } from "pg";

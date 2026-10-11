@@ -1,3 +1,6 @@
+/**
+ * Reconstruye la respuesta guardada de un comando para devolverla igual en un replay idempotente.
+ */
 import { isRecord } from "../../http.js";
 
 export function projectContext(value: unknown): unknown {

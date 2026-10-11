@@ -1,3 +1,6 @@
+/**
+ * Agrupa los endpoints de órdenes: catálogo de técnicos, lectura, comandos y paquete de trabajo.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionUser } from "../../types.js";
 import type { ApplicationContext } from "../application-context.js";

@@ -1,3 +1,10 @@
+/**
+ * Políticas HTTP de seguridad:
+ * - Cabeceras defensivas en todas las respuestas (nosniff, sin iframes, sin referrer; HSTS si hay HTTPS).
+ * - CORS solo para el origen configurado, con credenciales.
+ * - Protección CSRF en POST: el origen debe ser el permitido; con cookie de sesión el origen es obligatorio;
+ *   se rechaza `sec-fetch-site: cross-site`.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { HttpError, parseBearerToken } from "../http.js";
 
@@ -23,6 +30,7 @@ export function validateOrigin(request: IncomingMessage, allowedOrigin: string):
   const origin = request.headers.origin;
   const usesCookieAuthentication = !parseBearerToken(request.headers.authorization);
   const hasUnexpectedOrigin = origin !== undefined && origin !== allowedOrigin;
+  // Con cookie el navegador la envía sola; sin cabecera Origin no se puede descartar una petición CSRF.
   const missingCookieOrigin = !origin && usesCookieAuthentication;
 
   if (hasUnexpectedOrigin || missingCookieOrigin) {

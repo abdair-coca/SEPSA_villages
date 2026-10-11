@@ -1,3 +1,7 @@
+/**
+ * Configuración desde variables de entorno, con valores por defecto seguros para desarrollo.
+ * Los números inválidos o no positivos vuelven al valor por defecto.
+ */
 export interface Config {
   host: string;
   port: number;

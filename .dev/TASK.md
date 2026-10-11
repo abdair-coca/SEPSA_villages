@@ -7,7 +7,7 @@
 - Al cerrar cada tarea, marcar `[x]`. Al cerrar una fase, actualizar su estado en la tabla de fases de `PLAN.md`.
 - Cada fase termina con su bloque **Validación** completo en verde antes de commitear.
 
-Fase en curso: **3**
+Fase en curso: **4**
 
 ---
 
@@ -98,29 +98,31 @@ Solo `git mv` y actualización de imports. Ningún símbolo exportado cambia de 
 Política en `PLAN.md` → "Política de comentarios". Comentarios en español, explicando el porqué.
 
 **field-app**
-- [ ] `domain/`: cabeceras + porqué de cada política (elegibilidad de corte, excepciones GPS/foto, validación de captura)
-- [ ] `ports/`: JSDoc de cada interfaz y método (contrato, errores, garantías)
-- [ ] `use-cases/process.ts`: autorización online, de un solo uso e inmediata; resultado incierto no se repite
-- [ ] `use-cases/sync.ts`: lease, `cutSendPhase`, ACK perdido → consulta de estado, sin last-write-wins
-- [ ] `use-cases/reconnection.ts`: habilitación provisional y su vínculo orden/técnico/dispositivo/operación/versión
-- [ ] `adapters/indexeddb/`: esquema de stores, transacciones atómicas, por qué se re-verifica antes del POST
-- [ ] `adapters/http/client.ts`: mapeo de errores HTTP a errores de dominio
-- [ ] `state/`: responsabilidad de cada archivo del store y flujo de una acción
-- [ ] `bootstrap/runtime.ts` y `App.tsx`: modo simulado vs. backend piloto
-- [ ] Cabecera en cada pantalla y componente no trivial
+- [x] `domain/`: cabeceras + porqué de cada política (elegibilidad de corte, excepciones GPS/foto, validación de captura)
+- [x] `ports/`: JSDoc de cada interfaz y método (contrato, errores, garantías)
+- [x] `use-cases/process.ts`: autorización online, de un solo uso e inmediata; resultado incierto no se repite
+- [x] `use-cases/sync.ts`: lease, `cutSendPhase`, ACK perdido → consulta de estado, sin last-write-wins
+- [x] `use-cases/reconnection.ts`: habilitación provisional y su vínculo orden/técnico/dispositivo/operación/versión
+- [x] `adapters/indexeddb/`: esquema de stores, transacciones atómicas, por qué se re-verifica antes del POST
+- [x] `adapters/http/client.ts`: mapeo de errores HTTP a errores de dominio
+- [x] `state/`: responsabilidad de cada archivo del store y flujo de una acción
+- [x] `bootstrap/runtime.ts` y `App.tsx`: modo simulado vs. backend piloto
+- [x] Cabecera en cada pantalla y componente no trivial
 
 **backend**
-- [ ] Cabecera en cada módulo de `application/` (o su ubicación tras la fase 5)
-- [ ] Idempotencia de comandos (`command-idempotency.ts`): replay y conflicto de hash
-- [ ] Autorización de corte y reconexión: consumo único y vigencia
-- [ ] Sync: validación de evidencia dentro de la transacción de consumo
-- [ ] `http-policy.ts`: CORS, origen y cabeceras de seguridad
+- [x] Cabecera en cada archivo de `backend/src/` (incluidos `application/`, `auth.ts`, `db.ts`, `http.ts`, `config.ts`)
+- [x] Idempotencia de comandos (`command-idempotency.ts`): replay y conflicto de hash
+- [x] Autorización de corte y reconexión: consumo único y vigencia
+- [x] Sync: validación de evidencia dentro de la transacción de consumo
+- [x] `http-policy.ts`: CORS, origen y cabeceras de seguridad
 
 **Mapa del código**
-- [ ] Añadir a `docs/ARCHITECTURE.md` la sección "Mapa del código": carpeta → responsabilidad → archivo de entrada (field-app y backend)
-- [ ] Añadir el recorrido de una orden: admin crea → asigna → técnico descarga → captura → autoriza → sync → auditoría, con archivo y función de cada paso
-- [ ] Verificar que todas las rutas del mapa existen
-- [ ] **Validación:** suites de ambos paquetes en verde (los comentarios no deben romper nada); commit; estado actualizado en `PLAN.md`
+- [x] Añadir a `docs/ARCHITECTURE.md` la sección "Mapa del código": carpeta → responsabilidad → archivo de entrada (field-app y backend)
+- [x] Añadir el recorrido de una orden: admin crea → asigna → técnico descarga → captura → autoriza → sync → auditoría, con archivo y función de cada paso
+- [x] Verificar que todas las rutas del mapa existen
+- [x] Comentarios previos en inglés traducidos al español
+- [x] Imports sin usar preexistentes eliminados (`tsc --noUnusedLocals` sin hallazgos en field-app)
+- [x] **Validación:** field-app `tsc`, `vitest` (316/316), `build`, `smoke:ui` (17/17), `smoke:pwa`; backend `tsc`, `test:unit` (48/48), `test:integration`, `e2e:browser` en verde; commit; estado actualizado en `PLAN.md`
 
 ## Fase 4 — División de componentes grandes
 
@@ -168,6 +170,7 @@ Objetivo: ~300 líneas máximo por componente, sin cambiar markup, clases CSS ni
 - [ ] `authorizations` (cut + reconexión)
 - [ ] `sync`
 - [ ] Verificar: ningún archivo de `controllers/` contiene `.query(`; ningún archivo de `repositories/` importa `node:http`
+- [ ] Actualizar la tabla del backend y el recorrido de la orden en `docs/ARCHITECTURE.md` → "Mapa del código"
 
 **Validación**
 - [ ] `npx tsc --noEmit` · `npm run test:unit` · `npm run test:integration` · `npm run e2e:browser` en verde
@@ -215,6 +218,8 @@ Bugs, deudas o decisiones detectadas durante el plan. No se corrigen dentro de u
 - Fase 1→2: `utils/` importaba tipos de `state/`. Resuelto para `ActionKind` (ahora en `domain/types.ts`). `ActivityEntry` sigue en `state/store.ts` porque es un modelo de vista del store; `utils/format.ts` y `utils/sorting.ts` lo importan solo como tipo.
 - Fase 2: `screens/OperationsApp.tsx` tiene etiquetas privadas propias del admin (`orderDomainStatusLabel`, `orderStatusLabel`, `statusTone`, `formatRelativeDate`) con textos distintos a los de `utils/labels.ts` (p. ej. "Generada" vs "Por ejecutar"). Moverlas a `utils/labels.ts` con nombres `admin*` en la fase 4; unificar textos es decisión de producto.
 - Fase 2: `FieldMap.tsx` tiene `orderCoordinates()` que repite la validación de `hasCadastralCoordinates` (`domain/policies.ts`). Unificar en la fase 4.
-- Fase 2: imports sin usar preexistentes (detectados con `tsc --noUnusedLocals`), p. ej. en `OrderDetail.tsx` (`ReactNode`, `ActionInput`, iconos), `state/store-actions.ts`, `state/store.ts` (`formatSyncMessage`), `adapters/http/client.ts` (`ApiErrorBody`, `numberOr`). Limpiar en la fase 3 o 4.
+- Fase 2→3: imports sin usar preexistentes. Resuelto en la fase 3 (incluida la reexportación sin uso de `formatSyncMessage` en `state/store.ts`).
+- Fase 3: los mensajes de error del backend y de `DomainError` están en inglés y algunos llegan a la UI (p. ej. "Order is not assigned to this technician."). Traducirlos cambia textos visibles: decisión de producto, fuera de esta limpieza.
+- Fase 3: `HttpPilotClient.requestCut` relanza un `HttpError` del backend (p. ej. 409 `VERSION_CONFLICT`) y `use-cases/process.ts` solo convierte en visita los errores inciertos; un rechazo explícito del backend llega a la UI como error en vez de registrarse como visita bloqueada. Revisar si es el comportamiento deseado.
 - Fase 1: `main.tsx` importa `adapters/browser/service-worker`; se considera punto de composición junto con `App.tsx` y `bootstrap/`.
 - Fase 0: `npm run build` avisa de un chunk de ~507 kB (>500 kB). No bloquea; evaluar code-splitting fuera de este plan.

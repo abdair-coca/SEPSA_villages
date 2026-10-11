@@ -277,7 +277,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       const key = draftKey(orderId, action);
       const draft = await dependencies.repository.getCaptureDraft(key);
       if (!draft) return undefined;
-      // A crash may happen after the atomic operation commit but before draft removal.
+      // La app pudo cerrarse después de guardar la operación y antes de borrar el borrador.
       const items = await dependencies.repository.listSyncItems();
       for (const item of items) {
         if (item.orderId !== orderId || item.action !== action) continue;
@@ -344,7 +344,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     if (!record || !queued || record.orderId !== orderId || record.technicianId !== technicianId || record.deviceId !== deviceId || (!confirmed && !durableCutIntent) || (evidenceExpected && !record.evidenceRefs.length) || !(await evidenceIsDurable(record))) {
       throw new Error("No pudimos verificar el guardado local. Revise pendientes antes de repetir la acción.");
     }
-    // Draft cleanup is best effort after durable operation, evidence and queue verification.
+    // Borrar el borrador es opcional: la operación, la evidencia y la cola ya quedaron guardadas.
     if (options.cleanupDraft !== false) await dependencies.repository.deleteCaptureDraft(draftKey(orderId, action)).catch(() => undefined);
   }
 

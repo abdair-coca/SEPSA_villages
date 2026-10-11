@@ -1,3 +1,6 @@
+/**
+ * Cookie de sesión `sepsa_session`: HttpOnly, `SameSite=Lax` y `Secure` cuando está habilitado (producción o `COOKIE_SECURE=true`).
+ */
 export function parseCookie(header: string | undefined, name: string): string | undefined {
   return header?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || undefined;
 }

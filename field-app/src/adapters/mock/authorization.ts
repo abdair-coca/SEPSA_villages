@@ -33,7 +33,7 @@ type ConfiguredConsumeResponse = Omit<ConsumeResponse, "operationId"> & { operat
 type ConfiguredEnablementResponse = Omit<EnablementResponse, "operationId"> & { operationId?: string };
 type ConfiguredConsumeEnablementResponse = Omit<ConsumeEnablementResponse, "operationId"> & { operationId?: string };
 
-/** Demonstration adapter. No endpoint, credential, or SEPSA contract is represented. */
+/** Adaptador de demostración. No representa ningún endpoint, credencial ni contrato de SEPSA. */
 export class MockAuthorizationAdapter implements AuthorizationAdapter {
   readonly simulation = "DEMO_ONLY_NO_SEPSA_ENDPOINT" as const;
   readonly requestCalls: AuthRequest[] = [];

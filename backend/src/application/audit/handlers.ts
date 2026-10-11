@@ -1,3 +1,6 @@
+/**
+ * Consulta de la auditoría (solo ADMIN), paginada y filtrable por orden.
+ */
 import type { ServerResponse } from "node:http";
 import { sendJson, HttpError } from "../../http.js";
 import type { Role, SessionUser } from "../../types.js";

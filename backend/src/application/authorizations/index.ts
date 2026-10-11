@@ -1,3 +1,6 @@
+/**
+ * Agrupa los endpoints de autorización de corte y habilitación de reconexión.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionUser } from "../../types.js";
 import type { ApplicationContext } from "../application-context.js";

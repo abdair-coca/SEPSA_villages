@@ -1,3 +1,7 @@
+/**
+ * Inserción de eventos de auditoría. Se llama dentro de la misma transacción que el cambio que audita,
+ * para que no exista un cambio sin su evento (ni un evento sin su cambio).
+ */
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { Role } from "../../types.js";

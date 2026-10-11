@@ -1,3 +1,7 @@
+/**
+ * Paquete de trabajo del técnico (`GET /v1/technician/orders`): sus órdenes asignadas con una versión
+ * monótona por técnico y dispositivo (nunca menor que la conocida por el cliente), checksum y auditoría.
+ */
 import type { ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { withTransaction } from "../../db.js";

@@ -1,3 +1,6 @@
+/**
+ * Columnas SQL y conversión de filas de morosos (con kardex y contexto) al JSON de la API.
+ */
 import { isRecord } from "../../http.js";
 import { PROVISIONAL_SOURCE } from "../application-context.js";
 import { projectContext } from "./command-response.js";

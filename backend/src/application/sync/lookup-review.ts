@@ -1,3 +1,10 @@
+/**
+ * Consulta del estado de una operación y revisión humana.
+ * - Lookup: `confirmed` solo con un recibo completo; un recibo antiguo incompleto o un conflicto responde
+ *   `unknown`. El técnico solo ve sus operaciones; ADMIN ve todas.
+ * - Revisión humana (solo ADMIN): marca la orden `PHYSICAL_UNKNOWN` con motivo y versión esperada. No confirma
+ *   el corte, no autoriza otra ejecución y no cambia un resultado ya confirmado.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionUser } from "../../types.js";
 import { withTransaction } from "../../db.js";

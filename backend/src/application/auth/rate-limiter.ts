@@ -1,3 +1,7 @@
+/**
+ * Límite de intentos de login en memoria por IP y usuario. Es por proceso: con varias instancias del
+ * backend hace falta un límite distribuido (pendiente de definir para despliegue).
+ */
 import type { IncomingMessage } from "node:http";
 import type { Config } from "../../config.js";
 import { HttpError } from "../../http.js";

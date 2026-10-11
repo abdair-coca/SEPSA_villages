@@ -1,3 +1,8 @@
+/**
+ * Comandos de órdenes (solo ADMIN): crear una orden, crear en lote y asignar a un técnico.
+ * Cada comando es idempotente por `operation_id` (`claimCommand`), se ejecuta en una transacción y queda auditado.
+ * No se crea una segunda orden activa para el mismo deudor; la asignación exige la versión esperada.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PoolClient } from "pg";
 import { withTransaction } from "../../db.js";

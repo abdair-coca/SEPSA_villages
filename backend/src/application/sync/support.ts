@@ -1,3 +1,7 @@
+/**
+ * Apoyo del sync: rechazo con conflicto auditado, detección de replays, recibo de respuesta y payload sin
+ * el token de autorización (que nunca se guarda ni se audita).
+ */
 import type { PoolClient } from "pg";
 import { insertAudit } from "../audit/record.js";
 import { digestJson } from "../shared/json-digest.js";

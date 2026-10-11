@@ -1,3 +1,6 @@
+/**
+ * Lista de órdenes para el administrador.
+ */
 import type { ServerResponse } from "node:http";
 import { sendJson } from "../../http.js";
 import type { SessionUser } from "../../types.js";

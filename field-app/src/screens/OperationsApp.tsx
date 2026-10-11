@@ -301,7 +301,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     if (!isActiveSession()) return;
     setOrderCreationDialog(undefined);
 
-    // Keep returned orders even if assignment or the final refresh fails.
+    // Conservar las órdenes creadas aunque falle la asignación o el refresco final.
     if (createdOrders.length) {
       setSelectedOrder(createdOrders[0].orderId);
       notify(`Se crearon ${createdOrders.length} órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.`, "error");
@@ -322,7 +322,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
           return;
         }
       } catch {
-        // Preserve original conflict message when refresh cannot complete.
+        // Si el refresco no termina, se mantiene el mensaje de conflicto original.
       }
     }
     notify(readableError(error), "error");

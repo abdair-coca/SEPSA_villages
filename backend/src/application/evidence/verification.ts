@@ -1,3 +1,9 @@
+/**
+ * Validación de evidencia:
+ * - `validateEvidenceImage`: la foto debe ser un JPEG/PNG completo, estático, decodificable y dentro de los
+ *   límites de tamaño (se decodifica entera; los metadatos solos no bastan).
+ * - `hasVerifiedEvidence`: todas las fotos referenciadas por una operación están verificadas y ligadas a ella.
+ */
 import sharp from "sharp";
 import type { PoolClient } from "pg";
 import { HttpError } from "../../http.js";
@@ -22,7 +28,7 @@ export async function validateEvidenceImage(bytes: Buffer, mimeType: "image/jpeg
     const { width, height } = metadata;
     if (!width || !height) throw new HttpError(400, "EVIDENCE_CONTENT_INVALID", "Evidence image dimensions are invalid. Retake or re-export the photo.");
     if (width > MAX_EVIDENCE_DIMENSION || height > MAX_EVIDENCE_DIMENSION || width * height > MAX_EVIDENCE_PIXELS) throw evidenceImageTooLarge();
-    // Metadata alone does not validate pixels. Decode the entire image, retaining original bytes for storage.
+    // Los metadatos no validan los píxeles: se decodifica la imagen completa y se guardan los bytes originales.
     await image.timeout({ seconds: EVIDENCE_DECODE_TIMEOUT_SECONDS }).toColourspace("srgb").removeAlpha().raw({ depth: "uchar" }).toBuffer();
   } catch (error) {
     if (error instanceof HttpError) throw error;
@@ -44,7 +50,7 @@ function evidenceImageTooLarge(): HttpError {
 }
 
 function validateStaticPngChunks(bytes: Buffer): void {
-  // libvips exposes APNG as a still PNG; inspect chunk boundaries to reject animation explicitly.
+  // libvips trata un APNG como PNG estático; se revisan los bloques para rechazar animaciones explícitamente.
   let offset = PNG_SIGNATURE.length;
   while (offset + 12 <= bytes.length) {
     const length = bytes.readUInt32BE(offset);

@@ -1,3 +1,8 @@
+/**
+ * Autenticación: login (con límite de intentos), logout (revoca la sesión), validación de sesión en cada
+ * petición y cambio de rol activo. La sesión se acepta por cookie o `Authorization: Bearer`; se busca por el
+ * hash del token y debe estar vigente, no revocada y con el usuario habilitado.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { hashToken, verifyPassword, createOpaqueToken } from "../../auth.js";
 import { withTransaction } from "../../db.js";

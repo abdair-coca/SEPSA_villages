@@ -45,7 +45,7 @@ Un ACK remoto se confirma solo con recibo completo. Si se pierde la respuesta, s
 
 ## Componentes involucrados
 
-Dominio/policies, `app/store`, repositorio IndexedDB, adaptador de autorización, `FieldApp`, backend provisional y cola de sincronización.
+Dominio/policies, `state/store`, `use-cases/process.ts`, repositorio IndexedDB, adaptador de autorización, `FieldApp`, backend provisional y cola de sincronización. Recorrido completo por archivo en [Arquitectura → Mapa del código](../ARCHITECTURE.md#mapa-del-código).
 
 ## Pendientes
 

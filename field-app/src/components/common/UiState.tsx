@@ -14,7 +14,7 @@ export interface AppStateCardProps {
   layout?: "panel" | "inline";
 }
 
-/** Shared presentation for loading, empty and recoverable error states. */
+/** Presentación común de los estados de carga, vacío y error recuperable. */
 export function AppStateCard({ tone, title, description, action, as = "div", className, layout = "panel" }: AppStateCardProps) {
   const Element: "main" | "div" = as;
   const classNames = ["ui-state-card", `ui-state-card--${tone}`, `ui-state-card--${layout}`, className].filter(Boolean).join(" ");

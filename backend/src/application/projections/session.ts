@@ -1,3 +1,6 @@
+/**
+ * Filas de usuario/sesión y el cuerpo JSON de la sesión que recibe el cliente.
+ */
 import type { Role, SessionUser } from "../../types.js";
 import { PROVISIONAL_SOURCE } from "../application-context.js";
 

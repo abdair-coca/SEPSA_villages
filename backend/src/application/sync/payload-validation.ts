@@ -1,3 +1,8 @@
+/**
+ * Lectura y validación del payload de sync antes de tocar la base: campos obligatorios, captura de corte
+ * (lectura final real en kWh, GPS válido o excepción justificada, tipo de corte del catálogo), evidencia o
+ * excepción, y datos SC08 de la reconexión (`effective_at`, `demora`).
+ */
 import { HttpError, isRecord, requiredInteger, requiredString } from "../../http.js";
 import type { SyncPayload } from "../../types.js";
 

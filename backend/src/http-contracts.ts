@@ -1,3 +1,7 @@
+/**
+ * Formas (DTO) de las peticiones y respuestas HTTP del piloto, en snake_case. Deben coincidir con
+ * `openapi/pilot-provisional.openapi.json`.
+ */
 export type PilotRole = "ADMIN" | "TECHNICIAN";
 export type PilotSource = "PILOT_PROVISIONAL";
 

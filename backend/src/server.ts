@@ -1,3 +1,7 @@
+/**
+ * Arranque del servidor HTTP del backend piloto (`PILOT_PROVISIONAL`, no API oficial de SEPSA).
+ * Crea el pool de PostgreSQL y delega cada petición en `Application.handle`.
+ */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";

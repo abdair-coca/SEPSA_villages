@@ -1,3 +1,9 @@
+/**
+ * Idempotencia de comandos administrativos por `operation_id`.
+ * - Primer envío: reserva el id (`pending`) dentro de la transacción del comando.
+ * - Mismo id, mismo tipo, mismo actor y mismo hash de petición: devuelve la respuesta guardada (replay).
+ * - Mismo id con otros datos: `IDEMPOTENCY_CONFLICT`. Si todavía no hay respuesta: `OPERATION_IN_PROGRESS`.
+ */
 import type { PoolClient } from "pg";
 import { HttpError } from "../../http.js";
 import { PROVISIONAL_SOURCE } from "../application-context.js";

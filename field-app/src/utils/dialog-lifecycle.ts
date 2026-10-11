@@ -22,7 +22,7 @@ export function resolveDialogTheme(doc: Document, fallback: DialogTheme = "admin
   return fallback;
 }
 
-/** Query on every key press: controls may disappear or become disabled while saving. */
+/** Se consulta en cada tecla: los controles pueden desaparecer o deshabilitarse mientras se guarda. */
 export function getDialogControls(dialog: HTMLElement): HTMLElement[] {
   const view = dialog.ownerDocument.defaultView;
   return Array.from(dialog.querySelectorAll<HTMLElement>(CONTROL_SELECTOR)).filter((element) => {
@@ -111,7 +111,7 @@ function createDialogStack(doc: Document): DialogStack {
     },
   };
   const onKeyDown = (event: KeyboardEvent) => {
-    // Read once: synchronous dismissal must not send this event to the next dialog.
+    // Se lee una sola vez: un cierre síncrono no debe pasar este evento al siguiente diálogo.
     const top = stack.entries.at(-1);
     if (top) handleDialogKeyDown(event, top.dialog, top.getOptions());
   };
@@ -129,7 +129,7 @@ function createDialogStack(doc: Document): DialogStack {
   return stack;
 }
 
-/** A document shares one lock and one focus/keyboard owner across overlapping modals. */
+/** Con diálogos superpuestos, el documento comparte un solo bloqueo y un solo dueño del foco y del teclado. */
 export function activateDialog(dialog: HTMLElement, portalRoot: HTMLElement, getOptions: () => DialogCloseOptions): () => void {
   const doc = dialog.ownerDocument;
   let stack = documentStacks.get(doc);
@@ -142,7 +142,7 @@ export function activateDialog(dialog: HTMLElement, portalRoot: HTMLElement, get
     dialog,
     portalRoot,
     getOptions,
-    // Keep ancestry even if the underlying dialog closes before this one.
+    // Se conserva la jerarquía aunque el diálogo de abajo se cierre antes que este.
     openers: [...(opener ? [opener] : []), ...(stack.entries.at(-1)?.openers ?? [])],
   };
   stack.entries.push(entry);

@@ -1,3 +1,6 @@
+/**
+ * Consulta base de órdenes con su contexto y conversión de filas al JSON de la API.
+ */
 import { PROVISIONAL_SOURCE } from "../application-context.js";
 import { projectContext } from "./command-response.js";
 import { kardexColumns } from "./debtor.js";

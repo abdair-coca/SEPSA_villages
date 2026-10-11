@@ -1,3 +1,7 @@
+/**
+ * Acceso a PostgreSQL. `withTransaction` ejecuta todo en una transacción: si algo falla hace ROLLBACK y
+ * ninguna escritura parcial queda guardada.
+ */
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg";
 
 export function createPool(databaseUrl: string): Pool {

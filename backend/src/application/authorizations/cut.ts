@@ -1,3 +1,9 @@
+/**
+ * Emisión de autorización de corte (`POST /v1/authorizations/cut`, solo TECHNICIAN).
+ * Reserva una autorización de un solo uso ligada a operación, orden, técnico, dispositivo y versión, con
+ * vencimiento (`AUTHORIZATION_TTL_SECONDS`). Exige orden asignada, versión vigente, `GENERADO` y estado
+ * físico `NONE`. El token solo se devuelve una vez; se guarda su hash. Se consume al aceptar el sync del CUT.
+ */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createOpaqueToken, hashToken } from "../../auth.js";
@@ -27,6 +33,7 @@ export async function authorizeCut(context: ApplicationContext, request: Incomin
   const result = await withTransaction(context.pool, async (client) => {
     const existing = await client.query<ExistingCutAuthorization & { authorization_id: string; expires_at: string }>("SELECT authorization_id, expires_at, technician_id, action FROM cut_authorizations WHERE operation_id = $1", [authorizationRequest.operationId]);
     const prior = existing.rows[0];
+    // Un operation_id solo puede tener una autorización: no se emite otra para el mismo intento.
     if (prior) {
       if (belongsToAnotherCutAuthorization(prior, user.userId)) throw new HttpError(409, "IDEMPOTENCY_CONFLICT", "Authorization operation identifier is bound to another action or technician.");
       throw new HttpError(409, "AUTHORIZATION_OPERATION_REPLAY", "Authorization operation already has a reservation; use saved response.");

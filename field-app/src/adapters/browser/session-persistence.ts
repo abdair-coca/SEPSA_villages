@@ -38,7 +38,7 @@ export function persistSession(session: Session, storage: StorageLike | undefine
     const { sessionToken: _sessionToken, ...safeSession } = session;
     storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(safeSession));
   } catch {
-    // Session persistence is best effort; authentication must still work.
+    // Guardar la sesión es opcional: si falla, el inicio de sesión debe seguir funcionando.
   }
 }
 
@@ -57,7 +57,7 @@ export function persistRememberedUsername(username: string, remember: boolean, s
     if (remember && username.trim()) storage.setItem(REMEMBERED_USERNAME_STORAGE_KEY, username.trim());
     else storage.removeItem(REMEMBERED_USERNAME_STORAGE_KEY);
   } catch {
-    // Remembering the username is optional and must not block login.
+    // Recordar el usuario es opcional y no debe bloquear el inicio de sesión.
   }
 }
 
