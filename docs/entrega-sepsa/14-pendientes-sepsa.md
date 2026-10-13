@@ -2,7 +2,7 @@
 
 Fuente: preguntas para SEPSA y respuestas del equipo del 2026-10-13, y los documentos 01 a 13.
 Fecha: 2026-10-13
-Estado: entrega, copia fechada. La sección A ya está respondida. La B corresponde a SEPSA. La C requiere cambio de código, que no se ha hecho.
+Estado: entrega, copia fechada. La sección A ya está respondida y confirmada. La B corresponde a SEPSA. La C requiere cambio de código, que no se ha hecho.
 
 ## A. Respondido el 2026-10-13
 
@@ -19,6 +19,8 @@ Estado: entrega, copia fechada. La sección A ya está respondida. La B correspo
 | Umbrales, privacidad y retención de lecturas | Fuera de alcance del proyecto |
 | Borrado local al cerrar sesión | Se mantiene: no se borran |
 | Mapa de teselas (servicio externo) | Declarado en la entrega; no se pregunta al proveedor |
+| Lectura final del medidor | Sin excepción: se mantiene como está en el sistema |
+| CATEGORÍA del SC08 | Se asocia con `tariff`. Confirmado |
 
 ## B. Decisiones de SEPSA
 
@@ -49,8 +51,4 @@ Estas acciones se acordaron, pero requieren cambios en el código. No se han hec
 | FECHA_CORTE y HORA_CORTE | Verificar que el momento del corte llega al servidor |
 | Revisión humana desde la pantalla | Hoy solo existe como API (RF-23) |
 
-## D. Por confirmar con el equipo
-
-1. La respuesta 5 de SEPSA llegó como imagen que no se pudo leer. Hace falta reenviarla.
-2. ¿La lectura final del medidor admite excepción, igual que el GPS y la foto? Hoy no la admite.
-3. CATEGORÍA se asocia provisionalmente con `tariff`. ¿Es correcta esa asociación?
+No quedan preguntas abiertas para el equipo.

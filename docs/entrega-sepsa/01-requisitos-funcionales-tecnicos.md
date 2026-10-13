@@ -23,7 +23,7 @@ Estado: entrega, copia fechada.
 | RF-11 | El técnico descarga sus órdenes y las consulta sin conexión (cliente, dirección, suministro, medidor, deuda y Kardex). | Implementado |
 | RF-12 | El técnico registra una visita sin afirmar que hubo corte. | Implementado |
 | RF-13 | El corte solo se ejecuta sobre una orden asignada, en estado `GENERADO` y sin reclamación física previa. | Implementado |
-| RF-14 | Captura de corte: lectura final del medidor (kWh, no negativa), GPS y foto. Los tres son obligatorios. | Implementado. Confirmar si la lectura admite excepción. `TODO: VALIDAR CON SEPSA` |
+| RF-14 | Captura de corte: lectura final del medidor (kWh, no negativa), GPS y foto. Los tres son obligatorios. | Implementado. La lectura final no admite excepción |
 | RF-15 | Si no se capturan GPS o foto, excepción con motivo escrito. | Implementado |
 | RF-16 | Foto JPEG o PNG, ligada a la orden y a la operación; la app la reduce a 1 MB como máximo. | Implementado |
 | RF-17 | Autorización de corte en línea justo antes de cortar: concluyente, vigente, de un solo uso y ligada a orden, técnico, dispositivo, operación y versión. | Implementado |

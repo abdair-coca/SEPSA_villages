@@ -51,7 +51,7 @@ La tabla SC08 oficial tiene 21 campos. El sistema no genera hoy un archivo SC08;
 |---|---|
 | NRO_CORREL | Lo asigna SEPSA. La app lo recibe tal cual. No existe hoy en el modelo. `TODO: VALIDAR CON SEPSA` |
 | NRO_CUENTA, CONSUMIDOR, DIRECCIÓN, TELEFONO, LOCALIDAD | Datos de la carga de morosos (`account_id`, `customer_name`, `address`, `contact_phone`, `locality`) |
-| CATEGORÍA | Asociación provisional con `tariff`. `TODO: VALIDAR CON SEPSA` |
+| CATEGORÍA | Asociado a `tariff`, confirmado el 2026-10-13 |
 | NIV_CALIDAD | Lo asigna SEPSA. La app lo recibe. No existe hoy en el modelo |
 | FECHA_CORTE, HORA_CORTE | Momento del corte, guardado en el dispositivo. Verificar que llegue al servidor |
 | TEC_CORTE, TEC_REPOS | Nombre del técnico en la fecha del evento. Implementado |
