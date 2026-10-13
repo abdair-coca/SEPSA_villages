@@ -81,14 +81,14 @@ export interface OrderService {
 export function createOrderService(context: ServiceContext): OrderService {
   async function createOrder(user: SessionUser, input: CreateOrderInput): Promise<unknown> {
     const { operationId, debtorId, purpose } = input;
-    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Solo CUT está disponible en este tramo provisional.");
+    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Solo CUT está disponible en esta versión.");
     const requestHash = digestJson({ operation_id: operationId, debtor_id: debtorId, purpose });
     return withTransaction(context.pool, async (client) => {
       const command = await claimCommand(client, operationId, "CREATE_ORDER", user.userId, requestHash);
       if (!command.claimed) return command.replay;
       const debtor = await findDebtorForUpdate(client, debtorId);
       if (!debtor) throw new HttpError(404, "DEBTOR_NOT_FOUND", "No se encontró el deudor.");
-      if (await hasActiveOrderForDebtorShared(client, debtorId, purpose)) throw new HttpError(409, "DUPLICATE_ORDER", "Ya existe una orden provisional activa para este deudor.");
+      if (await hasActiveOrderForDebtorShared(client, debtorId, purpose)) throw new HttpError(409, "DUPLICATE_ORDER", "Ya existe una orden activa para este deudor.");
       const orderId = randomUUID();
       const cuc = `CUC-${randomUUID()}`;
       const order = await insertOrderAndRead(client, {
@@ -107,7 +107,7 @@ export function createOrderService(context: ServiceContext): OrderService {
 
   async function createOrdersBatch(user: SessionUser, input: CreateOrdersBatchInput): Promise<unknown> {
     const { batchId, debtorIds, purpose } = input;
-    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Solo CUT está disponible en este tramo provisional.");
+    if (purpose !== "CUT") throw new HttpError(400, "INVALID_PURPOSE", "Solo CUT está disponible en esta versión.");
     const requestHash = digestJson({ batch_id: batchId, debtor_ids: debtorIds, purpose });
     return withTransaction(context.pool, async (client) => {
       const command = await claimCommand(client, batchId, "CREATE_ORDER_BATCH", user.userId, requestHash);

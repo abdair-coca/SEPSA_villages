@@ -285,7 +285,7 @@ function MobileOrderReview({
     { label: "Circuito", value: context.circuit },
     { label: "Localidad", value: context.locality },
     { label: "Estado del suministro", value: context.supplyStatus === "A" ? "Activo" : context.supplyStatus },
-    { label: "Fuente y actualización", value: `${context.source === "SIMULATED" ? "Simulada" : "Provisional"} · ${formatDate(context.updatedAt)}` },
+    { label: "Actualización", value: formatDate(context.updatedAt) },
     { label: "Tarifa", value: context.tariff },
     { label: "Coordenadas", value: hasCadastralCoordinates(context) ? `${context.cadastralLatitude!.toFixed(6)}, ${context.cadastralLongitude!.toFixed(6)}` : undefined },
   ] : [];
@@ -357,7 +357,7 @@ function ReviewData({ label, value }: { label: string; value?: string }) {
 function OperationalContext({ context }: { context: NonNullable<WorkOrder["context"]> }) {
   return (
     <section className="order-detail-context" aria-label="Cliente y suministro">
-      <div className="order-detail-section-heading"><div><span className="eyebrow">DATOS PARA TRABAJAR</span><h3>Cliente y suministro</h3></div><span className="context-source">Actualizado {formatDate(context.updatedAt)} · {context.source === "SIMULATED" ? "Fuente simulada" : "Fuente provisional"}</span></div>
+      <div className="order-detail-section-heading"><div><span className="eyebrow">DATOS PARA TRABAJAR</span><h3>Cliente y suministro</h3></div><span className="context-source">Actualizado {formatDate(context.updatedAt)}</span></div>
       <div className="detail-location"><IconPin /><div><span>Dirección</span><strong>{context.address || "Dato no disponible"}</strong><small>{context.references || "Sin referencia adicional"}</small></div></div>
       <div className="detail-debt"><div><span>Deuda de referencia</span><strong>{formatDebt(context.debtCents) ?? "Dato no disponible"}</strong></div><span>{context.monthsPending} facturas pendientes</span></div>
       <div className="context-grid"><div className="data-point"><span>Cuenta / suministro</span><strong>{context.accountId || "Dato no disponible"} · {context.supplyId || "Dato no disponible"}</strong></div><div className="data-point"><span>Medidor</span><strong>{context.meterId || "Dato no disponible"}{context.meterBrand ? ` · ${context.meterBrand}` : ""}</strong></div><div className="data-point"><span>Ruta / circuito</span><strong>{context.route || "Dato no disponible"} · {context.circuit || "Dato no disponible"}</strong></div><div className="data-point"><span>Localidad / estado</span><strong>{context.locality || "Dato no disponible"} · {context.supplyStatus || "Dato no disponible"}</strong></div></div>

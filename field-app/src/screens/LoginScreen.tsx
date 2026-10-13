@@ -1,4 +1,4 @@
-/** Pantalla de inicio de sesión (modo simulado y piloto). Recuerda el último usuario, nunca la contraseña. */
+/** Pantalla de inicio de sesión. Recuerda el último usuario, nunca la contraseña. */
 import { useRef, useState, type FormEvent } from "react";
 import type { DemoCredentials, Session } from "../domain/types";
 import type { IdentityPort } from "../ports/identity";

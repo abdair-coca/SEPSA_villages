@@ -35,7 +35,6 @@ export type { EvidenceDraft } from "./evidence";
 export const DEMO_TECHNICIAN_ID = "tech-camila";
 export const DEMO_DEVICE_ID = "device-rugged-01";
 export const DEMO_PACKAGE_ID = "demo-field-package-v1";
-export const DEMO_SIMULATION_LABEL = "Simulación, sin conexión a SEPSA";
 
 /** Filtro de la lista de órdenes; `REVIEW` muestra las que están en `PHYSICAL_UNKNOWN`. */
 export type OrderFilter = "ALL" | WorkOrder["status"] | "REVIEW";

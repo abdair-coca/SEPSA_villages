@@ -86,6 +86,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function errorBody(error: unknown): HttpErrorShape {
   if (error instanceof HttpError) return { status: error.status, code: error.code, message: error.message };
-  if (error && typeof error === "object" && "code" in error && error.code === "23505") return { status: 409, code: "IDEMPOTENCY_CONFLICT", message: "Ya existe una operación única provisional." };
-  return { status: 500, code: "INTERNAL_ERROR", message: "Error inesperado del backend provisional." };
+  if (error && typeof error === "object" && "code" in error && error.code === "23505") return { status: 409, code: "IDEMPOTENCY_CONFLICT", message: "Ya existe una operación única." };
+  return { status: 500, code: "INTERNAL_ERROR", message: "Error inesperado del servidor." };
 }
