@@ -1,6 +1,6 @@
 # Arquitectura y tecnologías del piloto
 
-Fuente: `docs/ARCHITECTURE.md` (CURRENT y Límites importantes), `docs/PROJECT.md` (Stack actual), `field-app/package.json`, `backend/package.json`, `backend/Dockerfile`, `backend/docker-compose.yml`, `render.yaml`, `field-app/vercel.json`, `.github/workflows/ci.yml`, `backend/src/services/evidence-image.service.ts`, `docs/api/pilot-contract.md`.
+Fuente: `docs/ARCHITECTURE.md` (CURRENT y Límites importantes), `docs/PROJECT.md` (Stack actual), `field-app/package.json`, `backend/package.json`, `backend/Dockerfile`, `backend/docker-compose.yml`, `render.yaml`, `field-app/vercel.json`, `.github/workflows/ci.yml`, `backend/src/services/evidence-image.service.ts`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D023), `field-app/src/bootstrap/runtime.ts`.
 Fecha: 2026-10-12
 Estado: entrega, copia fechada. Describe el piloto provisional; no es la arquitectura oficial de SEPSA.
 
@@ -101,10 +101,10 @@ La aplicación de campo arranca en uno de estos modos:
 
 | Modo | Condición | Qué hace |
 |---|---|---|
-| Local o simulado | Sin `VITE_PILOT_BACKEND_URL` | La autoridad y los datos de demostración viven en el navegador |
+| Local o simulado | Solo en desarrollo o con `VITE_ENABLE_SIMULATION=true`; sin URL de servidor | La autoridad y los datos de demostración viven en el navegador. No se incluye en el despliegue (D023) |
 | Piloto conectado | Con `VITE_PILOT_BACKEND_URL` o en el despliegue | Usa el servidor provisional a través de `HttpPilotClient` |
 
-En el modo simulado, los pasos que normalmente harían en el servidor los resuelve `adapters/indexeddb/authority-repository.ts`.
+En el modo simulado, los pasos que normalmente harían en el servidor los resuelve `adapters/indexeddb/authority-repository.ts`. Sin URL de servidor y sin simulación, la aplicación avisa que no tiene servidor configurado (D023).
 
 ## 6. Flujo de datos
 
@@ -128,7 +128,7 @@ Observaciones del despliegue:
 
 - `render.yaml` configura un servicio de plan `free` en la región `oregon`. Es la configuración del piloto, no una decisión de producción.
 - `field-app/vercel.json` hace que la aplicación y la API compartan origen para las rutas `/v1/*`. La cookie de sesión depende de que el navegador envíe el contexto correcto; la topología definitiva está pendiente (`docs/api/pilot-contract.md`).
-- `render.yaml` declara `NODE_ENV=production`, `HOST`, `SESSION_TTL_SECONDS=28800`, `AUTHORIZATION_TTL_SECONDS=300`, `HTTP_MAX_BODY_BYTES=2097152`, `DATABASE_URL` y `CORS_ORIGIN`. No declara las variables `LOGIN_RATE_LIMIT_*`, que toman su valor por defecto. Con `NODE_ENV=production` la cookie usa `Secure`. La lista completa de variables está en `08-manual-instalacion.md` (pendiente, F3).
+- `render.yaml` declara `NODE_ENV=production`, `HOST`, `SESSION_TTL_SECONDS=604800` (7 días, D025), `AUTHORIZATION_TTL_SECONDS=300`, `HTTP_MAX_BODY_BYTES=2097152`, `DATABASE_URL` y `CORS_ORIGIN`. No declara las variables `LOGIN_RATE_LIMIT_*`, que toman su valor por defecto. Con `NODE_ENV=production` la cookie usa `Secure`. La lista completa de variables está en `08-manual-instalacion.md` (pendiente, F3).
 
 Procedimiento de despliegue, reversión, copia de seguridad y restauración: `docs/operations/pilot-runbook.md`. En esta entrega, el resumen está en `07-manual-tecnico.md` (pendiente, F3).
 

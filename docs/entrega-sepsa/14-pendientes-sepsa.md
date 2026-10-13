@@ -1,19 +1,19 @@
 # Pendientes para SEPSA
 
-Fuente: marcadores `TODO: VALIDAR CON SEPSA` en los documentos activos de `docs/` (excluido `docs/archive/`), al 2026-10-12, y pendientes sin marcador de `docs/DOMAIN.md` y `docs/ARCHITECTURE.md` (P-11, P-20 a P-22). Cada entrada apunta a la línea de origen.
+Fuente: marcadores `TODO: VALIDAR CON SEPSA` en los documentos activos de `docs/` (excluido `docs/archive/`), al 2026-10-12, y pendientes sin marcador de `docs/DECISIONS.md`, `docs/DOMAIN.md` y `docs/ARCHITECTURE.md` (P-04, P-11, P-20 a P-22). Cada entrada apunta a la línea de origen.
 Fecha: 2026-10-12
 Estado: entrega, copia fechada. Ninguna entrada es una regla oficial: son preguntas que SEPSA debe responder.
 
-Las 18 ocurrencias activas del marcador tienen entrada. Hay cuatro pendientes sin marcador: P-11, P-20, P-21 y P-22. Si una fuente cambia o se resuelve un pendiente, se actualiza esta lista en la misma tarea.
+Las 17 ocurrencias activas del marcador tienen entrada. Hay cinco pendientes sin marcador: P-04, P-11, P-20, P-21 y P-22. El marcador de P-04 estaba en la decisión D017; D022 lo reemplazó. Si una fuente cambia o se resuelve un pendiente, se actualiza esta lista en la misma tarea.
 
 ## Reglas de corte y reconexión
 
 | ID | Qué debe confirmar SEPSA | Fuente | Usado en |
 |---|---|---|---|
-| P-01 | Reglas de elegibilidad para corte: umbral de facturas o mora, exclusión de intereses, bloqueo por CI/NIT, protección por reclamos y cargos o prioridad de reconexión. El código no las aplica como autoridad general. | `docs/RULES.md:48` | 01, 02 |
+| P-01 | Reglas de elegibilidad para corte: umbral de facturas o mora, exclusión de intereses, bloqueo por CI/NIT, protección por reclamos y cargos o prioridad de reconexión. El código no las aplica como autoridad general, pero la carga provisional al arrancar y el script de importación codifican un umbral de 3 meses para crear órdenes (`backend/migrations/20260923-load-excel-20260922.mjs:113` y `backend/scripts/import-debtors-xlsx.py:123`). | `docs/RULES.md:48` | 01, 02, 07 |
 | P-02 | Umbrales y semántica definitiva de la captura de corte (lectura final, GPS, excepciones con motivo). | `docs/DOMAIN.md:54` | 01, 02 |
 | P-03 | Política de conciliación oficial de operaciones de corte y reposición. | `docs/features/synchronization.md:63` | 01, 02 |
-| P-04 | Política para resolver habilitaciones de reconexión expiradas, no encontradas o no consultables (`ENABLEMENT_RESERVATION_EXPIRED`, `ENABLEMENT_NOT_FOUND`, `ENABLEMENT_LOOKUP_UNKNOWN`). Hoy quedan para revisión del administrador. | `docs/DECISIONS.md:105` (D017) | 01, 02, 10 |
+| P-04 | Política para resolver las autorizaciones de corte y las habilitaciones de reconexión cuya consulta no es concluyente (por ejemplo `ENABLEMENT_LOOKUP_UNKNOWN`). Las que el servidor demuestra no usadas (`expired`, `rejected`, `not_found`) las resuelve el técnico según D022 y no requieren política. **Sin marcador en el texto.** | `docs/DECISIONS.md` (D017, D022) | 01, 02, 10 |
 
 ## Registro SC08
 
@@ -50,6 +50,6 @@ Las 18 ocurrencias activas del marcador tienen entrada. Hay cuatro pendientes si
 
 ---
 
-Conteo de control: las 18 ocurrencias del marcador en los documentos activos tienen una entrada: P-01 a P-10 y P-12 a P-19. P-11, P-20, P-21 y P-22 no tienen marcador en el texto fuente; se incluyen porque la entrega debe cubrirlos (ver cada entrada). Verificar con `grep -rc "TODO: VALIDAR CON SEPSA" docs --include=*.md --exclude-dir=archive` antes de cerrar F0.
+Conteo de control (estado al 2026-10-12): las 17 ocurrencias del marcador en los documentos activos tienen una entrada: P-01 a P-03, P-05 a P-10 y P-12 a P-19. P-04, P-11, P-20, P-21 y P-22 no tienen marcador en el texto fuente; se incluyen porque la entrega debe cubrirlos. Verificar con `grep -rc "TODO: VALIDAR CON SEPSA" docs --include=*.md --exclude-dir=archive --exclude-dir=entrega-sepsa` (resultado: 17 en 8 archivos).
 
 Se listan en el orden en que aparecen en la fuente, no por prioridad. Las prioridades se decidirán con SEPSA.

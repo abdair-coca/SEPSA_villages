@@ -1,6 +1,6 @@
 # Requisitos funcionales y técnicos
 
-Fuente: `docs/RULES.md`, `docs/PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/features/assignments.md`, `docs/features/cuts.md`, `docs/features/readings.md`, `docs/features/synchronization.md`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D003, D004, D007, D010, D015, D017, D018, D019, D020), `backend/src/shared/auth-crypto.ts`.
+Fuente: `docs/RULES.md`, `docs/PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/features/assignments.md`, `docs/features/cuts.md`, `docs/features/readings.md`, `docs/features/synchronization.md`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D003, D004, D007, D010, D015, D017, D018, D019, D020, D022, D023, D024), `backend/src/shared/auth-crypto.ts`, `backend/src/repositories/reconciliation.repository.ts`, `field-app/src/bootstrap/runtime.ts`.
 Fecha: 2026-10-12
 Estado: entrega, copia fechada.
 
@@ -64,7 +64,7 @@ Este documento describe lo que el sistema debe hacer y el estado actual de cada 
 | RF-23 | La reposición solo se registra sobre la orden de un corte confirmado. Un ciclo (corte y reposición) comparte el mismo `orderId` y no crea una identidad duplicada. | `docs/features/cuts.md` (Reposición y ciclo SC08), `docs/DECISIONS.md` (D010) | Implementado |
 | RF-24 | El registro de la reposición guarda `effectiveAt` (instante capturado), el técnico con el nombre histórico y `DEMORA` (observación del técnico o `Sin demora`). | `docs/features/cuts.md` (Persistencia y captura), `docs/DOMAIN.md` (SC08) | Implementado. Formato de `DEMORA`: P-07 |
 | RF-25 | Antes de confirmar la reposición en el servidor, se reserva una habilitación de un solo uso, ligada a orden, técnico, dispositivo, operación y versión. Al sincronizar, la orden pasa a `RECONEXIÓN`. | `docs/api/pilot-contract.md` (Habilitación de reposición y Sync), `docs/features/synchronization.md` (Contrato piloto) | Implementado (`PILOT_PROVISIONAL`) |
-| RF-26 | Una reconexión no confirmada localmente se verifica solo consultando su habilitación por `operationId`. La cola de sincronización no la consulta ni la reintenta. | `docs/DECISIONS.md` (D017), `docs/features/synchronization.md` | Implementado |
+| RF-26 | Una reconexión no confirmada localmente se verifica solo consultando su habilitación por `operationId`. La cola de sincronización no la consulta ni la reintenta. Si la consulta demuestra que la habilitación no se usó (`expired`, `rejected` o `not_found`), el técnico puede pedir una nueva (RF-36). | `docs/DECISIONS.md` (D017, D022), `docs/features/synchronization.md` | Implementado |
 | RF-27 | Las reglas de cargos y prioridad de reconexión no están confirmadas. El sistema no las aplica. | `docs/RULES.md` (Reglas observadas pero no vigentes) | Pendiente (P-01) |
 
 ### Sincronización y revisión
@@ -75,10 +75,12 @@ Este documento describe lo que el sistema debe hacer y el estado actual de cada 
 | RF-29 | La cola sobrevive a recarga, cierre, reinicio y pérdida temporal de red. | `docs/RULES.md` (Offline-first), `docs/features/synchronization.md` (Reglas) | Implementado |
 | RF-30 | Antes de enviar un corte con foto, la evidencia se sube y se verifica. El backend acepta el corte solo si la evidencia está verificada y ligada a esa operación. | `docs/features/synchronization.md` (Flujo 4 y 5), `docs/api/pilot-contract.md` (Evidencia) | Implementado (`PILOT_PROVISIONAL`) |
 | RF-31 | Una operación con respuesta perdida, timeout o respuesta ambigua se marca como `PHYSICAL_UNKNOWN` y se consulta su estado con el mismo identificador. Ningún resultado de consulta permite otro envío del POST. | `docs/features/synchronization.md` (Flujo 7 y Reglas) | Implementado |
-| RF-32 | Un administrador registra una revisión de una operación incierta con motivo y versión esperada. La revisión no confirma el corte, no autoriza otra ejecución y no reenvía el POST. | `docs/features/synchronization.md` (Revisión humana ADMIN), `docs/api/pilot-contract.md` (Revisión) | Implementado (`PILOT_PROVISIONAL`). Política de SEPSA: P-04 |
+| RF-32 | Registrar la revisión de una operación incierta por un administrador, con motivo y versión esperada. La revisión no confirma el corte, no autoriza otra ejecución y no reenvía el POST. | `docs/features/synchronization.md` (Revisión humana ADMIN), `docs/api/pilot-contract.md` (Revisión), `docs/DECISIONS.md` (D024) | Parcial: existe como API (`PILOT_PROVISIONAL`); el piloto no tiene interfaz para registrarla (D024). Política de SEPSA: P-04 |
 | RF-33 | Las transiciones físicas son append-only y se escriben en la misma transacción local que la operación, la orden y la cola. | `docs/features/synchronization.md` (Reglas) | Implementado |
 | RF-34 | Los mensajes de error dicen qué quedó guardado y cuál es el siguiente paso. La interfaz distingue guardado local, pendiente de sincronizar, sincronizado, fallido y revisión incierta. | `docs/RULES.md` (Datos e integración, Antes de entregar) | Implementado |
 | RF-35 | La consulta de auditoría es exclusiva del administrador. | `docs/api/pilot-contract.md` (Auditoría) | Implementado |
+| RF-36 | Cuando la consulta de una autorización incierta de corte o de reconexión devuelve `expired`, `rejected` o `not_found`, el técnico puede pedir una nueva autorización tras confirmarlo. La app cierra la operación anterior fuera de la cola y repite la acción con un identificador nuevo, la misma foto y los mismos datos. No interviene el administrador. Un corte cuyo envío ya empezó no se cierra así. | `docs/DECISIONS.md` (D022) | Implementado |
+| RF-37 | El administrador ve, en solo lectura, las operaciones por conciliar: conflictos de sincronización, autorizaciones consumidas cuya operación no llegó del dispositivo y operaciones cerradas por RF-36. No puede resolverlas desde la interfaz. | `docs/DECISIONS.md` (D024), `backend/src/repositories/reconciliation.repository.ts` | Implementado (ruta `GET /v1/admin/reconciliation`, solo ADMIN) |
 
 ## Requisitos técnicos y no funcionales
 
@@ -102,6 +104,7 @@ Este documento describe lo que el sistema debe hacer y el estado actual de cada 
 | RT-16 | Cada cambio de comportamiento, estado, permiso, persistencia o sincronización tiene pruebas. | `docs/RULES.md` (Método de trabajo) | Implementado. Inventario en `10-plan-pruebas.md` (F4) |
 | RT-17 | El despliegue termina TLS antes de exponer el piloto. El backend no confía en cabeceras de proxy. | `docs/api/pilot-contract.md` (Seguridad HTTP y operación) | Pendiente: topología, proveedor y TLS (P-11) |
 | RT-18 | Límites de sesión por dispositivo y contrato de revocación. | `docs/ARCHITECTURE.md` (Backend), `docs/api/pilot-contract.md` (Seguridad HTTP) | Pendiente (P-12, P-13) |
+| RT-19 | El modo simulado (datos de demostración) existe solo en desarrollo o con `VITE_ENABLE_SIMULATION=true`. El despliegue no lo incluye: sin URL de servidor, la aplicación avisa que no tiene servidor configurado. | `docs/DECISIONS.md` (D023), `field-app/src/bootstrap/runtime.ts` | Implementado |
 
 ## Pendientes de este documento
 

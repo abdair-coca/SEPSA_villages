@@ -1,6 +1,6 @@
 # Procesos de corte y reconexión
 
-Fuente: `docs/features/cuts.md`, `docs/features/readings.md`, `docs/features/assignments.md`, `docs/features/synchronization.md`, `docs/RULES.md`, `docs/DOMAIN.md`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D003, D010, D015, D017, D019, D020).
+Fuente: `docs/features/cuts.md`, `docs/features/readings.md`, `docs/features/assignments.md`, `docs/features/synchronization.md`, `docs/RULES.md`, `docs/DOMAIN.md`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D003, D010, D015, D017, D019, D020, D022, D024).
 Fecha: 2026-10-12
 Estado: entrega, copia fechada.
 
@@ -21,7 +21,7 @@ Este documento describe, paso a paso, cómo se ejecutan un corte y una reconexi�
 | 7 | Técnico | Confirma el corte. La app consume la autorización con su `operationId` y su token. Si el consumo queda incierto (red, 15 s de espera o 5xx), reintenta con el mismo `operationId` y token, con esperas de 1 s y 3 s. Nunca pide una autorización nueva. | RF-19 (D019, D020) |
 | 8 | App | Sincroniza. Primero sube la evidencia y verifica su recibo. Después envía el corte. El backend lo acepta solo si la evidencia está verificada y ligada a la operación. | RF-28, RF-29, RF-30 |
 | 9 | App y backend | Si el ACK es íntegro, la operación queda `synced`. Si falla, queda `failed` y se reintenta con el mismo identificador. Si la respuesta se pierde o es ambigua, queda `PHYSICAL_UNKNOWN`: se consulta el estado con el mismo identificador. Ningún resultado de consulta permite otro envío del POST. | RF-31 |
-| 10 | Administrador | Revisa las operaciones inciertas y registra la revisión con motivo. La revisión no confirma el corte ni reenvía el POST. | RF-32 |
+| 10 | Administrador | Consulta en solo lectura las operaciones por conciliar. No las resuelve desde la interfaz: la revisión con motivo existe solo como API y no confirma el corte ni reenvía el POST. | RF-37, RF-32 |
 
 ### 1.2 Estados
 
@@ -61,6 +61,12 @@ Cada regla de `docs/RULES.md` (sección "Reglas de producto") tiene su requisito
 | Timeout, ausencia de respuesta, `unknown`, conflicto o datos obsoletos bloquean; nunca autorizan por inferencia | RF-18, RF-31 |
 | Lectura final, GPS y evidencia reales y vinculados; solo GPS y fotos tienen excepciones controladas | RF-14, RF-15, RF-16 |
 
+### 1.5 Nueva autorización cuando la anterior no se usó (D022)
+
+Si la consulta de una autorización de corte incierta devuelve `expired`, `rejected` o `not_found`, el servidor demuestra que la autorización no se consumió. En ese caso, el técnico puede pedir una nueva después de confirmarlo. La app consulta al servidor en ese momento, cierra la operación anterior fuera de la cola, devuelve la orden a su estado previo, registra una visita de constancia y repite la acción con un identificador nuevo, la misma foto y los mismos datos. El administrador no interviene (RF-36).
+
+La prueba es sobre la autorización, no sobre el medidor: la interfaz no afirma que la acción física no ocurrió. Un corte cuyo envío ya empezó no se cierra así.
+
 ## 2. Proceso de reconexión
 
 La reconexión (reposición) se registra sobre el ciclo de un corte ya confirmado. Un ciclo comparte un único `orderId` (D010).
@@ -75,15 +81,15 @@ La reconexión (reposición) se registra sobre el ciclo de un corte ya confirmad
 | 4 | App | Consume la habilitación con el mismo `operationId`. Si el consumo queda incierto, reintenta como en el corte (D019). Un replay idéntico del mismo `operationId` devuelve la misma respuesta. | RF-19 |
 | 5 | App y backend | Sincroniza la operación `RECONNECTION`. El backend exige una habilitación consumida, `effective_at`, el snapshot del técnico y `demora`. El token de la habilitación no se reenvía en la sincronización. Con ACK íntegro, la orden pasa a `RECONEXIÓN` y la operación queda `synced`. | RF-25 |
 | 6 | App | Si la reconexión no está confirmada localmente (`INTENT_PERSISTED` o `PHYSICAL_UNKNOWN`), se verifica solo consultando su habilitación por `operationId`: botón «Verificar con servidor» o al sincronizar. La cola de sincronización no la consulta ni la reintenta. | RF-26 (D017) |
-| 7 | App | Si la habilitación está `expired`, es `not_found` o no se puede consultar, la reconexión queda incierta con su código (`ENABLEMENT_RESERVATION_EXPIRED`, `ENABLEMENT_NOT_FOUND`, `ENABLEMENT_LOOKUP_UNKNOWN`) y no se envía. | RF-26 |
-| 8 | Administrador | Resuelve esos casos con la revisión del administrador. La política de SEPSA para estos casos está pendiente. | RF-32. P-04 |
+| 7 | App | Si la consulta devuelve `expired`, `rejected` o `not_found`, el técnico puede pedir una habilitación nueva tras confirmarlo (D022, RF-36). Si la consulta no es concluyente (por ejemplo, `ENABLEMENT_LOOKUP_UNKNOWN`), la reconexión queda incierta con su código y no se envía. | RF-26, RF-36 |
+| 8 | Administrador | Consulta en solo lectura las operaciones por conciliar (RF-37). Los casos no concluyentes siguen sin resolverse hasta que SEPSA defina la política (P-04). | RF-37. P-04 |
 
 ### 2.2 Estados de la reconexión
 
 - `INTENT_PERSISTED`: registrada en el dispositivo; no hay confirmación remota.
 - `PHYSICAL_UNKNOWN`: incierta; requiere verificación.
 - Confirmada: solo con ACK íntegro del backend.
-- Habilitación: `consumed` (consumida), `expired` (vencida), `not_found` (no encontrada), `not_enabled` (no consumida).
+- Habilitación: `consumed` (consumida), `expired` (vencida), `rejected` (rechazada), `not_found` (no encontrada), `not_enabled` (no consumida).
 
 ### 2.3 Reglas de la reconexión
 
@@ -130,3 +136,5 @@ Los documentos históricos describen las siguientes reglas. El código actual no
 - Cargos y prioridad de reconexión. `TODO: VALIDAR CON SEPSA`.
 
 Todas quedan en [14-pendientes-sepsa.md](14-pendientes-sepsa.md) bajo P-01.
+
+**Excepción en el código.** La carga provisional de morosos (`backend/migrations/20260923-load-excel-20260922.mjs`, que se ejecuta al arrancar el servidor) y el script de importación (`backend/scripts/import-debtors-xlsx.py`) aplican el umbral de tres meses (`months_pending >= 3`) para crear órdenes de corte. El umbral no es una autoridad general del sistema, pero sí está codificado en esos dos scripts. Esta entrega lo documenta como hecho del código y no como regla confirmada: sigue pendiente de SEPSA (P-01).
