@@ -204,7 +204,7 @@ describe("FieldApp SSR shell", () => {
     store.selectOrder("ORD-24017");
     const generated = html(store);
     expect(generated).toContain("detalle de ord-24017");
-    expect(generated).toContain("preparar corte");
+    expect(generated).toContain("registrar corte");
     expect(generated).not.toContain("preparar reconexión");
 
     store.selectOrder("ORD-24019");

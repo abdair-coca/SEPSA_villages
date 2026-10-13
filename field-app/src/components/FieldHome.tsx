@@ -119,7 +119,7 @@ function CurrentOrderCard({ order, orders, mode, position, total, onPrevious, on
           <span className="current-order-card__icon"><IconDocument /></span>
           <strong>Orden actual</strong>
         </div>
-        <div className="current-order-card__navigation" aria-label="Navegación de órdenes">
+        <div className="current-order-card__navigation" role="group" aria-label="Navegación de órdenes">
           <button type="button" aria-label="Orden anterior" onClick={onPrevious} disabled={position <= 1}>‹</button>
           <span>{position} de {total}</span>
           <button type="button" aria-label="Orden siguiente" onClick={onNext} disabled={position >= total}>›</button>

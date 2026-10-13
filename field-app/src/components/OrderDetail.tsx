@@ -147,7 +147,7 @@ export function OrderDetail({
 
         <div className="order-detail-actions">
           {canCut ? (
-            <button className="primary-action" aria-label="Preparar corte" disabled={Boolean(state.busyAction)} onClick={() => setDraft("CUT")}>
+            <button className="primary-action" disabled={Boolean(state.busyAction)} onClick={() => setDraft("CUT")}>
               <IconScissors />
               Registrar corte
               <span aria-hidden="true">→</span>
@@ -304,7 +304,7 @@ function MobileOrderReview({
       </nav>
 
       {view === "review" ? (
-        <div className="order-review-screen order-review-screen--summary" aria-label="Resumen prioritario de la orden">
+        <div className="order-review-screen order-review-screen--summary" role="region" aria-label="Resumen prioritario de la orden">
           <header className="order-review-identity"><h2>Cuenta {displayValue(account)} · Medidor {displayValue(meter)}</h2><p>{displayValue(context?.customerName)}</p></header>
           {order.status === "ANULADO" ? <div className="order-review-alert order-review-alert--cancelled" role="alert"><strong>Corte bloqueado</strong><span>La orden fue anulada administrativamente. No registrar corte ni visita.</span></div> : null}
           {order.physicalStatus === "PHYSICAL_UNKNOWN" ? <div className="order-review-alert order-review-alert--unknown" role="alert"><strong>No repetir acción</strong><span>{uncertainActions ? "Verifique con el servidor." : "Revisión humana requerida."}</span>{uncertainActions}</div> : null}
@@ -328,7 +328,7 @@ function MobileOrderReview({
           {context ? <>
             {!showKardex ? <div className="order-review-detail-grid">{detailPages[detailsPageIndex]?.map((field) => <ReviewData key={field.label} label={field.label} value={field.value} />)}</div> : null}
             {showKardex ? <section className="order-review-kardex" aria-label="Kardex de deuda"><div><strong>Kardex</strong><span>{kardex.length ? `${kardexIndex + 1} de ${kardex.length}` : "No disponible"}</span></div>{currentKardex ? <p>{currentKardex.period} · {formatDebt(currentKardex.amountCents) ?? "Dato no disponible"} · {currentKardex.daysLate ?? "Dato no disponible"} días mora</p> : <p>Historial no disponible en paquete local.</p>}{kardex.length > 1 ? <div className="order-review-pager"><button type="button" disabled={kardexIndex <= 0} onClick={() => onKardexIndexChange(kardexIndex - 1)}>Anterior</button><button type="button" disabled={kardexIndex >= kardex.length - 1} onClick={() => onKardexIndexChange(kardexIndex + 1)}>Siguiente</button></div> : null}</section> : null}
-            <div className="order-review-pager" aria-label="Páginas de datos"><button type="button" disabled={detailsPageIndex <= 0} onClick={() => onDetailsPageIndexChange(detailsPageIndex - 1)}>Anterior</button><span>{detailPageLabel}</span><button type="button" disabled={detailsPageIndex >= detailsPageCount} onClick={() => onDetailsPageIndexChange(detailsPageIndex + 1)}>Siguiente</button></div>
+            <div className="order-review-pager" role="group" aria-label="Páginas de datos"><button type="button" disabled={detailsPageIndex <= 0} onClick={() => onDetailsPageIndexChange(detailsPageIndex - 1)}>Anterior</button><span>{detailPageLabel}</span><button type="button" disabled={detailsPageIndex >= detailsPageCount} onClick={() => onDetailsPageIndexChange(detailsPageIndex + 1)}>Siguiente</button></div>
           </> : <p className="order-review-no-action">Datos operativos no disponibles en este paquete local.</p>}
         </section>
       ) : null}
@@ -345,7 +345,7 @@ export function OrderReviewMap({ order, mode, onViewChange }: { order: WorkOrder
   return (
     <section className="order-review-screen order-review-screen--map" aria-label="Mapa de ubicación">
       <div className="order-review-map-address"><strong>{displayValue(context?.address)}</strong><span>{displayValue(context?.references)}</span></div>
-      {hasCoordinates ? <FieldMap orders={[order]} selectedOrderId={order.orderId} onSelectOrder={() => onViewChange("details")} mode={mode} /> : <div className="field-map-container field-map-container--empty" aria-label="Ubicación de esta orden no disponible"><div className="field-map-empty" role="status"><IconMap /><strong>Ubicación de esta orden no disponible</strong></div></div>}
+      {hasCoordinates ? <FieldMap orders={[order]} selectedOrderId={order.orderId} onSelectOrder={() => onViewChange("details")} mode={mode} /> : <div className="field-map-container field-map-container--empty" role="group" aria-label="Ubicación de esta orden no disponible"><div className="field-map-empty" role="status"><IconMap /><strong>Ubicación de esta orden no disponible</strong></div></div>}
     </section>
   );
 }

@@ -407,7 +407,7 @@ export function FieldMap({
           ) : null}
         </div>
       </div>
-      <div className="field-map-legend" aria-label="Leyenda del mapa">
+      <div className="field-map-legend" role="group" aria-label="Leyenda del mapa">
         <span><i className="field-map-legend__dot field-map-legend__dot--order" />Orden de corte</span>
         <span><i className="field-map-legend__dot field-map-legend__dot--location" />Mi ubicación</span>
       </div>
