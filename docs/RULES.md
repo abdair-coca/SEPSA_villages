@@ -43,9 +43,9 @@ El producto activo conserva deuda, facturas y mora, sin procesar ni presentar pa
 - No guardar contraseñas en texto plano, secretos en frontend ni credenciales en documentación activa.
 - Los mensajes de error deben decir qué quedó guardado y cuál es el siguiente paso.
 
-## Reglas observadas pero no vigentes
+## Elegibilidad y cargos de reconexión
 
-Los documentos históricos describen umbral fijo de facturas/mora, exclusión de intereses, bloqueo por CI/NIT, protección por reclamos y cargos/prioridad de reconexión. El código actual no los establece como autoridad general. Mantenerlos como `TODO: VALIDAR CON SEPSA` hasta recibir confirmación y contrato; no implementarlos por inferencia.
+La elegibilidad para cortar (umbral de mora o facturas, exclusión de intereses, bloqueo por CI o NIT, protección por reclamos) y los cargos y la prioridad de reconexión los decide el administrador al seleccionar los suministros. El sistema no los valida ni los aplica. El filtro de la carga de datos de prueba no es una regla del sistema. No implementar estas reglas por inferencia (D027).
 
 ## Antes de entregar
 

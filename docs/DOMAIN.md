@@ -51,7 +51,7 @@ La aplicación trabaja con `OperationalContext` para transportar el contexto com
 
 ## Captura de campo
 
-Una captura de corte contiene lectura final, medidor, tipo de corte, ubicación/GPS, precisión, disponibilidad y evidencia o excepción. La lectura final es obligatoria para confirmar el corte. GPS y fotos admiten únicamente sus excepciones controladas con motivo auditable. Umbrales y semántica definitiva: `TODO: VALIDAR CON SEPSA`.
+Una captura de corte contiene lectura final, medidor, tipo de corte, ubicación/GPS, precisión, disponibilidad y evidencia o excepción. La lectura final es obligatoria para confirmar el corte y no admite excepción. GPS y fotos admiten únicamente sus excepciones controladas con motivo auditable. Umbrales de validación: `TODO: VALIDAR CON SEPSA`.
 
 ## Registro oficial SC08 de cortes y reposiciones
 
@@ -74,19 +74,19 @@ La fuente observada de estos valores es la carga Excel y el backend piloto, ambo
 
 Trazabilidad de esta revisión: esquema en `backend/sql/001_init.sql`, mapeo de importación en `backend/sql/seeds/005_definitive_seed.sql`, proyección del backend en `backend/src/mappers/` (`order.mapper.ts`, `debtor.mapper.ts`), adaptación al contexto de campo en `field-app/src/adapters/http/client.ts` y etiquetas en `field-app/src/screens/OperationsApp.tsx` / `FieldApp.tsx`.
 
-- `NRO_CORREL`: lo asigna SEPSA; falta definir cómo lo recibirá la aplicación.
-- `NIV_CALIDAD`: lo define SEPSA por cantidad de usuarios de la localidad: nivel 1 si supera 10.000; nivel 2 si es menor de 10.000. El caso exacto de 10.000 usuarios queda `TODO: VALIDAR CON SEPSA`.
-- `FECHA_REPO` y `HORA_REPO`: se capturan automáticamente cuando el técnico confirma que realizó la reposición, en hora local de Bolivia (`America/La_Paz`).
-- `TIEMPO`: días transcurridos desde que el consumidor paga lo adeudado hasta la reposición efectiva, expresados con dos decimales. La fuente de fecha y hora de pago sigue sin definir y el procesamiento de pagos queda fuera del alcance actual.
-- `DEMORA`: observación ingresada por el técnico que realiza la reposición. Si no hubo demora, el valor acordado es `Sin demora`. El piloto limita el texto a 1.000 caracteres por seguridad; formato y longitud oficiales: `TODO: VALIDAR CON SEPSA`.
+- `NRO_CORREL`: lo asigna SEPSA. La aplicación lo recibe tal cual, como el código de domicilio. Todavía no existe en el modelo.
+- `NIV_CALIDAD`: lo asigna SEPSA. La aplicación lo recibe; no lo calcula.
+- `FECHA_REPO` y `HORA_REPO`: fuera de alcance del proyecto. Su fuente y su validez son responsabilidad de SEPSA.
+- `TIEMPO`: fuera de alcance del proyecto. Depende de la fecha de pago, que también queda fuera.
+- `DEMORA`: fuera de alcance del proyecto. No se toma en cuenta en este proyecto ni en su documentación.
 - `TEC_CORTE`: técnico que realizó físicamente el corte; se conserva su nombre tal como era en la fecha del evento.
 - `TEC_REPOS`: técnico que realizó físicamente la reposición; puede ser distinto del técnico de corte y también se conserva su nombre histórico.
-- `ENER_PROM`: se indicó como dato semestral calculado a partir de los cortes realizados. La tabla SC08 lo describe como promedio de energía de 12 meses; aclarar periodo de cálculo frente a frecuencia de actualización antes de fijar su definición: `TODO: VALIDAR CON SEPSA`.
-- `POT_FACT` e `IMP_REDUC`: significado y fuente pendientes: `TODO: VALIDAR CON SEPSA`.
+- `CATEGORÍA`: se asocia con `tariff`, confirmado el 2026-10-13.
+- `ENER_PROM`, `POT_FACT` e `IMP_REDUC`: fuera de alcance del proyecto. Su fuente y su validez son responsabilidad de SEPSA.
 
-`FECHA_PAGO` y `HORA_PAGO` permanecen fuera del alcance hasta que se defina su fuente autorizada, aunque SC08 los marque obligatorios.
+`FECHA_PAGO` y `HORA_PAGO` quedan fuera del alcance del proyecto: el procesamiento de pagos no forma parte del piloto.
 
-El formato y destino de salida SC08 (archivo o API) tampoco están definidos; no asumir un endpoint oficial ni certificar una fila como registro oficial mientras falten sus fuentes o reglas obligatorias.
+El formato de salida es la tabla SC08 oficial de 21 campos. El destino (archivo o API) no está definido: `TODO: VALIDAR CON SEPSA`. No asumir un endpoint oficial.
 
 ## Datos financieros y fuente
 

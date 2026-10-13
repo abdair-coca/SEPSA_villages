@@ -11,6 +11,7 @@ Conservar una captura de campo verificable, vinculada al medidor y a la operaci�
 - El valor debe ser finito y no negativo; no se inventan lecturas.
 - La evidencia fotográfica debe ser JPEG o PNG, estar optimizada y quedar ligada a orden, operación, técnico y dispositivo.
 - Si no se puede capturar GPS o foto, solo se permite la excepción controlada con motivo no vacío.
+- La lectura final no admite excepción: sin ella no se confirma el corte (D027).
 - La evidencia local conserva bytes y estado de carga: `pending`, `uploading`, `verified`, `failed` o `review-required`. Un fallo conserva el blob para reintento.
 - El backend piloto recomputa SHA-256; coincidencia de hash no basta si orden, operación, técnico o dispositivo no coinciden.
 - Las coordenadas, precisión, evidencia y excepciones quedan en el historial; no se reemplazan silenciosamente.
@@ -21,4 +22,4 @@ Los borradores se guardan localmente para sobrevivir a cierres o recargas. La op
 
 ## Pendientes
 
-Umbrales y políticas de validación, privacidad y retención: `TODO: VALIDAR CON SEPSA`.
+Umbrales de validación, privacidad y retención de lecturas: fuera del alcance del proyecto; los define SEPSA. `TODO: VALIDAR CON SEPSA`.

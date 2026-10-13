@@ -51,4 +51,4 @@ Dominio/policies, `state/store`, `use-cases/process.ts`, repositorio IndexedDB, 
 
 ## Pendientes
 
-Retención y contrato oficial de fotos, límites de tamaño/MIME y política definitiva de excepciones: `TODO: VALIDAR CON SEPSA`. Contrato actual `PILOT_PROVISIONAL`.
+Las fotos de evidencia se conservan de forma permanente en PostgreSQL, sin excepciones de retención (D029). Pendiente: límites oficiales de tamaño y MIME, y contrato oficial de almacenamiento: `TODO: VALIDAR CON SEPSA`. Contrato actual `PILOT_PROVISIONAL`.

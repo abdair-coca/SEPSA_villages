@@ -48,6 +48,7 @@ Un fallo de sync puede reintentarse con el mismo `operationId` sin tocar los dat
 - El backend verifica sesión, alcance del técnico, versión, hash/idempotencia y auditoría.
 - Conflictos se conservan; no usar última escritura gana.
 - Operaciones inciertas o marcadas para revisión no se reenvían automáticamente.
+- Una consulta no concluyente (`not_found`, `unknown` o error) se reintenta con el mismo identificador, a petición del técnico («Verificar con servidor»). Mientras no sea concluyente, no hay corte ni reconexión, y ningún reintento repite la acción física (D028).
 - `CLAIMED` significa intención física durable local; no representa confirmación remota.
 - `CONFIRMED` requiere ACK íntegro o lookup con recibo exacto. Un registro legacy sin campos de recibo suficientes queda `unknown`.
 - Lookup `not_found`, `unknown`, error, conflicto o recibo distinto mantiene revisión incierta. Repetir `syncOnce`, reconectar o recargar no reenvía ese corte. Registros legacy sin fase durable y registros con `send-started` quedan limitados a lookup después de interrupción o vencimiento del lease.
@@ -60,7 +61,7 @@ Un fallo de sync puede reintentarse con el mismo `operationId` sin tocar los dat
 
 El piloto provisional expone `POST /v1/sync/operations/{operation_id}/review`. Requiere `order_id`, `technician_id`, `device_id`, `expected_version` y un `reason` no vacío (máximo 1000 caracteres). El servidor comprueba rol ADMIN, asignación, identidad y versión bajo transacción. Si el lookup remoto no confirma la operación (por ejemplo, `not_found`), la revisión cambia el estado físico de la orden a `PHYSICAL_UNKNOWN` y aumenta su versión de `expected_version` a `expected_version + 1`; conserva el estado de negocio de la orden y agrega `HUMAN_REVIEW_RECORDED` con actor, dispositivo, fecha del servidor, motivo y transición.
 
-Registrar una revisión no confirma el corte, no autoriza otra ejecución y no permite reenviar el POST. Solo un recibo remoto íntegro puede confirmar. Para request/response exactos y errores ver [contrato piloto](../api/pilot-contract.md). Esta ruta es `PILOT_PROVISIONAL`, no API oficial de SEPSA; política de conciliación oficial queda `TODO: VALIDAR CON SEPSA`.
+Registrar una revisión no confirma el corte, no autoriza otra ejecución y no permite reenviar el POST. Solo un recibo remoto íntegro puede confirmar. Para request/response exactos y errores ver [contrato piloto](../api/pilot-contract.md). Esta ruta es `PILOT_PROVISIONAL`, no API oficial de SEPSA; no hay política de conciliación adicional: el administrador ve en solo lectura las operaciones por conciliar (D028).
 
 ## Componentes involucrados
 

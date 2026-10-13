@@ -162,16 +162,22 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 
 **Estado:** vigente
 **Decisión:** Los campos `FECHA_PAGO`, `HORA_PAGO`, `FECHA_REPO`, `HORA_REPO`, `TIEMPO`, `DEMORA`, `ENER_PROM`, `POT_FACT` e `IMP_REDUC` quedan fuera del alcance del piloto; SEPSA responde por su fuente y su validez. `NRO_CORREL` y `NIV_CALIDAD` los asigna SEPSA y la aplicación los recibe sin calcularlos. La elegibilidad para cortar, los cargos y la prioridad de reconexión los decide el administrador; el sistema no los valida. La infraestructura, la retención, el responsable del tratamiento, las copias de seguridad y las métricas los define SEPSA; el proyecto entrega la información. Las filas de personas de los seeds `005` y `006` se eliminan del repo.
-**Consecuencia:** La entrega (`docs/entrega-sepsa/`) no trata esos campos ni las reglas de elegibilidad como requisitos. Sustituye las preguntas P-01, P-07 a P-09 y P-20 a P-22 de la lista anterior. Eliminar los seeds requiere un cambio de código, porque `005` lo usa el bootstrap, y reescribir el historial de git es una decisión aparte.
+**Consecuencia:** La entrega (`docs/entrega-sepsa/`) no trata esos campos ni las reglas de elegibilidad como requisitos. Sustituye las preguntas correspondientes de la lista anterior de la entrega. Eliminar los seeds requiere un cambio de código, porque `005` lo usa el bootstrap, y reescribir el historial de git es una decisión aparte.
 
 ## D028 — Consulta no concluyente: reintento por el técnico, sin política de conciliación
 
 **Estado:** vigente
 **Decisión:** Si la consulta de una autorización de corte o de reconexión no es concluyente, el técnico la reintenta con el mismo identificador. Mientras no sea concluyente, no hay corte ni reconexión, y la acción física no se repite. No se define una política de conciliación adicional: el administrador ve en solo lectura las operaciones por conciliar (D024). Los datos locales no se borran al cerrar sesión.
-**Consecuencia:** Sustituye la pregunta P-04 de la lista anterior. D022 sigue vigente para la consulta que demuestra que la autorización no se usó. Pendiente de código: confirmar que «Verificar con servidor» cubre cortes y reconexiones, y que no hay reintento automático de la consulta.
+**Consecuencia:** Sustituye la pregunta correspondiente de la lista anterior de la entrega. D022 sigue vigente para la consulta que demuestra que la autorización no se usó. Pendiente de código: confirmar que «Verificar con servidor» cubre cortes y reconexiones, y que no hay reintento automático de la consulta.
 
 ## D029 — Evidencias permanentes y datos del técnico desde otro dispositivo
 
 **Estado:** vigente
 **Decisión:** Las fotos de evidencia se guardan en PostgreSQL de forma permanente, sin excepciones de retención. Los datos sincronizados del técnico deben poder consultarse desde otro dispositivo, y el servidor es la fuente para ese acceso.
 **Consecuencia:** La entrega marca el requisito de acceso desde otro dispositivo como parcial hasta verificarlo con un segundo dispositivo. Ninguna función del código borra evidencias; cambiar esta regla exige una decisión nueva.
+
+## D030 — Formato de la entrega SEPSA
+
+**Estado:** vigente
+**Decisión:** La entrega (`docs/entrega-sepsa/`) se mantiene en unas 36 páginas medidas en A4 con letra de 10 pt, sin anexos separados. Dentro de la entrega no se enlazan archivos `.md` internos; solo se citan rutas de código o de documentos cuando hacen falta para verificar una fuente. La copia en Word (`.docx`) se genera fuera del repo a partir de la entrega y no se commitea salvo petición.
+**Consecuencia:** Si la entrega cambia, la copia Word se regenera. Reducir más la entrega exige quitar contenido de algún punto de la carta, decisión que no se ha tomado.
