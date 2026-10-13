@@ -56,6 +56,9 @@ The user authorizes committing every finished task on `main`. Commit at the end 
 | Open findings from the structural cleanup | `docs/archive/limpieza-estructural/TASK.md` (Hallazgos section) |
 | Open pending items and conflicts from the SEPSA delivery | `docs/archive/entrega-sepsa/TASK.md` (Pendientes and Hallazgos sections) |
 | SEPSA delivery (copy of the active sources, dated; index and pending items) | `docs/entrega-sepsa/README.md`; pending items in `docs/entrega-sepsa/14-pendientes-sepsa.md` |
+| SEPSA answers and decisions of 2026-10-13 (SC08 scope, eligibility, final reading, inconclusive lookup, evidence) | `docs/DECISIONS.md` (D027–D030) and the active feature documents they cite |
+| SEPSA pending items for code (seeds, other-device data, lookup retry coverage) | `docs/entrega-sepsa/14-pendientes-sepsa.md` (section C) |
+| Word copy of the SEPSA delivery | Generated outside the repo from `docs/entrega-sepsa/`; see D030 |
 
 ## Before editing
 
@@ -73,6 +76,14 @@ The user authorizes committing every finished task on `main`. Commit at the end 
 - A cut capture requires a real final meter reading, GPS and photo, or only the documented controlled exception with an auditable reason. Never invent data.
 - Preserve unique operation IDs, versions, audit trail and conflicts. Do not use last-write-wins for assignments, cancellations, authorisations or physical results.
 - Excel, mocks and the current backend are provisional; mark unknown semantics `TODO: VALIDAR CON SEPSA`.
+
+## SEPSA delivery
+
+- `docs/entrega-sepsa/` is a dated copy of the active sources (D021). When a source changes, update the delivery in the same task.
+- Keep the delivery short: about 36 pages at A4 and 10 pt (D030). Add content only when a point of the SEPSA letter requires it.
+- No internal `.md` links inside the delivery. Cite a source path only when it is needed to verify a fact.
+- Items that SEPSA decides (infrastructure, retention, personal data, SC08 destination) are reported as information, not designed by the project.
+- SC08 fields out of scope (D027) are stated as out of scope and are not documented further.
 
 ## Verification and delivery
 
