@@ -1,43 +1,25 @@
 # Entrega documental para SEPSA
 
-Fuente: `docs/RULES.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/PROJECT.md`, `docs/features/`, `docs/api/pilot-contract.md`, `docs/operations/`, `backend/`, `field-app/` (estado del repo al 2026-10-12).
+Fuente: código de `backend/` y `field-app/`, migraciones `backend/sql/` y tabla SC08 recibida de SEPSA (imagen del 2026-10-03). Estado del repo al 2026-10-12.
 Fecha: 2026-10-13
-Estado: entrega, copia fechada. Las fuentes activas mandan; si esta entrega y una fuente difieren, se corrige esta entrega (decisión D021 en `docs/DECISIONS.md`).
+Estado: entrega, copia fechada.
 
-Este conjunto documenta el piloto provisional del sistema de cortes y reconexiones. No es la API oficial de SEPSA ni certifica reglas oficiales: todo lo que depende de SEPSA aparece marcado como `TODO: VALIDAR CON SEPSA` y se consolida en [14-pendientes-sepsa.md](14-pendientes-sepsa.md).
+Este conjunto describe el piloto provisional del sistema de cortes y reconexiones. No es la API oficial de SEPSA. Lo que corresponde a SEPSA definir está en la lista de pendientes.
 
 ## Índice por punto de la carta
 
-Los archivos marcados como "pendiente, F_n" se generan en la fase indicada de `.dev/DocPlan.md`.
+| Punto de la carta | Documento |
+|---|---|
+| 1. Requerimientos funcionales y técnicos; procesos de corte y reconexión | `01-requisitos-funcionales-tecnicos.md`, `02-procesos-corte-reconexion.md` |
+| 2. Arquitectura, tecnologías, modelo de datos, diccionario y código fuente | `03-arquitectura-tecnologias.md`, `04-modelo-datos.md`, `05-diccionario-datos.md`, `06-documentacion-codigo.md` |
+| 3. Manuales técnico, de instalación y de usuario | `07-manual-tecnico.md`, `08-manual-instalacion.md`, `09-manual-usuario.md` |
+| 4. Plan de pruebas, criterios de aceptación y resultados | `10-plan-pruebas.md`, `11-resultados-pruebas.md` |
+| 5. Seguridad, perfiles de acceso y tratamiento de la información | `12-seguridad-perfiles-acceso.md`, `13-tratamiento-informacion.md` |
+| Transversal | `14-pendientes-sepsa.md` |
 
-### 1. Requerimientos funcionales y técnicos, y procesos de cortes y reconexiones
+## Cómo leer
 
-- `01-requisitos-funcionales-tecnicos.md`: pendiente, F1.
-- `02-procesos-corte-reconexion.md`: pendiente, F1.
-
-### 2. Arquitectura, tecnologías, modelo de base de datos, diccionario de datos y documentación del código fuente
-
-- `03-arquitectura-tecnologias.md`: pendiente, F2.
-- `04-modelo-datos.md`: pendiente, F2.
-- `05-diccionario-datos.md`: pendiente, F2.
-- `06-documentacion-codigo.md`: pendiente, F3.
-
-### 3. Manuales técnico, de instalación y de usuario, en su versión disponible
-
-- `07-manual-tecnico.md`: pendiente, F3.
-- `08-manual-instalacion.md`: pendiente, F3.
-- `09-manual-usuario.md`: pendiente, F3.
-
-### 4. Plan de pruebas, casos de prueba, criterios de aceptación y resultados obtenidos
-
-- `10-plan-pruebas.md`: estrategia, catálogo de pruebas, cobertura por requisito y criterios de aceptación propuestos (F4).
-- `11-resultados-pruebas.md`: resultados de ejecución con comando, código y conteos; parcial, porque las suites con base de datos PostgreSQL de prueba no se han ejecutado (F5).
-
-### 5. Medidas de seguridad, perfiles de acceso y tratamiento de la información
-
-- `12-seguridad-perfiles-acceso.md`: medidas de seguridad, matriz de permisos de las 24 rutas, perfiles y pendientes de seguridad (F6).
-- `13-tratamiento-informacion.md`: inventario de almacenes, datos personales, envíos a terceros, retención y cierre de sesión (F6).
-
-### Transversal
-
-- `14-pendientes-sepsa.md`: lista consolidada de datos, reglas y políticas que SEPSA debe confirmar.
+- `RF-xx`: requisito funcional. `RT-xx`: requisito técnico.
+- Estado `Implementado`: existe en el código y tiene pruebas. No significa validado en campo ni aprobado por SEPSA.
+- Estado `Parcial` o `Pendiente`: falta una parte, o no existe todavía. Se indica qué falta.
+- Los criterios de aceptación son una propuesta. SEPSA todavía no los aprueba.
