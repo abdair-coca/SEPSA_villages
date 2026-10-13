@@ -130,6 +130,13 @@ describe("field domain policies", () => {
     expect(() => validateFieldCapture({ ...validFieldCapture, cutType: "INVALID" as FieldCapture["cutType"] })).toThrowError(DomainError);
   });
 
+  it("rejects a negative reading and a unit other than kWh with their own codes (RF-14)", () => {
+    const withReading = (reading: Partial<FieldCapture["reading"]>): FieldCapture => ({ ...validFieldCapture, reading: { ...validFieldCapture.reading, ...reading } as FieldCapture["reading"] });
+    expect(() => validateFieldCapture(withReading({ value: -1 }))).toThrowError(expect.objectContaining({ code: "METER_READING_REQUIRED" }));
+    expect(() => validateFieldCapture(withReading({ unit: "m3" as "kWh" }))).toThrowError(expect.objectContaining({ code: "METER_READING_INVALID" }));
+    expect(() => validateFieldCapture(withReading({ value: 0 }))).not.toThrow();
+  });
+
   it("requires a reading", () => {
     expect(() => validateFieldCapture({ ...validFieldCapture, reading: undefined as unknown as FieldCapture["reading"] })).toThrowError(DomainError);
   });

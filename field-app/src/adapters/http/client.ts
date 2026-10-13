@@ -57,7 +57,7 @@ const CUT_AUTHORIZATION_REJECTIONS: ReadonlySet<string> = new Set([
  */
 const AUTHORIZATION_REPLAY_CODES: ReadonlySet<string> = new Set(["AUTHORIZATION_OPERATION_REPLAY", "ENABLEMENT_OPERATION_REPLAY", "IDEMPOTENCY_CONFLICT"]);
 /** Tiempo límite de un consumo: agotado, el resultado es incierto y se reintenta con el mismo `operationId`. */
-const CONSUME_TIMEOUT_MS = 15_000;
+export const CONSUME_TIMEOUT_MS = 15_000;
 
 interface HttpClientOptions {
   baseUrl: string;

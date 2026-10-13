@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { HttpPilotClient } from "./client";
+import { CONSUME_TIMEOUT_MS, HttpPilotClient } from "./client";
 
 describe("PILOT_PROVISIONAL HTTP client", () => {
+  it("limits each consumption request to 15 seconds so a lost response becomes uncertain (RF-19)", () => {
+    expect(CONSUME_TIMEOUT_MS).toBe(15_000);
+  });
+
+
   it("uses browser HttpOnly cookies through login, restored session, and logout", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const client = new HttpPilotClient({

@@ -15,6 +15,10 @@ function fakeEncoder(bytesPerPixel: { png: number; jpeg: (quality: number) => nu
 }
 
 describe("fitEvidenceImage", () => {
+  it("keeps the photo target at 1 000 000 bytes, below the 2 MB body limit of the server (D018, RF-16)", () => {
+    expect(EVIDENCE_MAX_BYTES).toBe(1_000_000);
+  });
+
   it("keeps a photo that already meets size and resolution limits", async () => {
     const original = blobOf(400_000, "image/jpeg");
     const encode = fakeEncoder({ png: 1, jpeg: () => 1 });
