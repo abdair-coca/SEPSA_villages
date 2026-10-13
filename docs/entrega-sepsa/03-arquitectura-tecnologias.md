@@ -1,7 +1,7 @@
 # Arquitectura y tecnologías del piloto
 
 Fuente: `docs/ARCHITECTURE.md` (CURRENT y Límites importantes), `docs/PROJECT.md` (Stack actual), `field-app/package.json`, `backend/package.json`, `backend/Dockerfile`, `backend/docker-compose.yml`, `render.yaml`, `field-app/vercel.json`, `.github/workflows/ci.yml`, `backend/src/services/evidence-image.service.ts`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D023), `field-app/src/bootstrap/runtime.ts`.
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Describe el piloto provisional; no es la arquitectura oficial de SEPSA.
 
 Los términos técnicos se explican en el [glosario](05-diccionario-datos.md#glosario-de-términos-y-estados). Los nombres entre paréntesis son los que aparecen en el código y en la configuración.

@@ -1,7 +1,7 @@
 # Entrega documental para SEPSA
 
 Fuente: `docs/RULES.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/PROJECT.md`, `docs/features/`, `docs/api/pilot-contract.md`, `docs/operations/`, `backend/`, `field-app/` (estado del repo al 2026-10-12).
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Las fuentes activas mandan; si esta entrega y una fuente difieren, se corrige esta entrega (decisión D021 en `docs/DECISIONS.md`).
 
 Este conjunto documenta el piloto provisional del sistema de cortes y reconexiones. No es la API oficial de SEPSA ni certifica reglas oficiales: todo lo que depende de SEPSA aparece marcado como `TODO: VALIDAR CON SEPSA` y se consolida en [14-pendientes-sepsa.md](14-pendientes-sepsa.md).

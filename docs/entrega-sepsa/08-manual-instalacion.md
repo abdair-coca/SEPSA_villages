@@ -1,7 +1,7 @@
 # Manual de instalación
 
 Fuente: `README.md`, `backend/README.md`, `backend/.env.example`, `field-app/.env.example`, `backend/src/config.ts`, `backend/package.json`, `field-app/package.json`, `backend/docker-compose.yml`, `backend/scripts/bootstrap-pilot.mjs`, `backend/scripts/import-debtors-xlsx.py`, `backend/migrations/20260923-load-excel-20260922.mjs`, `backend/Dockerfile`, `docs/DECISIONS.md` (D018, D023).
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Los pasos y resultados de la sección 5 se verificaron en una copia limpia de `main` (`git archive HEAD`), no en el repositorio de trabajo.
 
 Este manual describe cómo instalar el piloto para desarrollo y pruebas, y qué revisar antes de un despliegue. El despliegue en producción está en [07-manual-tecnico.md](07-manual-tecnico.md). Los términos técnicos están en el [glosario](05-diccionario-datos.md#glosario-de-términos-y-estados).

@@ -1,7 +1,7 @@
 # Diccionario de datos del piloto
 
 Fuente: `backend/sql/001_init.sql`, `002_evidence_assets.sql`, `003_payment_observations.sql`, `003_reference_fields.sql`, `007_role_grants.sql`, `007_work_package_versions.sql` y `008_reconnection_schema.sql`. Columnas extraídas de las migraciones con un script de solo lectura. Las descripciones se redactaron desde `docs/DOMAIN.md`, `docs/RULES.md`, `docs/features/`, `docs/api/pilot-contract.md` y el código de `backend/src/`.
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Describe el esquema de las migraciones del repo; la base desplegada puede diferir si se aplicaron migraciones en otro orden (ver Discrepancias).
 
 Este documento describe 13 tablas y 147 columnas. Cada tabla y cada columna aparece con su nombre en español y, entre paréntesis, el nombre técnico que usa la base de datos y el código. **Los nombres técnicos no se cambian**: son los que hay que buscar en la base, en las consultas y en el código.

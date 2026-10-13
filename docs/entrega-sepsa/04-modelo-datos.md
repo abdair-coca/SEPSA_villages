@@ -1,7 +1,7 @@
 # Modelo de datos del piloto
 
-Fuente: `backend/sql/001_init.sql`, `002_evidence_assets.sql`, `003_payment_observations.sql`, `003_reference_fields.sql`, `007_role_grants.sql`, `007_work_package_versions.sql` y `008_reconnection_schema.sql`. Relaciones leídas de las cláusulas `REFERENCES` y verificadas contra el esquema.
-Fecha: 2026-10-12
+Fuente: `backend/sql/001_init.sql`, `backend/sql/002_evidence_assets.sql`, `backend/sql/003_payment_observations.sql`, `backend/sql/003_reference_fields.sql`, `backend/sql/007_role_grants.sql`, `backend/sql/007_work_package_versions.sql` y `backend/sql/008_reconnection_schema.sql`. Relaciones leídas de las cláusulas `REFERENCES` y verificadas contra el esquema.
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Modelo del piloto provisional; no es el modelo oficial de SEPSA (`docs/DOMAIN.md`).
 
 Este modelo tiene 13 tablas y 21 relaciones. El diccionario de columnas está en [05-diccionario-datos.md](05-diccionario-datos.md). Los términos y los estados están en el [glosario de términos y estados](05-diccionario-datos.md#glosario-de-términos-y-estados).

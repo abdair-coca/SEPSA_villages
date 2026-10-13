@@ -1,7 +1,7 @@
 # Manual técnico: despliegue, respaldo y restauración
 
 Fuente: `docs/operations/pilot-runbook.md` (fuente principal), `backend/Dockerfile`, `backend/docker-compose.yml`, `backend/scripts/apply-startup-schema-migrations.mjs`, `backend/migrations/`, `render.yaml`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D018, D023).
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Resume el procedimiento del piloto provisional. Si el runbook cambia, este manual se actualiza en la misma tarea.
 
 Este manual sirve al equipo que despliega y opera el servidor del piloto. Los términos técnicos están en el [glosario](05-diccionario-datos.md#glosario-de-términos-y-estados). Las variables de entorno completas están en [08-manual-instalacion.md](08-manual-instalacion.md).

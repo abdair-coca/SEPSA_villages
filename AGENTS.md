@@ -55,6 +55,7 @@ The user authorizes committing every finished task on `main`. Commit at the end 
 | Folder layout, naming or code comments | `docs/ARCHITECTURE.md` (Mapa del código) |
 | Open findings from the structural cleanup | `docs/archive/limpieza-estructural/TASK.md` (Hallazgos section) |
 | Open pending items and conflicts from the SEPSA delivery | `docs/archive/entrega-sepsa/TASK.md` (Pendientes and Hallazgos sections) |
+| SEPSA delivery (copy of the active sources, dated; index and pending items) | `docs/entrega-sepsa/README.md`; pending items in `docs/entrega-sepsa/14-pendientes-sepsa.md` |
 
 ## Before editing
 

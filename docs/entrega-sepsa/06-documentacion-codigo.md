@@ -1,7 +1,7 @@
 # Documentación del código fuente
 
 Fuente: `docs/ARCHITECTURE.md` (Mapa del código), `backend/src/http/router.ts`, `backend/openapi/pilot-provisional.openapi.json`, `backend/src/controllers/`, `field-app/src/`, `backend/test/architecture.test.ts`, `backend/test/router.test.ts`, `field-app/src/architecture.test.ts`, `docs/DECISIONS.md` (D010, D016, D022, D023, D024).
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Describe el código de `main` al 2026-10-12. Si el código cambia, esta entrega se actualiza en la misma tarea.
 
 Los términos técnicos están en el [glosario](05-diccionario-datos.md#glosario-de-términos-y-estados). Los nombres de archivos, funciones y rutas se muestran tal como aparecen en el código.

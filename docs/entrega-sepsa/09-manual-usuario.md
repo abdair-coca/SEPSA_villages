@@ -1,7 +1,7 @@
 # Manual de usuario
 
 Fuente: `docs/features/assignments.md`, `docs/features/cuts.md`, `docs/features/readings.md`, `docs/features/synchronization.md`, `docs/RULES.md`, `docs/operations/guia-de-campo.md`, `field-app/src/components/` (etiquetas), `field-app/src/utils/error-catalog.ts`, `docs/DECISIONS.md` (D002, D017, D022, D024), capturas del smoke de interfaz del 2026-10-12.
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Describe la interfaz tal como está en `main` al 2026-10-12.
 
 Este manual tiene dos partes: la del administrador, que busca morosos y crea órdenes de corte, y la del técnico de campo, que registra visitas y cortes. La guía de campo en PDF es el material de bolsillo del técnico; este manual la complementa.

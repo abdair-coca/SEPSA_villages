@@ -1,7 +1,7 @@
 # Procesos de corte y reconexión
 
 Fuente: `docs/features/cuts.md`, `docs/features/readings.md`, `docs/features/assignments.md`, `docs/features/synchronization.md`, `docs/RULES.md`, `docs/DOMAIN.md`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D003, D010, D015, D017, D019, D020, D022, D024).
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada.
 
 Este documento describe, paso a paso, cómo se ejecutan un corte y una reconexión en el piloto. Los identificadores `RF-xx` remiten a [01-requisitos-funcionales-tecnicos.md](01-requisitos-funcionales-tecnicos.md). Lo que depende de SEPSA está marcado con `TODO: VALIDAR CON SEPSA` y listado en [14-pendientes-sepsa.md](14-pendientes-sepsa.md).

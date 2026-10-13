@@ -1,7 +1,7 @@
 # Requisitos funcionales y técnicos
 
 Fuente: `docs/RULES.md`, `docs/PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/features/assignments.md`, `docs/features/cuts.md`, `docs/features/readings.md`, `docs/features/synchronization.md`, `docs/api/pilot-contract.md`, `docs/DECISIONS.md` (D003, D004, D007, D010, D015, D017, D018, D019, D020, D022, D023, D024), `backend/src/shared/auth-crypto.ts`, `backend/src/repositories/reconciliation.repository.ts`, `field-app/src/bootstrap/runtime.ts`.
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada.
 
 Este documento describe lo que el sistema debe hacer y el estado actual de cada requisito en el piloto provisional. Un requisito "Implementado" significa que existe en el código del repo y tiene pruebas, no que haya sido validado en campo ni aprobado por SEPSA. Los puntos que dependen de SEPSA están marcados con su identificador en [14-pendientes-sepsa.md](14-pendientes-sepsa.md).

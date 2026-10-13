@@ -70,5 +70,6 @@ La falta de conexión permite trabajo local, nunca autoriza un corte físico. Un
 - [Lecturas](features/readings.md)
 - [Sincronización](features/synchronization.md)
 - [Guía de campo del piloto](operations/guia-de-campo.md)
+- [Entrega documental para SEPSA](entrega-sepsa/README.md): copia fechada de estas fuentes, con sus pendientes en `14-pendientes-sepsa.md`. No es fuente de reglas; si cambia una fuente, la entrega se actualiza en la misma tarea (D021).
 
 El material anterior se conserva en [archive/](archive/README.md) solo para investigación histórica o revisión de decisiones previas.
