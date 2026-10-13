@@ -35,8 +35,8 @@ Los archivos marcados como "pendiente, F_n" se generan en la fase indicada de `.
 
 ### 5. Medidas de seguridad, perfiles de acceso y tratamiento de la información
 
-- `12-seguridad-perfiles-acceso.md`: pendiente, F6.
-- `13-tratamiento-informacion.md`: pendiente, F6.
+- `12-seguridad-perfiles-acceso.md`: medidas de seguridad, matriz de permisos de las 24 rutas, perfiles y pendientes de seguridad (F6).
+- `13-tratamiento-informacion.md`: inventario de almacenes, datos personales, envíos a terceros, retención y cierre de sesión (F6).
 
 ### Transversal
 

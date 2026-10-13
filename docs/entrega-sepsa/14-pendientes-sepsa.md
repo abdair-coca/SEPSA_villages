@@ -1,7 +1,7 @@
 # Pendientes para SEPSA
 
 Fuente: marcadores `TODO: VALIDAR CON SEPSA` en los documentos activos de `docs/` (excluido `docs/archive/`), al 2026-10-12, y pendientes sin marcador de `docs/DECISIONS.md`, `docs/DOMAIN.md` y `docs/ARCHITECTURE.md` (P-04, P-11, P-20 a P-22). Cada entrada apunta a la línea de origen.
-Fecha: 2026-10-12
+Fecha: 2026-10-13
 Estado: entrega, copia fechada. Ninguna entrada es una regla oficial: son preguntas que SEPSA debe responder.
 
 Las 17 ocurrencias activas del marcador tienen entrada. Hay cinco pendientes sin marcador: P-04, P-11, P-20, P-21 y P-22. El marcador de P-04 estaba en la decisión D017; D022 lo reemplazó. Si una fuente cambia o se resuelve un pendiente, se actualiza esta lista en la misma tarea.
@@ -41,6 +41,11 @@ Las 17 ocurrencias activas del marcador tienen entrada. Hay cinco pendientes sin
 | P-16 | Umbrales de validación de lecturas, políticas de privacidad y retención. | `docs/features/readings.md:24` | 02, 13 |
 | P-17 | Proveedor cloud, topología, TLS, rotación de credenciales, retención y objetivos de recuperación (RPO y RTO). | `docs/operations/pilot-runbook.md:3` | 07, 08, 12 |
 | P-18 | Retención oficial de la evidencia fotográfica almacenada en base de datos. | `docs/operations/pilot-runbook.md:33` | 07, 13 |
+| P-23 | Backups cifrados y prueba de restauración verificada. El contrato pide definirlos; hoy no están implementados ni documentados. | `docs/api/pilot-contract.md:36` | 07, 12 |
+| P-24 | Responsable del tratamiento de los datos personales (clientes, técnicos y usuarios), custodia técnica, y retención y eliminación de datos personales, sesiones vencidas y auditoría. El código no borra ninguno de estos datos (no hay sentencias `DELETE` en el backend). | `backend/src/` | 05, 12, 13 |
+| P-25 | Política de borrado local: qué se borra de IndexedDB, de la cola, de las evidencias y de Cache Storage al cerrar sesión, al perder el equipo o tras confirmar una operación. Hoy el cierre de sesión no borra esos datos. | `field-app/src/App.tsx`; `field-app/src/adapters/indexeddb/repository.ts` | 07, 13 |
+| P-26 | Aviso al técnico y contrato con el proveedor de teselas (`server.arcgisonline.com`), que recibe el número de tesela de la zona visible. | `field-app/src/services/map-cache.ts:9` | 03, 13 |
+| P-27 | Filas de personas en los seeds `backend/sql/seeds/005_definitive_seed.sql` y `006_replace-betanzos-20260923-jhonny.sql`, y en el historial de git (JSON retirado en D026). Decidir si se eliminan del repositorio y cómo. | `docs/DECISIONS.md` (D026) | 05, 13 |
 
 ## Marcador de regla general
 

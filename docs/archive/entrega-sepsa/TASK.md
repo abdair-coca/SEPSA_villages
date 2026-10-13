@@ -2,7 +2,7 @@
 
 > Archivado el 2026-10-13 desde `.dev/DocTask.md` y `.dev/DocPlan.md`. Lo ejecuta el modelo que sigue `.dev/PLAN.md`, que lo enlaza desde su final. Ninguna tarea de este archivo está cerrada.
 
-**Estado al archivar:** F0 a F4 hechas. F5 aprobada con pendientes de base de datos (ver F5.1, F5.2 y F5.6). F6 a F8 pendientes.
+**Estado al archivar:** F0 a F4 hechas. F5 aprobada con pendientes de base de datos (ver F5.1, F5.2 y F5.6). F6 hecha. F7 y F8 pendientes.
 **Fuente de la entrega:** `docs/entrega-sepsa/` es una copia fechada de las fuentes vigentes (D021). Si cambia una fuente, la entrega se actualiza en la misma tarea.
 **Antes de tocar código:** resolver primero los conflictos de la sección Hallazgos (H-01 a H-03). Son decisiones del usuario, no del código.
 
@@ -34,15 +34,15 @@ Ejecutar sobre el código del commit actual. Si antes cambia el código por `PLA
 
 ### Fase 6: seguridad y datos (`12` y `13`, no creados)
 
-- [ ] **F6.1.1** `12`: medidas de seguridad, cada una con su fuente (`docs/api/pilot-contract.md`, `docs/ARCHITECTURE.md`).
-- [ ] **F6.1.2** `12`: matriz de permisos con una fila por ruta de `backend/src/http/router.ts`. Los roles de cada fila se comprueban contra el controlador (`backend/src/controllers/`).
-- [ ] **F6.1.3** `12`: perfiles ADMIN y TECHNICIAN, grants y cambio de rol, citando `ARCHITECTURE.md` ("Identidad y autorización") y `pilot-contract.md`.
-- [ ] **F6.1.4** `14`: pendientes de seguridad: TLS, rotación de secretos, rate limit distribuido, revocación por dispositivo y backup cifrado.
-- [ ] **F6.2.1** `13`: inventario por almacén. Cada store de `field-app/src/adapters/indexeddb/database.ts` y cada tabla de `04` deben aparecer, junto con logs y evidencia.
-- [ ] **F6.2.2** `13`: marcar los datos personales (nombre, dirección, medidor, deuda, fotos) con su ubicación.
-- [ ] **F6.2.3** `13`: qué borra el cierre de sesión (`session-persistence.ts`, `store-actions.ts`, `runtime.ts`). Si no borra datos de trabajo locales, se documenta como pendiente, no como garantía.
-- [ ] **F6.2.4** Retención y eliminación: `TODO: VALIDAR CON SEPSA` en `13` y listados en `14`.
-- [ ] **F6 cierre** Commit `docs(entrega-sepsa): seguridad, perfiles de acceso y tratamiento de la información`.
+- [x] **F6.1.1** `12`: medidas de seguridad, cada una con su fuente (`docs/api/pilot-contract.md`, `docs/ARCHITECTURE.md`).
+- [x] **F6.1.2** `12`: matriz de permisos con una fila por ruta de `backend/src/http/router.ts`. Los roles de cada fila se comprueban contra el controlador (`backend/src/controllers/`).
+- [x] **F6.1.3** `12`: perfiles ADMIN y TECHNICIAN, grants y cambio de rol, citando `ARCHITECTURE.md` ("Identidad y autorización") y `pilot-contract.md`.
+- [x] **F6.1.4** `14`: pendientes de seguridad: TLS, rotación de secretos, rate limit distribuido, revocación por dispositivo y backup cifrado.
+- [x] **F6.2.1** `13`: inventario por almacén. Cada store de `field-app/src/adapters/indexeddb/database.ts` y cada tabla de `04` deben aparecer, junto con logs y evidencia.
+- [x] **F6.2.2** `13`: marcar los datos personales (nombre, dirección, medidor, deuda, fotos) con su ubicación.
+- [x] **F6.2.3** `13`: qué borra el cierre de sesión (`session-persistence.ts`, `store-actions.ts`, `runtime.ts`). Si no borra datos de trabajo locales, se documenta como pendiente, no como garantía.
+- [x] **F6.2.4** Retención y eliminación: `TODO: VALIDAR CON SEPSA` en `13` y listados en `14`.
+- [x] **F6 cierre** Hecha el 2026-10-13. Verificaciones: matriz de 24 rutas contra `router.ts`; 9 stores y 13 tablas en `13`; pendientes P-23 a P-27 añadidos en `14`.
 
 ### Fase 7: cierre
 
@@ -71,7 +71,7 @@ Conflictos entre `.dev/PLAN.md` y decisiones o código vigentes. Resolver antes 
 - **H-02 Carga de datos al arrancar (conflicto).** La tarea 0.2 pide que el arranque ejecute la carga del Excel y que un segundo arranque no cambie tablas. D026, vigente (commit `d8f1d0d`), quita la carga del `CMD`: solo se ejecuta a mano con `npm run pilot:migrate:field-test`, y el archivo de datos ya no está en el repo. Las aceptaciones de 0.2 hay que reescribirlas contra D026. El umbral de tres meses sigue sin confirmar (U-04).
 - **H-03 Datos personales en el repo (conflicto).** La tarea 4.2 afirma que «el Excel no contiene datos reales (confirmado por el usuario)». Eso se refiere al Excel. Los seeds `005_definitive_seed.sql` (28 filas) y `006_replace-betanzos-20260923-jhonny.sql` (948 filas) contienen filas de personas (D026). No se puede afirmar en la entrega que el repo no tiene datos personales hasta resolver U-02. La tarea 0.1 también cita `005_definitive_seed.sql`, que sí existe.
 - **H-04 Guía de campo.** La tarea 3.5 pide revisar `guia-tecnico-campo-piloto.pdf`. Ese PDF se retiró. La guía vigente es `docs/operations/guia-de-campo.md`, verificada contra las etiquetas de la aplicación. Revisar esa guía.
-- **H-05 Contrato incompleto.** `docs/api/pilot-contract.md` no documenta `GET /v1/admin/reconciliation`, que ya existe y tiene prueba en `backend/test/cut-consume.integration.test.ts`. Tampoco documenta el estado `rejected` de la consulta de habilitación, que la tarea 1.3 añade. Hay que actualizar contrato y OpenAPI en la tarea 1.3 e incluir el endpoint existente.
+- **H-05 Contrato (resuelto).** `docs/api/pilot-contract.md` ya documenta `GET /v1/admin/reconciliation` (solo ADMIN) y el estado `rejected` de la consulta de habilitación. Verificado el 2026-10-13. La tarea 1.3 de `PLAN.md` debe mantener esa documentación al cambiar el contrato y el OpenAPI.
 - **H-06 `pilot:bootstrap`.** El script aplica más scripts de los que indica `backend/README.md`. Decidir si el README o el script es la fuente y corregir el otro.
 - **H-07 Cobertura de pruebas (de `10`, secciones 7 y 9).** Cada hueco se puede cubrir con la tarea de PLAN que toca ese código:
   - RF-19: el valor de 15 s de `CONSUME_TIMEOUT_MS` (`field-app/src/adapters/http/client.ts`) no tiene prueba que lo fije. La tarea 1.2 la cubre si añade esa aserción.
