@@ -118,50 +118,64 @@ try {
   await waitForExpression(cdp, `navigator.onLine === true`, "browser reconnect");
   await waitForExpression(cdp, `document.querySelector('.queue-panel .queue-status--synced') !== null`, "queued visit synchronization", 120);
 
-  const browserCapture = await evaluate(cdp, `(async () => {
-    const api = ${JSON.stringify(apiUrl)};
-    const order = ${JSON.stringify(order.rows[0])};
-    const deviceId = localStorage.getItem('sepsa.simulated.device-id');
-    if (!deviceId) throw new Error('Synthetic device id missing');
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    const video = document.createElement('video'); video.muted = true; video.srcObject = stream; await video.play();
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
-    const context = canvas.getContext('2d'); context.drawImage(video, 0, 0, 64, 64);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-    stream.getTracks().forEach((track) => track.stop());
-    if (!blob) throw new Error('Synthetic camera frame encoding failed');
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    const hash = await crypto.subtle.digest('SHA-256', bytes);
-    const contentHash = [...new Uint8Array(hash)].map((value) => value.toString(16).padStart(2, '0')).join('');
-    const contentBase64 = btoa(String.fromCharCode(...bytes));
-    const operationId = 'phase5-browser-cut-' + crypto.randomUUID();
-    const evidenceId = 'phase5-browser-evidence-' + crypto.randomUUID();
-    const headers = { 'content-type': 'application/json' };
-    const upload = await fetch(api + '/v1/evidence/assets', { method: 'POST', credentials: 'include', headers, body: JSON.stringify({ evidence_id: evidenceId, order_id: order.order_id, operation_id: operationId, device_id: deviceId, mime_type: 'image/jpeg', content_hash: contentHash, content_base64: contentBase64 }) });
-    const uploadBody = await upload.json();
-    const authorization = await fetch(api + '/v1/authorizations/cut', { method: 'POST', credentials: 'include', headers, body: JSON.stringify({ operation_id: operationId, order_id: order.order_id, device_id: deviceId, order_version: order.version }) });
-    const authorizationBody = await authorization.json();
-    const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition((value) => resolve({ latitude: value.coords.latitude, longitude: value.coords.longitude, accuracyMeters: value.coords.accuracy }), reject));
-    const sync = await fetch(api + '/v1/sync/operations', { method: 'POST', credentials: 'include', headers, body: JSON.stringify({ operation_id: operationId, action: 'CUT', order_id: order.order_id, technician_id: order.assigned_technician_id, technician_name_snapshot: authorizationBody.technician_name_snapshot, device_id: deviceId, recorded_at: new Date().toISOString(), evidence_refs: [evidenceId], order_version: order.version, authorization_id: authorizationBody.authorization_id, authorization_token: authorizationBody.token, field_capture: { reading: { value: 123.45, unit: 'kWh', meterId: 'Medidor sintético', recordedAt: new Date().toISOString(), status: 'CAPTURED' }, location: { ...position, recordedAt: new Date().toISOString(), status: 'CAPTURED' }, cutType: 'RED', nearbyMeters: false } }) });
-    return { cameraFrameBytes: bytes.length, uploadStatus: upload.status, uploadBody, authorizationStatus: authorization.status, syncStatus: sync.status, syncBody: await sync.json(), syntheticGps: position, operationId, evidenceId };
-  })()`);
-  assert.equal(browserCapture.uploadStatus, 200, "Browser camera frame must upload as evidence");
-  assert.equal(browserCapture.authorizationStatus, 200, "Assigned order must receive a cut reservation");
-  assert.equal(browserCapture.syncStatus, 200, `Authorized CUT must synchronize with verified evidence: ${JSON.stringify(browserCapture.syncBody)}`);
-  assert.equal(browserCapture.syncBody.status, "acknowledged");
-  const browserAsset = await pool.query("SELECT status, content_hash FROM evidence_assets WHERE evidence_id = $1", [browserCapture.evidenceId]);
-  const browserOperation = await pool.query("SELECT status FROM sync_operations WHERE operation_id = $1", [browserCapture.operationId]);
-  const browserAudit = await pool.query("SELECT action FROM audit_events WHERE operation_id = $1", [browserCapture.operationId]);
-  assert.equal(browserAsset.rows[0]?.status, "verified");
-  assert.equal(browserOperation.rows[0]?.status, "acknowledged");
-  assert.ok(browserAudit.rows.some((row) => row.action === "SYNC_CUT"));
+  // Corte desde la interfaz (D020). La primera respuesta del consumo se pierde después de que el servidor la
+  // procesó: la app debe reintentar con el mismo operationId y el servidor responder con un replay (D019).
+  let lostConsumeResponses = 0;
+  cdp.on("Fetch.requestPaused", (event) => {
+    // Solo el POST: el preflight CORS (OPTIONS) no llega al consumo.
+    if (lostConsumeResponses === 0 && event.request?.method === "POST") {
+      lostConsumeResponses += 1;
+      void cdp?.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "ConnectionReset" });
+    } else void cdp?.send("Fetch.continueRequest", { requestId: event.requestId });
+  });
+  await cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*/v1/authorizations/cut/consume", requestStage: "Response" }] });
+  await openAssignedOrder(cdp);
+  await clickButton(cdp, ".order-review-actions", "Registrar corte");
+  await waitForStep(cdp, "Lectura");
+  await setInputValue(cdp, '.capture-wizard input[type="number"]', "123.45");
+  await clickWizardPrimary(cdp);
+  await waitForStep(cdp, "Datos del corte");
+  await evaluate(cdp, `document.querySelector('.capture-wizard input[type="checkbox"]')?.click()`);
+  await clickWizardPrimary(cdp);
+  await waitForStep(cdp, "Ubicación GPS");
+  await clickButton(cdp, ".capture-wizard", "Capturar GPS");
+  await waitForExpression(cdp, `document.querySelector('.capture-wizard')?.innerText.includes('precisión') === true`, "captured GPS");
+  await clickWizardPrimary(cdp);
+  await waitForStep(cdp, "Evidencia");
+  const cutCameraBytes = await attachCameraPhoto(cdp, "corte.jpg");
+  await clickWizardPrimary(cdp);
+  await waitForStep(cdp, "Revisar y confirmar");
+  await clickWizardPrimary(cdp);
+  await closeResultDialog(cdp);
+  const orderId = order.rows[0]?.order_id;
+  const cutAudit = await waitForAudit(pool, orderId, "SYNC_CUT");
+  assert.equal(lostConsumeResponses, 1, "The first consume response must have been lost on purpose");
+  assert.ok(cutAudit.includes("CONSUME_CUT") && cutAudit.includes("CONSUME_CUT_REPLAY"), `Lost consume response must be retried with the same operation: ${cutAudit.join(", ")}`);
+  const cutEvidence = await pool.query<{ status: string }>("SELECT e.status FROM evidence_assets e JOIN sync_operations s ON s.operation_id = e.operation_id WHERE s.order_id = $1 AND s.action = 'CUT'", [orderId]);
+  assert.equal(cutEvidence.rows[0]?.status, "verified", "The cut photo must be uploaded and verified");
+  const cutOrder = await pool.query<{ status: string; physical_status: string }>("SELECT status, physical_status FROM orders WHERE order_id = $1", [orderId]);
+  assert.deepEqual(cutOrder.rows[0], { status: "EJECUTADO", physical_status: "CONFIRMED" });
+
+  // Reconexión desde la interfaz sobre la misma orden.
+  await cdp.send("Fetch.disable");
+  await waitForExpression(cdp, `[...document.querySelectorAll('.order-review-actions button')].some((button) => button.textContent.includes('Preparar reconexión') && !button.disabled)`, "reconnection action after the confirmed cut", 60);
+  await clickButton(cdp, ".order-review-actions", "Preparar reconexión");
+  await waitForStep(cdp, "Evidencia");
+  await attachCameraPhoto(cdp, "reconexion.jpg");
+  await clickWizardPrimary(cdp);
+  await waitForStep(cdp, "Revisar y confirmar");
+  await clickWizardPrimary(cdp);
+  await closeResultDialog(cdp);
+  const reconnectionAudit = await waitForAudit(pool, orderId, "SYNC_RECONNECTION");
+  assert.ok(reconnectionAudit.includes("CONSUME_RECONNECTION"), `Reconnection must consume its enablement: ${reconnectionAudit.join(", ")}`);
+  const reconnectedOrder = await pool.query<{ status: string; physical_status: string }>("SELECT status, physical_status FROM orders WHERE order_id = $1", [orderId]);
+  assert.deepEqual(reconnectedOrder.rows[0], { status: "RECONEXIÓN", physical_status: "CONFIRMED" });
 
   const persisted = await pool.query<{ status: string }>("SELECT status FROM sync_operations WHERE order_id = $1 AND action = 'VISIT' ORDER BY created_at DESC LIMIT 1", [order.rows[0]?.order_id]);
   assert.equal(persisted.rows[0]?.status, "acknowledged", "Recovered offline visit must sync into PostgreSQL");
   const audit = await pool.query("SELECT audit_id FROM audit_events WHERE order_id = $1 AND action = 'SYNC_VISIT' AND result = 'accepted'", [order.rows[0]?.order_id]);
   assert.ok(audit.rows.length > 0, "PostgreSQL must retain accepted sync audit");
-  console.log(JSON.stringify({ result: "passed", browser: "headless Chrome/Chromium", checks: ["admin login", "order creation and assignment", "technician login", "offline visit", "reload recovery", "sync and PostgreSQL audit", "synthetic camera evidence upload", "synthetic GPS", "CUT confirmation and PostgreSQL evidence/audit"], cameraBytes: browserCapture.cameraFrameBytes, gps: browserCapture.syntheticGps }));
+  console.log(JSON.stringify({ result: "passed", browser: "headless Chrome/Chromium", checks: ["admin login", "order creation and assignment", "technician login", "offline visit", "reload recovery", "sync and PostgreSQL audit", "CUT from the UI with synthetic camera photo and GPS", "lost consume response retried with the same operation", "RECONNECTION from the UI", "PostgreSQL evidence and audit"], cameraBytes: cutCameraBytes }));
 } finally {
   cdp?.close();
   if (browser?.pid) stopProcess(browser.pid);
@@ -175,6 +189,68 @@ try {
 async function login(client: CdpClient, username: string, password: string): Promise<void> {
   await waitForExpression(client, `document.querySelector('.login-form') !== null`, "login form");
   await evaluate(client, `(() => { const inputs = [...document.querySelectorAll('.login-form input')].filter((input) => input.type !== 'checkbox'); const set = (input, value) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); }; set(inputs[0], ${JSON.stringify(username)}); set(inputs[1], ${JSON.stringify(password)}); document.querySelector('.login-form')?.requestSubmit(); })()`);
+}
+
+async function clickButton(client: CdpClient, scope: string, text: string): Promise<void> {
+  await waitForExpression(client, `[...document.querySelectorAll(${JSON.stringify(scope + " button")})].some((button) => button.textContent.includes(${JSON.stringify(text)}) && !button.disabled)`, `button ${text}`);
+  await evaluate(client, `[...document.querySelectorAll(${JSON.stringify(scope + " button")})].find((button) => button.textContent.includes(${JSON.stringify(text)}) && !button.disabled)?.click()`);
+}
+
+async function openAssignedOrder(client: CdpClient): Promise<void> {
+  await clickButton(client, ".bottom-navigation", "Inicio");
+  await clickButton(client, ".current-order-card", "Abrir orden");
+  await waitForExpression(client, `document.querySelector('.order-review-actions') !== null`, "order review actions");
+}
+
+async function waitForStep(client: CdpClient, title: string): Promise<void> {
+  await waitForExpression(client, `document.querySelector('.capture-wizard h3')?.textContent === ${JSON.stringify(title)}`, `capture step ${title}`);
+}
+
+async function clickWizardPrimary(client: CdpClient): Promise<void> {
+  await waitForExpression(client, `document.querySelector('.capture-wizard__footer .primary-action')?.disabled === false`, "enabled capture action");
+  await evaluate(client, `document.querySelector('.capture-wizard__footer .primary-action')?.click()`);
+}
+
+async function setInputValue(client: CdpClient, selector: string, value: string): Promise<void> {
+  await evaluate(client, `(() => { const input = document.querySelector(${JSON.stringify(selector)}); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+}
+
+/** Toma un cuadro de la cámara sintética y lo entrega al selector de foto del asistente como un archivo JPEG. */
+async function attachCameraPhoto(client: CdpClient, fileName: string): Promise<number> {
+  const bytes = await evaluate(client, `(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const video = document.createElement('video'); video.muted = true; video.srcObject = stream; await video.play();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
+    canvas.getContext('2d').drawImage(video, 0, 0, 64, 64);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+    stream.getTracks().forEach((track) => track.stop());
+    if (!blob) throw new Error('Synthetic camera frame encoding failed');
+    const input = document.querySelector('.capture-wizard .file-field__input');
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([blob], ${JSON.stringify(fileName)}, { type: 'image/jpeg' }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return blob.size;
+  })()`);
+  await waitForExpression(client, `document.querySelector('.capture-wizard')?.innerText.includes(${JSON.stringify(fileName)}) === true || document.querySelector('.capture-wizard img') !== null`, `selected photo ${fileName}`);
+  return bytes;
+}
+
+async function closeResultDialog(client: CdpClient): Promise<void> {
+  await waitForExpression(client, `[...document.querySelectorAll('[role="dialog"] button')].some((button) => button.textContent.trim() === 'Listo')`, "action result dialog", 60);
+  await evaluate(client, `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.trim() === 'Listo')?.click()`);
+}
+
+/** Espera hasta que la auditoría de la orden contenga la acción y devuelve todas sus acciones. */
+async function waitForAudit(database: Pool, orderId: string | undefined, action: string): Promise<string[]> {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const rows = await database.query<{ action: string }>("SELECT action FROM audit_events WHERE order_id = $1 ORDER BY occurred_at", [orderId]);
+    const actions = rows.rows.map((row) => row.action);
+    if (actions.includes(action)) return actions;
+    await delay(250);
+  }
+  throw new Error(`Timed out waiting for audit ${action} on order ${orderId}.`);
 }
 
 async function setValue(client: CdpClient, selector: string, value: string): Promise<void> {
@@ -228,15 +304,19 @@ async function waitForTarget(port: number, url: string): Promise<{ webSocketDebu
   throw new Error("Timed out waiting for headless Chrome DevTools.");
 }
 
-type CdpClient = { send(method: string, params?: Record<string, unknown>): Promise<any>; close(): void };
+type CdpClient = { send(method: string, params?: Record<string, unknown>): Promise<any>; on(method: string, handler: (params: any) => void): void; close(): void };
 async function connectCdp(url: string): Promise<CdpClient> {
   const socket = new WebSocket(url);
   await new Promise<void>((resolveOpen, reject) => { socket.addEventListener("open", () => resolveOpen(), { once: true }); socket.addEventListener("error", reject, { once: true }); });
   let id = 0;
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
+  const handlers = new Map<string, (params: any) => void>();
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(String(event.data));
-    if (!message.id) return;
+    if (!message.id) {
+      if (message.method) handlers.get(message.method)?.(message.params);
+      return;
+    }
     const waiter = pending.get(message.id);
     if (!waiter) return;
     pending.delete(message.id);
@@ -245,6 +325,7 @@ async function connectCdp(url: string): Promise<CdpClient> {
   });
   return {
     send(method, params = {}) { const nextId = ++id; socket.send(JSON.stringify({ id: nextId, method, params })); return new Promise((resolveResult, reject) => pending.set(nextId, { resolve: resolveResult, reject })); },
+    on(method, handler) { handlers.set(method, handler); },
     close() { socket.close(); },
   };
 }
