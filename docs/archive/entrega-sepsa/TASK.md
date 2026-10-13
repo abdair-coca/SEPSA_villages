@@ -2,7 +2,7 @@
 
 > Archivado el 2026-10-13 desde `.dev/DocTask.md` y `.dev/DocPlan.md`. Lo ejecuta el modelo que sigue `.dev/PLAN.md`, que lo enlaza desde su final. Ninguna tarea de este archivo está cerrada.
 
-**Estado al archivar:** F0 a F4 hechas (F4 pendiente de revisión del usuario). F5 a F8 pendientes.
+**Estado al archivar:** F0 a F4 hechas. F5 aprobada con pendientes de base de datos (ver F5.1, F5.2 y F5.6). F6 a F8 pendientes.
 **Fuente de la entrega:** `docs/entrega-sepsa/` es una copia fechada de las fuentes vigentes (D021). Si cambia una fuente, la entrega se actualiza en la misma tarea.
 **Antes de tocar código:** resolver primero los conflictos de la sección Hallazgos (H-01 a H-03). Son decisiones del usuario, no del código.
 
@@ -12,7 +12,7 @@
 
 ### Decisiones del usuario
 
-- [ ] **U-01** Revisión de `docs/entrega-sepsa/10-plan-pruebas.md` (F4.R). Bloquea F5.
+- [x] **U-01** Revisión de `docs/entrega-sepsa/10-plan-pruebas.md` (F4.R). Aprobada.
 - [ ] **U-02** Tratamiento de los seeds `backend/sql/seeds/005_definitive_seed.sql` (28 filas de personas) y `006_replace-betanzos-20260923-jhonny.sql` (948 filas). D026 los deja pendientes. El JSON ya se retiró del repo, pero el historial de git lo conserva.
 - [ ] **U-03** Duración de sesión: D025 (vigente, 7 días) frente a D-h de `PLAN.md` (14 h). Ver H-01.
 - [ ] **U-04** Umbral de tres meses de la carga de morosos (P-01): sin confirmar.
@@ -22,15 +22,15 @@
 
 Ejecutar sobre el código del commit actual. Si antes cambia el código por `PLAN.md`, anotar ese commit en `11`.
 
-- [ ] **F5.1** Entorno: `node -v` devuelve v22.x y PostgreSQL o Docker responde. Guardar las salidas en el scratchpad. Si falla, detenerse e informar; no inventar resultados.
-- [ ] **F5.2** Backend: `npm ci`, `npm run db:migrate:test` y `npm test` con `DATABASE_URL` local. Registrar pasadas y fallidas. Confirmar además si la omisión de `sql/003_payment_observations.sql` en `backend/scripts/migrate-test-db.mjs` es intencional y si alguna prueba la necesita.
-- [ ] **F5.3** Backend: `npm run build` y `JSON.parse` de `backend/openapi/pilot-provisional.openapi.json`.
-- [ ] **F5.4** Field-app: `npm ci`, `npm test -- --run` y `npm run build`. Registrar el número de pruebas.
-- [ ] **F5.5** Field-app: `npm run smoke:ui` y `npm run smoke:pwa` con registro oficial. Adelanto no oficial: `smoke:ui` pasó 17 de 17 el 2026-10-12 en una copia limpia de HEAD con `VITE_ENABLE_SIMULATION=true`. Esa evidencia no se reutiliza; hay que repetirla.
-- [ ] **F5.6** Backend: `npm run e2e:browser`, con Chrome o Chromium en `CHROME_PATH`. Si no corre, registrar la causa.
-- [ ] **F5.7** Registrar en `11` cada comando con fecha, commit, código de salida y conteos. Cada cifra debe coincidir con la salida guardada.
-- [ ] **F5.8** Listar en `11` lo no ejecutado, con su causa.
-- [ ] **F5 cierre** Commit `docs(entrega-sepsa): resultados de pruebas con fecha y commit`. Requiere U-01.
+- [ ] **F5.1** (parcial: Node 22 sí; sin base de prueba) Entorno: `node -v` devuelve v22.x y PostgreSQL o Docker responde. Guardar las salidas en el scratchpad. Si falla, detenerse e informar; no inventar resultados.
+- [ ] **F5.2** (pendiente: sin base de prueba; `npm ci`, `test:unit`, `build` y `npm test` sin base ya registrados) Backend: `npm ci`, `npm run db:migrate:test` y `npm test` con `DATABASE_URL` local. Registrar pasadas y fallidas. Confirmar además si la omisión de `sql/003_payment_observations.sql` en `backend/scripts/migrate-test-db.mjs` es intencional y si alguna prueba la necesita.
+- [x] **F5.3** Backend: `npm run build` y `JSON.parse` de `backend/openapi/pilot-provisional.openapi.json`.
+- [x] **F5.4** Field-app: `npm ci`, `npm test -- --run` y `npm run build`. Registrar el número de pruebas.
+- [x] **F5.5** Field-app: `npm run smoke:ui` y `npm run smoke:pwa` con registro oficial. Adelanto no oficial: `smoke:ui` pasó 17 de 17 el 2026-10-12 en una copia limpia de HEAD con `VITE_ENABLE_SIMULATION=true`. Esa evidencia no se reutiliza; hay que repetirla.
+- [ ] **F5.6** (pendiente: requiere base migrada) Backend: `npm run e2e:browser`, con Chrome o Chromium en `CHROME_PATH`. Si no corre, registrar la causa.
+- [x] **F5.7** Registrar en `11` cada comando con fecha, commit, código de salida y conteos. Cada cifra debe coincidir con la salida guardada.
+- [x] **F5.8** Listar en `11` lo no ejecutado, con su causa.
+- [x] **F5 cierre** Aprobada por el usuario el 2026-10-13 con S2, S3 (parte con base), S4 y S7 pendientes de una base PostgreSQL de prueba.
 
 ### Fase 6: seguridad y datos (`12` y `13`, no creados)
 
