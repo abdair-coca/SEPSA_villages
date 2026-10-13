@@ -95,6 +95,25 @@ test("CUT authorization is consumed on confirmation and the later sync does not 
       assert.equal((await postJson(server.url, "/v1/sync/operations", technicianToken, cutPayload(order, operationId, grant))).status, "acknowledged");
       assert.equal((await getJson(server.url, `/v1/authorizations/cut/${operationId}`, technicianToken)).status, "consumed");
     });
+    await t.test("lists consumed-not-synced and conflicting operations for the admin only, read-only (D024)", async () => {
+      const order = await assignedOrder();
+      const operationId = `cut-reconcile-${randomUUID()}`;
+      const { grant, consumeBody } = await authorize(order, operationId);
+      await postJson(server.url, "/v1/authorizations/cut/consume", technicianToken, consumeBody);
+      const pending = await getJson(server.url, "/v1/admin/reconciliation", adminToken);
+      assert.deepEqual(pending.items.find((item: { operation_id: string }) => item.operation_id === operationId), {
+        kind: "CONSUMED_NOT_SYNCED", operation_id: operationId, order_id: order.orderId, action: "CUT", technician_id: technicianId,
+        technician_name: "Synthetic Tech", account_id: pending.items.find((item: { operation_id: string }) => item.operation_id === operationId)?.account_id, customer_name: "Synthetic customer", detail: null,
+        since: pending.items.find((item: { operation_id: string }) => item.operation_id === operationId)?.since,
+      });
+      assert.equal((await getJson(server.url, "/v1/admin/reconciliation", technicianToken, 403)).code, "FORBIDDEN");
+
+      await pool.query("UPDATE orders SET version = version + 1 WHERE order_id = $1", [order.orderId]);
+      await postJson(server.url, "/v1/sync/operations", technicianToken, cutPayload(order, operationId, grant), 409);
+      const after = await getJson(server.url, "/v1/admin/reconciliation", adminToken);
+      const kinds = after.items.filter((item: { operation_id: string }) => item.operation_id === operationId).map((item: { kind: string }) => item.kind);
+      assert.deepEqual(kinds, ["SYNC_CONFLICT"]);
+    });
   } finally {
     await server.close();
     await pool.end();

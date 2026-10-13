@@ -745,6 +745,18 @@
         }
       }
     },
+    "/v1/admin/reconciliation": {
+      "get": {
+        "tags": ["Audit"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "description": "Read-only list of operations to reconcile for ADMIN: sync conflicts, authorizations consumed whose operation has not arrived, and operations closed because their authorization was not used (D022). No actions.",
+        "responses": {
+          "200": {"description": "Operations to reconcile", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReconciliationList"}}}},
+          "401": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
     "/v1/audit": {
       "get": {
         "tags": [
@@ -1667,6 +1679,31 @@
           "status": {"enum": ["reserved", "consumed", "expired", "rejected", "not_found", "unknown"]},
           "operation_id": {"type": "string"},
           "source": {"$ref": "#/components/schemas/Source"}
+        },
+        "additionalProperties": false
+      },
+      "ReconciliationList": {
+        "type": "object",
+        "required": ["source", "items"],
+        "properties": {
+          "source": {"$ref": "#/components/schemas/Source"},
+          "items": {"type": "array", "items": {
+            "type": "object",
+            "required": ["kind", "operation_id", "order_id", "technician_id", "since"],
+            "properties": {
+              "kind": {"enum": ["SYNC_CONFLICT", "CONSUMED_NOT_SYNCED", "CLOSED_NOT_CONSUMED"]},
+              "operation_id": {"type": "string"},
+              "order_id": {"type": "string", "format": "uuid"},
+              "action": {"type": ["string", "null"]},
+              "technician_id": {"type": "string", "format": "uuid"},
+              "technician_name": {"type": ["string", "null"]},
+              "account_id": {"type": ["string", "null"]},
+              "customer_name": {"type": ["string", "null"]},
+              "detail": {"type": ["string", "null"]},
+              "since": {"type": "string", "format": "date-time"}
+            },
+            "additionalProperties": false
+          }}
         },
         "additionalProperties": false
       },

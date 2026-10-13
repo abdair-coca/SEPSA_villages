@@ -392,3 +392,17 @@ export function generateOperationId(prefix = "operation"): string {
   }
   return `${prefix}-${randomUuid}`;
 }
+
+/** Operación por conciliar que el administrador ve en solo lectura (D024). */
+export interface ReconciliationItem {
+  kind: "SYNC_CONFLICT" | "CONSUMED_NOT_SYNCED" | "CLOSED_NOT_CONSUMED";
+  operationId: string;
+  orderId: string;
+  action?: string;
+  technicianId: string;
+  technicianName?: string;
+  accountId?: string;
+  customerName?: string;
+  detail?: string;
+  since: string;
+}

@@ -58,4 +58,6 @@ export interface OperationsAuthorityPort {
   listOrders(session: Session): Promise<WorkOrder[]>;
   /** Eventos de auditoría, opcionalmente filtrados por orden e incluyendo rechazos. */
   listAudit(query?: { orderId?: string; includeRejected?: boolean; session?: Session }): Promise<AuditEvent[]>;
+  /** Operaciones por conciliar, solo lectura (D024). Solo la tiene el backend conectado. */
+  listReconciliation?(session?: Session): Promise<import("../domain/types").ReconciliationItem[]>;
 }

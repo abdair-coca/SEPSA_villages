@@ -139,3 +139,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** La autoridad simulada, los datos de demostración y su store (`SimulatedApp.tsx`, `bootstrap/simulated-runtime.ts`) se cargan con `import()` solo si `simulationEnabled()`: en desarrollo o con `VITE_ENABLE_SIMULATION=true`. El build de producción no los incluye; sin URL de backend ni simulación, la app muestra que no tiene servidor configurado. El CI construye el build de producción, comprueba que no contiene el modo simulado y después construye el build de humo con la bandera.
 **Consecuencia:** Un evaluador nunca ve datos de demostración en el despliegue. Las pruebas de humo (`smoke:ui`, `smoke:pwa`) exigen el marcador `simulated-explicit`, que ahora requiere también la bandera.
+
+## D024 — El administrador ve las operaciones por conciliar sin poder resolverlas
+
+**Estado:** vigente
+**Decisión:** `GET /v1/admin/reconciliation` (solo ADMIN) lista, a partir de tablas existentes, los conflictos de sincronización, las autorizaciones consumidas cuya operación aún no llegó del dispositivo y las operaciones cerradas porque su autorización no se usó (D022). La vista del administrador las muestra en solo lectura. El estado incierto de un dispositivo no se envía al servidor; esta lista es lo que el servidor puede saber.
+**Consecuencia:** El administrador da seguimiento sin intervenir; el técnico verifica o pide una autorización nueva desde su dispositivo. `POST /v1/sync/operations/{id}/review` sigue existiendo sin interfaz.

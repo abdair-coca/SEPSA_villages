@@ -74,6 +74,7 @@ export function createRoutes(c: RouteControllers): Route[] {
     { method: "POST", pattern: "/v1/sync/operations/:operation_id/review", access: "session", handler: ({ request, response, user, params }) => c.sync.recordHumanReview(request, response, user, params.operation_id ?? "") },
     { method: "GET", pattern: "/v1/sync/operations/:operation_id", access: "session", handler: ({ response, user, params }) => c.sync.lookupOperation(response, user, params.operation_id) },
     { method: "GET", pattern: "/v1/audit", access: "session", handler: ({ response, user, url }) => c.audit.listAudit(response, user, url) },
+    { method: "GET", pattern: "/v1/admin/reconciliation", access: "session", handler: ({ response, user }) => c.audit.listReconciliation(response, user) },
   ];
 }
 

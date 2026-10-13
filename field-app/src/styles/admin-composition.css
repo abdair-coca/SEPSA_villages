@@ -432,3 +432,20 @@
   }.operations-app .filter-actions > button{
     width: 100%;
   }}
+
+/* Operaciones por conciliar, solo lectura (D024). */
+.admin-reconciliation__list {
+  display: grid;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-reconciliation__item {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--sepsa-border);
+  border-radius: 8px;
+}

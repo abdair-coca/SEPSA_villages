@@ -238,6 +238,14 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     });
   }
 
+  async listReconciliation(session?: Session): Promise<import("../../domain/types").ReconciliationItem[]> {
+    const authorized = this.requireSession(session);
+    return this.trackAdminRead(authorized, async () => {
+      const response = await this.request<{ items: Array<{ kind: "SYNC_CONFLICT" | "CONSUMED_NOT_SYNCED" | "CLOSED_NOT_CONSUMED"; operation_id: string; order_id: string; action: string | null; technician_id: string; technician_name: string | null; account_id: string | null; customer_name: string | null; detail: string | null; since: string }> }>("/v1/admin/reconciliation", { method: "GET" }, authorized);
+      return response.items.map((item) => ({ kind: item.kind, operationId: item.operation_id, orderId: item.order_id, action: item.action ?? undefined, technicianId: item.technician_id, technicianName: item.technician_name ?? undefined, accountId: item.account_id ?? undefined, customerName: item.customer_name ?? undefined, detail: item.detail ?? undefined, since: item.since }));
+    });
+  }
+
   async listAudit(query: { orderId?: string; session?: Session } = {}): Promise<AuditEvent[]> {
     const session = this.requireSession(query.session);
     return this.trackAdminRead(session, async () => {

@@ -17,6 +17,8 @@ import type { OperationsAuthorityPort } from "../ports/authority";
 import { AppHeader, type AppHeaderRoleSwitch } from "../components/AppHeader";
 import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "../components/common/Notification";
 import { AdminOverview } from "../components/AdminOverview";
+import { AdminReconciliation } from "../components/AdminReconciliation";
+import type { ReconciliationItem } from "../domain/types";
 import { DebtorSearchPanel, type SearchFilters } from "../components/DebtorSearchPanel";
 import { SelectedSupplyPanel, EmptySupplyPanel, RecentOrdersPreview } from "../components/AdminSupplyPanel";
 import { AdminOrderDetail } from "../components/AdminOrderDetail";
@@ -42,6 +44,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   const [technicians, setTechnicians] = useState<TechnicianRecord[]>([]);
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [reconciliation, setReconciliation] = useState<ReconciliationItem[]>();
   const [filters, setFilters] = useState<SearchFilters>({ ...DEFAULT_SEARCH_FILTERS });
   const [selectedDebtor, setSelectedDebtor] = useState("");
   const [selectedDebtorIds, setSelectedDebtorIds] = useState<string[]>([]);
@@ -92,7 +95,10 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
         authority.listAudit({ session, includeRejected: true }),
         authority.listTechnicians(session),
       ]);
+      // Lista de solo lectura: si falla (por ejemplo, un backend anterior), no bloquea el resto de la vista.
+      const nextReconciliation = authority.listReconciliation ? await authority.listReconciliation(session).catch(() => undefined) : undefined;
       if (!isCurrentRequest(sequence)) return nextOrders;
+      setReconciliation(nextReconciliation);
       setDebtors(nextDebtors);
       setFilterRecords(nextFilterRecords);
       setTechnicians(nextTechnicians);
@@ -373,6 +379,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
 
       <main className="operations-main">
         <AdminOverview orders={orders} audit={audit} />
+        {reconciliation ? <AdminReconciliation items={reconciliation} /> : null}
 
         <div className="operations-grid admin-workspace">
           <DebtorSearchPanel
