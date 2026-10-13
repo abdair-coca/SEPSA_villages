@@ -7,11 +7,9 @@ import { Pool } from "pg";
 import { Application } from "../src/http/application.js";
 import { hashToken } from "../src/shared/auth-crypto.js";
 import type { Config } from "../src/config.js";
+import { requireLocalDatabaseUrl } from "../scripts/local-database-guard.mjs";
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required. Start isolated PostgreSQL, run `npm run db:migrate:test`, then `npm test`.");
-}
+const databaseUrl = requireLocalDatabaseUrl(process.env.DATABASE_URL, "database integration tests (run `npm run db:migrate:test` first)");
 
 const config: Config = { host: "127.0.0.1", port: 0, databaseUrl, sessionTtlSeconds: 3600, authorizationTtlSeconds: 300, maxBodyBytes: 1024 * 1024, corsOrigin: "http://localhost:5173" };
 const pool = new Pool({ connectionString: databaseUrl, max: 4 });

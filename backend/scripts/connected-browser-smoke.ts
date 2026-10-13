@@ -11,9 +11,9 @@ import { Pool } from "pg";
 import { Application } from "../src/http/application.js";
 import { hashPassword } from "../src/shared/auth-crypto.js";
 import { loadConfig } from "../src/config.js";
+import { requireLocalDatabaseUrl } from "./local-database-guard.mjs";
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error("DATABASE_URL is required. Run `npm run db:migrate:test` against isolated PostgreSQL before this browser smoke.");
+const databaseUrl = requireLocalDatabaseUrl(process.env.DATABASE_URL, "the connected browser smoke (run `npm run db:migrate:test` first)");
 
 const projectRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const fieldAppRoot = join(projectRoot, "field-app");

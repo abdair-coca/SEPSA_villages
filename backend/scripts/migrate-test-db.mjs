@@ -1,9 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
+import { requireLocalDatabaseUrl } from "./local-database-guard.mjs";
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  console.error("DATABASE_URL is required. Start an isolated PostgreSQL 16 service, then run npm run db:migrate:test.");
+let databaseUrl;
+try {
+  databaseUrl = requireLocalDatabaseUrl(process.env.DATABASE_URL, "test database migrations");
+} catch (error) {
+  console.error(error.message);
   process.exit(1);
 }
 
