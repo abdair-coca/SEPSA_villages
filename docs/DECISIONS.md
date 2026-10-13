@@ -145,3 +145,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** `GET /v1/admin/reconciliation` (solo ADMIN) lista, a partir de tablas existentes, los conflictos de sincronización, las autorizaciones consumidas cuya operación aún no llegó del dispositivo y las operaciones cerradas porque su autorización no se usó (D022). La vista del administrador las muestra en solo lectura. El estado incierto de un dispositivo no se envía al servidor; esta lista es lo que el servidor puede saber.
 **Consecuencia:** El administrador da seguimiento sin intervenir; el técnico verifica o pide una autorización nueva desde su dispositivo. `POST /v1/sync/operations/{id}/review` sigue existiendo sin interfaz.
+
+## D025 — Sesión de 7 días en el despliegue
+
+**Estado:** vigente
+**Decisión:** `SESSION_TTL_SECONDS` vale `604800` (7 días) en `render.yaml` y en `backend/.env.example`, igual que el valor por defecto de `backend/src/config.ts`. La pantalla de acceso dice «La sesión dura 7 días». Sustituye a la sesión de 14 horas (`50400`, tarea 2.4 del plan de consolidación).
+**Consecuencia:** Con la sesión vigente se trabaja sin conexión; entrar sí exige conexión (`docs/RULES.md`, Offline-first). Si la duración cambia, debe cambiar también el texto de la pantalla de acceso. Render aplica el valor al sincronizar el blueprint o al cambiar la variable en su panel.
