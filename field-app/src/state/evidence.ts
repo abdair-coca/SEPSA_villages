@@ -74,30 +74,62 @@ function imageMime(file: File): "image/jpeg" | "image/png" {
   throw new DomainError("La evidencia debe ser JPEG o PNG.", "EVIDENCE_FORMAT_INVALID");
 }
 
-async function prepareImageFile(file: File): Promise<{ content: Blob; width: number; height: number; mimeType: "image/jpeg" | "image/png" }> {
+/** Bytes máximos de la foto preparada: en base64 cabe con margen en el límite del cuerpo del backend (D018). */
+export const EVIDENCE_MAX_BYTES = 1_000_000;
+/** Lado máximo que acepta el backend (`evidence-image.service.ts`). */
+export const EVIDENCE_MAX_SIDE = 4096;
+const JPEG_QUALITIES = [0.85, 0.72, 0.6];
+const RESOLUTION_STEPS = [1, 0.75, 0.55, 0.4];
+
+type EvidenceMime = "image/jpeg" | "image/png";
+export type EvidenceEncoder = (width: number, height: number, mimeType: EvidenceMime, quality?: number) => Promise<Blob>;
+export interface FittedEvidence { content: Blob; width: number; height: number; mimeType: EvidenceMime }
+
+/**
+ * Ajusta la foto a ≤ 5 MP, ≤ 4096 px por lado y ≤ `EVIDENCE_MAX_BYTES`. Conserva el original si ya cumple; si no,
+ * prueba el mismo formato a la resolución permitida y luego JPEG bajando calidad y, si no basta, resolución.
+ * Un PNG pesado sale como JPEG. Si nada cabe, bloquea la captura: nunca envía otra foto ni la omite.
+ */
+export async function fitEvidenceImage(original: Blob, mimeType: EvidenceMime, width: number, height: number, encode: EvidenceEncoder): Promise<FittedEvidence> {
+  const base = limitEvidenceDimensions(width, height);
+  const unchanged = base.width === Math.floor(width) && base.height === Math.floor(height);
+  if (unchanged && original.size <= EVIDENCE_MAX_BYTES) return { content: original, width: base.width, height: base.height, mimeType };
+  if (!unchanged && mimeType === "image/png") {
+    const png = await encode(base.width, base.height, "image/png");
+    if (png.size <= EVIDENCE_MAX_BYTES) return { content: png, ...base, mimeType: "image/png" };
+  }
+  for (const step of RESOLUTION_STEPS) {
+    const size = { width: Math.max(1, Math.floor(base.width * step)), height: Math.max(1, Math.floor(base.height * step)) };
+    for (const quality of JPEG_QUALITIES) {
+      const jpeg = await encode(size.width, size.height, "image/jpeg", quality);
+      if (jpeg.size <= EVIDENCE_MAX_BYTES) return { content: jpeg, ...size, mimeType: "image/jpeg" };
+    }
+  }
+  throw new DomainError("No pudimos reducir la foto lo suficiente. Tome otra foto con menos resolución.", "EVIDENCE_TOO_LARGE");
+}
+
+async function prepareImageFile(file: File): Promise<FittedEvidence> {
   const mimeType = imageMime(file);
   const decoded = await decodeImage(file);
-  const resized = resizeToFiveMegapixels(decoded.width, decoded.height);
-  if (resized.width === Math.floor(decoded.width) && resized.height === Math.floor(decoded.height)) {
+  try {
+    return await fitEvidenceImage(file, mimeType, decoded.width, decoded.height, (width, height, targetMime, quality) => {
+      if (typeof document === "undefined") throw new Error("No pudimos redimensionar la evidencia en este dispositivo.");
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("No pudimos preparar la evidencia localmente.");
+      // JPEG no tiene transparencia: fondo blanco en lugar de negro para un PNG convertido.
+      if (targetMime === "image/jpeg") {
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, width, height);
+      }
+      context.drawImage(decoded.source, 0, 0, width, height);
+      return canvasBlob(canvas, targetMime, quality);
+    });
+  } finally {
     decoded.dispose();
-    return { content: file, width: resized.width, height: resized.height, mimeType };
   }
-  if (typeof document === "undefined") {
-    decoded.dispose();
-    throw new Error("No pudimos redimensionar la evidencia en este dispositivo.");
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = resized.width;
-  canvas.height = resized.height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    decoded.dispose();
-    throw new Error("No pudimos preparar la evidencia localmente.");
-  }
-  context.drawImage(decoded.source, 0, 0, resized.width, resized.height);
-  decoded.dispose();
-  const content = await canvasBlob(canvas, mimeType);
-  return { content, width: resized.width, height: resized.height, mimeType };
 }
 
 async function decodeImage(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; dispose: () => void }> {
@@ -115,8 +147,8 @@ async function decodeImage(file: File): Promise<{ source: CanvasImageSource; wid
   });
 }
 
-function canvasBlob(canvas: HTMLCanvasElement, mimeType: "image/jpeg" | "image/png"): Promise<Blob> {
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("No pudimos guardar la evidencia preparada.")), mimeType, mimeType === "image/jpeg" ? 0.9 : undefined));
+function canvasBlob(canvas: HTMLCanvasElement, mimeType: EvidenceMime, quality?: number): Promise<Blob> {
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("No pudimos guardar la evidencia preparada.")), mimeType, mimeType === "image/jpeg" ? quality : undefined));
 }
 
 async function sha256(content: Blob): Promise<string> {
@@ -125,10 +157,10 @@ async function sha256(content: Blob): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function resizeToFiveMegapixels(width: number, height: number): { width: number; height: number } {
+/** Escala proporcional para quedar en ≤ 5 MP y ≤ `EVIDENCE_MAX_SIDE` px por lado. */
+function limitEvidenceDimensions(width: number, height: number): { width: number; height: number } {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new DomainError("Las dimensiones de evidencia no son válidas.", "EVIDENCE_DIMENSIONS_INVALID");
-  const area = width * height;
-  if (area <= 5_000_000) return { width: Math.floor(width), height: Math.floor(height) };
-  const scale = Math.sqrt(5_000_000 / area);
+  const scale = Math.min(1, Math.sqrt(5_000_000 / (width * height)), EVIDENCE_MAX_SIDE / Math.max(width, height));
+  if (scale === 1) return { width: Math.floor(width), height: Math.floor(height) };
   return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
 }

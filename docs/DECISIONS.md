@@ -103,3 +103,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** Una reconexión que no se confirmó localmente (`INTENT_PERSISTED` o `PHYSICAL_UNKNOWN`) se verifica solo consultando su habilitación por `operationId` (`recoverReconnection`), desde el botón "Verificar con servidor" o al sincronizar. La cola de sincronización no la consulta en `/v1/sync/operations` ni la reintenta. Una consulta no concluyente conserva la causa original del registro.
 **Consecuencia:** `/v1/sync/operations` solo se consulta para reconexiones confirmadas localmente. Una habilitación `expired`, `not_found` o no consultable deja la reconexión incierta con su código (`ENABLEMENT_RESERVATION_EXPIRED`, `ENABLEMENT_NOT_FOUND`, `ENABLEMENT_LOOKUP_UNKNOWN`) y sin envío. Resolver esos casos corresponde a la revisión del administrador, pendiente de la política de SEPSA (`TODO: VALIDAR CON SEPSA`).
+
+## D018 — Tamaño de la foto de evidencia
+
+**Estado:** vigente
+**Decisión:** La app prepara cada foto en ≤ 5 MP, ≤ 4096 px por lado (límite del backend) y ≤ 1 000 000 bytes (`EVIDENCE_MAX_BYTES`, `field-app/src/state/evidence.ts`). Conserva el original si ya cumple; si no, baja la calidad JPEG y después la resolución. Un PNG que no cabe se convierte a JPEG. Si ningún intento cabe, la captura se bloquea con `EVIDENCE_TOO_LARGE`. El backend desplegado acepta cuerpos de hasta 2 MB (`HTTP_MAX_BODY_BYTES` = 2097152), suficiente para la foto en base64.
+**Consecuencia:** Con el límite anterior (1 MiB) una foto normal de móvil fallaba con `PAYLOAD_TOO_LARGE`, el corte no se enviaba y su autorización vencía. El hash SHA-256 y las dimensiones guardadas corresponden siempre a los bytes finales.

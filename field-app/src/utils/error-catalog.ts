@@ -166,6 +166,16 @@ const CATALOG: Record<string, Omit<ErrorGuidance, "code">> = {
     saved: "La visita queda guardada si correspondía.",
     nextStep: "No se creó duplicado. Revise la actividad de la orden.",
   },
+  PAYLOAD_TOO_LARGE: {
+    title: "La foto pesa más de lo que acepta el servidor",
+    saved: "La foto y la operación siguen guardadas en este dispositivo; no se envió nada.",
+    nextStep: CONTACT_ADMIN,
+  },
+  EVIDENCE_IMAGE_TOO_LARGE: {
+    title: "La foto supera la resolución que acepta el servidor",
+    saved: "La foto y la operación siguen guardadas en este dispositivo; no se envió nada.",
+    nextStep: CONTACT_ADMIN,
+  },
   ORDER_RECOVERY_UNAVAILABLE: {
     title: "No se pudo recuperar la orden local",
     saved: SAVED_LOCALLY,

@@ -113,6 +113,7 @@ export function readableError(error: unknown): string {
       EVIDENCE_REQUIRED: "Adjunte JPEG/PNG preparado o marque excepción con justificación.",
       EVIDENCE_FORMAT_INVALID: "La evidencia debe ser JPEG o PNG.",
       EVIDENCE_NOT_OPTIMIZED: "La evidencia debe quedar preparada en cinco megapíxeles o menos.",
+      EVIDENCE_TOO_LARGE: "No pudimos reducir la foto lo suficiente. Tome otra foto con menos resolución.",
       VISIT_REASON_REQUIRED: "Escriba un motivo para registrar la visita.",
       FIELD_CAPTURE_REQUIRED: "Complete lectura, tipo de corte, GPS y verificación de medidores.",
       METER_READING_REQUIRED: "Ingrese lectura final válida del medidor.",

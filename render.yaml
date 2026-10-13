@@ -19,7 +19,7 @@ services:
       - key: AUTHORIZATION_TTL_SECONDS
         value: "300"
       - key: HTTP_MAX_BODY_BYTES
-        value: "1048576"
+        value: "2097152"
       - key: DATABASE_URL
         sync: false
       - key: CORS_ORIGIN
