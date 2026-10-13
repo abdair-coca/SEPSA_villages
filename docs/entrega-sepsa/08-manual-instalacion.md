@@ -127,7 +127,7 @@ npm run pilot:migrate:field-test   # aplica la carga del conjunto de prueba
 npm run pilot:migrate:roles        # aplica los grants de roles
 ```
 
-`pilot:migrate:field-test` es la misma carga que el servidor ejecuta al arrancar la imagen de Docker. Crea órdenes con el umbral de 3 meses. Como la carga del arranque, está protegida por `pilot_migrations`: con el mismo checksum no vuelve a escribir. Ver [07-manual-tecnico.md](07-manual-tecnico.md), sección 1.1, antes de usarla fuera de desarrollo.
+`pilot:migrate:field-test` es la carga de datos de prueba. Ya no se ejecuta al arrancar la imagen (D026); el archivo `backend/migrations/data/EXCEL_20260922.json` no está en el repo. Crea órdenes con el umbral de 3 meses. Como la carga del arranque, está protegida por `pilot_migrations`: con el mismo checksum no vuelve a escribir. Ver [07-manual-tecnico.md](07-manual-tecnico.md), sección 1.1, antes de usarla fuera de desarrollo.
 
 ### 3.4 Aplicación de campo y administración
 

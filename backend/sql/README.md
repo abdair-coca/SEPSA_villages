@@ -31,9 +31,10 @@ Orden real de los scripts de `backend/sql/`, de los `.mjs` de `backend/migration
 **Arranque de la API** (CMD del `Dockerfile`; en cada arranque, con o sin volumen nuevo). Cada paso se detiene si falla el anterior:
 
 1. `scripts/apply-startup-schema-migrations.mjs`: `002_evidence_assets.sql` → `007_work_package_versions.sql` → `008_reconnection_schema.sql`.
-2. `migrations/20260923-load-excel-20260922.mjs`: carga idempotente del dataset de prueba.
-3. `migrations/20261002-role-grants.mjs`: aplica `007_role_grants.sql` solo si falta `sessions.active_role`.
-4. `dist/src/server.js`.
+2. `migrations/20261002-role-grants.mjs`: aplica `007_role_grants.sql` solo si falta `sessions.active_role`.
+3. `dist/src/server.js`.
+
+La carga de datos de prueba (`20260923-load-excel-20260922.mjs`) no está en el arranque desde D026. Se ejecuta a mano con `npm run pilot:migrate:field-test`.
 
 **Bootstrap** (`npm run pilot:bootstrap`, una vez, sobre base vacía; se niega si hay datos): `001_init` → `002_evidence_assets` → `seeds/002_seed` → `003_reference_fields` → `seeds/004_e2e_seed` → `seeds/005_definitive_seed` → `007_work_package_versions` → `007_role_grants` → `008_reconnection_schema`.
 
@@ -43,7 +44,7 @@ Orden real de los scripts de `backend/sql/`, de los `.mjs` de `backend/migration
 
 ## Scripts `.mjs`
 
-- `20260923-load-excel-20260922.mjs` carga `migrations/data/EXCEL_20260922.json` (99 deudores, 10 órdenes elegibles). Exige los usuarios `admin.sepsa` y `jhonny.moya` creados por `seeds/002_seed.sql`. Crea la tabla `pilot_migrations` (el script, no un `.sql`) y registra su `migration_id` con el checksum del JSON; si el checksum no coincide con el ya aplicado, se detiene.
+- `20260923-load-excel-20260922.mjs` carga `migrations/data/EXCEL_20260922.json` (99 deudores, 10 órdenes elegibles). El archivo no está en el repo; se gestiona fuera de él. Si falta, el comando se detiene con un mensaje que lo indica. Exige los usuarios `admin.sepsa` y `jhonny.moya` creados por `seeds/002_seed.sql`. Crea la tabla `pilot_migrations` (el script, no un `.sql`) y registra su `migration_id` con el checksum del JSON; si el checksum no coincide con el ya aplicado, se detiene.
 - `20261002-role-grants.mjs` aplica `007_role_grants.sql` solo si `sessions.active_role` no existe. Por eso ese SQL no está en la lista de `apply-startup-schema-migrations.mjs`.
 
 Los `.mjs` existen porque su decisión depende del estado de la base (checksum o columna existente) o porque cargan datos desde un archivo. Convertirlos a SQL cambiaría cuándo se ejecutan en despliegues existentes, así que la relación se documenta y no se unifica.

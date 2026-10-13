@@ -25,9 +25,10 @@ Antes de operar el piloto en producción faltan decisiones que no están en el r
    Al arrancar, el comando de la imagen (`CMD` en `backend/Dockerfile`) ejecuta además, en este orden:
 
    1. `scripts/apply-startup-schema-migrations.mjs`
-   2. `migrations/20260923-load-excel-20260922.mjs` (carga provisional)
-   3. `migrations/20261002-role-grants.mjs` (grants de roles)
-   4. `dist/src/server.js` (servidor)
+   2. `migrations/20261002-role-grants.mjs` (grants de roles)
+   3. `dist/src/server.js` (servidor)
+
+   La carga de datos de prueba no está en el arranque desde D026. Se ejecuta a mano (sección 1.1).
 
    `008_reconnection_schema.sql` habilita la reconexión sobre tablas existentes. El arranque no aplica `003_payment_observations.sql`. Revisar el historial y el conjunto de datos antes del despliegue, sin ejecutar importaciones ni semillas adicionales.
 
@@ -43,26 +44,25 @@ Antes de operar el piloto en producción faltan decisiones que no están en el r
 
 TLS, proxy confiable, réplicas, almacén compartido del límite de intentos, observabilidad, umbrales, retención y gestión de secretos dependen de infraestructura que no está definida (P-11).
 
-En Compose, los archivos SQL montados en `/docker-entrypoint-initdb.d`, incluida la migración de evidencias, solo se ejecutan sobre un volumen de PostgreSQL vacío. Un volumen existente recibe `002_evidence_assets.sql`, `007_work_package_versions.sql` y `008_reconnection_schema.sql` mediante el arranque de la API; no hace falta borrar el volumen. Si una migración falla, el `CMD` no continúa hacia la carga provisional ni hacia el servidor.
+En Compose, los archivos SQL montados en `/docker-entrypoint-initdb.d`, incluida la migración de evidencias, solo se ejecutan sobre un volumen de PostgreSQL vacío. Un volumen existente recibe `002_evidence_assets.sql`, `007_work_package_versions.sql` y `008_reconnection_schema.sql` mediante el arranque de la API; no hace falta borrar el volumen. Si una migración falla, el `CMD` no continúa hacia los grants de roles ni hacia el servidor.
 
-### 1.1 Carga provisional al arrancar: qué hace realmente
+### 1.1 Carga de datos de prueba (manual)
 
-El `CMD` de la imagen ejecuta `migrations/20260923-load-excel-20260922.mjs` en **cada arranque** del contenedor. El runbook lo nombra, pero no describe su efecto. Según el script:
+Desde D026 la carga `migrations/20260923-load-excel-20260922.mjs` ya no se ejecuta al arrancar el contenedor. Se hace a mano con `npm run pilot:migrate:field-test`. Según el script:
 
-- Valida en cada arranque el conjunto de datos `backend/migrations/data/EXCEL_20260922.json`: 99 registros y 10 elegibles, es decir, con `debt_cents > 0` y `months_pending >= 3`. Si no se cumple, el arranque falla.
-- Antes de escribir, consulta la tabla `pilot_migrations`. Si la carga ya se aplicó con el mismo checksum, sale sin escribir nada. Si el checksum cambió, el arranque falla.
+- Valida el conjunto de datos `backend/migrations/data/EXCEL_20260922.json`, que no está en el repo: 99 registros y 10 elegibles, es decir, con `debt_cents > 0` y `months_pending >= 3`. Si no se cumple, el comando falla.
+- Antes de escribir, consulta la tabla `pilot_migrations`. Si la carga ya se aplicó con el mismo checksum, sale sin escribir nada. Si el checksum cambió, el comando falla.
 - En la primera aplicación actualiza cada moroso con el mismo `debtor_id` (`ON CONFLICT DO UPDATE`) y sobrescribe campos como `debt_cents`, `months_pending` y `address` con los valores del conjunto de datos.
 - Para cada elegible crea una orden de corte en estado `GENERADO`, asignada al técnico `jhonny.moya` y creada por `admin.sepsa`. Los nombres de usuario están fijos en el script. Registra la auditoría de creación y de asignación.
 - Las órdenes no se duplican: el identificador se calcula de forma determinista y la inserción se omite si ya existe.
 
 Consecuencias que el equipo debe decidir antes de operar en producción:
 
-- Solo la primera aplicación escribe. Un reinicio posterior con el mismo archivo no cambia nada.
+- Solo la primera aplicación escribe. Una segunda ejecución con el mismo archivo no cambia nada.
 - El umbral de 3 meses está codificado. `docs/RULES.md` lo marca como no vigente y pide no implementarlo por inferencia (P-01).
-- La carga está en el `CMD`, así que se ejecuta en cada arranque, aunque solo escribe la primera vez. El runbook pide no ejecutar importaciones ni semillas adicionales en el despliegue.
-- El conjunto de datos del repo contiene nombre y dirección de 99 registros, y teléfono en 27. El equipo lo trata como datos de prueba. Retirarlo del repo está pendiente de decisión, porque el arranque lo lee en cada inicio.
+- El conjunto de datos se retiró del repo (D026). Sin el archivo, el comando se detiene con un mensaje que lo indica. Los seeds `005` y `006` siguen en el repo con filas de personas; su tratamiento está pendiente de decisión.
 
-El código no se ha cambiado. Esta sección describe lo que hace hoy.
+El código de la carga no cambió; cambió dónde se ejecuta. Esta sección describe lo que hace el código hoy.
 
 ## 2. Reversión segura
 
@@ -116,7 +116,7 @@ Los objetivos RPO y RTO, la frecuencia de restauración, el cifrado administrado
 | Retención de evidencias y respaldos | Pendiente de SEPSA | P-18 |
 | RPO, RTO, frecuencia de restauración y cifrado administrado | Valores aprobados pendientes | P-17 |
 | Política de conciliación oficial | Pendiente de SEPSA | P-03, P-04 |
-| Carga provisional al arrancar: en la primera aplicación crea órdenes de prueba con umbral de 3 meses y está fijada a usuarios concretos | Decisión del equipo sobre si debe ejecutarse en el arranque. El código no se ha modificado | Sección 1.1; P-01 |
+| Carga de datos de prueba: la primera ejecución crea órdenes de prueba con umbral de 3 meses y está fijada a usuarios concretos | Ya no se ejecuta al arrancar (D026). Pendiente: tratamiento de los seeds `005` y `006` | Sección 1.1; P-01 |
 
 ## 7. Material para el técnico de campo
 

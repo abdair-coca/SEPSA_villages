@@ -13,7 +13,7 @@ Los términos técnicos están en el [glosario](05-diccionario-datos.md#glosario
 | `field-app/` | Aplicación de campo y administración (React, TypeScript, Vite) |
 | `backend/` | Servidor de la API (Node.js, TypeScript, PostgreSQL) |
 | `backend/sql/` | Migraciones SQL del esquema (`001` a `008`) y datos de prueba |
-| `backend/migrations/` | Scripts de carga y de roles que se ejecutan al arrancar el servidor |
+| `backend/migrations/` | Carga de datos de prueba (se ejecuta a mano) y migración de roles (se ejecuta al arrancar el servidor) |
 | `backend/openapi/` | Contrato HTTP provisional en formato OpenAPI |
 | `docs/` | Documentación activa del proyecto |
 | `docs/entrega-sepsa/` | Esta entrega |

@@ -120,7 +120,7 @@ En el modo simulado, los pasos que normalmente harían en el servidor los resuel
 
 | Componente | Configuración en el repo | Observación |
 |---|---|---|
-| Servidor | `backend/Dockerfile` y `render.yaml` (servicio `sepsa-pilot-api`, con contenedor Docker y control de salud en `/healthz`) | Al arrancar ejecuta, en este orden: migraciones de arranque, carga provisional de Excel, migración de roles y después el servidor |
+| Servidor | `backend/Dockerfile` y `render.yaml` (servicio `sepsa-pilot-api`, con contenedor Docker y control de salud en `/healthz`) | Al arrancar ejecuta, en este orden: migraciones de arranque, migración de roles y después el servidor. La carga de datos de prueba no se ejecuta al arrancar (D026) |
 | Base de datos | `backend/docker-compose.yml` (PostgreSQL 16) para desarrollo | La topología de producción no está definida (P-11) |
 | Aplicación de campo | `field-app/vercel.json` | Reenvía `/v1/*` al servidor en Render y marca esas respuestas como `no-store` |
 

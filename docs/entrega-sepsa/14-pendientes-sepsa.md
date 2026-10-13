@@ -10,7 +10,7 @@ Las 17 ocurrencias activas del marcador tienen entrada. Hay cinco pendientes sin
 
 | ID | Qué debe confirmar SEPSA | Fuente | Usado en |
 |---|---|---|---|
-| P-01 | Reglas de elegibilidad para corte: umbral de facturas o mora, exclusión de intereses, bloqueo por CI/NIT, protección por reclamos y cargos o prioridad de reconexión. El código no las aplica como autoridad general, pero la carga provisional al arrancar y el script de importación codifican un umbral de 3 meses para crear órdenes (`backend/migrations/20260923-load-excel-20260922.mjs:113` y `backend/scripts/import-debtors-xlsx.py:123`). | `docs/RULES.md:48` | 01, 02, 07 |
+| P-01 | Reglas de elegibilidad para corte: umbral de facturas o mora, exclusión de intereses, bloqueo por CI/NIT, protección por reclamos y cargos o prioridad de reconexión. El código no las aplica como autoridad general, pero la carga de datos de prueba y el script de importación codifican un umbral de 3 meses para crear órdenes (`backend/migrations/20260923-load-excel-20260922.mjs:113` y `backend/scripts/import-debtors-xlsx.py:123`). | `docs/RULES.md:48` | 01, 02, 07 |
 | P-02 | Umbrales y semántica definitiva de la captura de corte (lectura final, GPS, excepciones con motivo). | `docs/DOMAIN.md:54` | 01, 02 |
 | P-03 | Política de conciliación oficial de operaciones de corte y reposición. | `docs/features/synchronization.md:63` | 01, 02 |
 | P-04 | Política para resolver las autorizaciones de corte y las habilitaciones de reconexión cuya consulta no es concluyente (por ejemplo `ENABLEMENT_LOOKUP_UNKNOWN`). Las que el servidor demuestra no usadas (`expired`, `rejected`, `not_found`) las resuelve el técnico según D022 y no requieren política. **Sin marcador en el texto.** | `docs/DECISIONS.md` (D017, D022) | 01, 02, 10 |
