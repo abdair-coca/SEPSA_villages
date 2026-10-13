@@ -42,7 +42,9 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
 function QueueItem({ item, operation, busy, onRetryWithNewAuthorization, displayedAt, order, onRetry, onVerifyReconnection, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: SyncItem; operation?: OperationRecord; busy: boolean; onRetryWithNewAuthorization: () => void; displayedAt?: string; order?: WorkOrder; onRetry: () => void; onVerifyReconnection: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
   const manualReview = Boolean(item.manualReview);
   const uncertain = Boolean(item.uncertain);
-  const protectedFromRetry = manualReview || uncertain;
+  // Una acción física guardada antes de confirmar su autorización (la app se cerró a mitad): solo se verifica.
+  const awaitingVerification = operation?.status === "INTENT_PERSISTED" && (operation.action === "RECONNECTION" || operation.authorizationConsumption === "immediate");
+  const protectedFromRetry = manualReview || uncertain || awaitingVerification;
   const reviewMessage = queueReviewMessage(item);
   return (
     <article className="queue-item">
@@ -52,7 +54,8 @@ function QueueItem({ item, operation, busy, onRetryWithNewAuthorization, display
       {mobile && item.errorCode && item.errorCode.length <= 36 ? <p className="queue-error queue-error--mobile">Error: {item.errorCode}</p> : null}
       <div className="queue-item__actions">
         {(item.status === "pending" || item.status === "failed") && !protectedFromRetry ? <button type="button" className="queue-item__retry" disabled={!canRetry} onClick={onRetry}>Reintentar</button> : null}
-        {item.action === "RECONNECTION" && uncertain && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onVerifyReconnection}>Verificar con servidor</button> : null}
+        {item.action === "RECONNECTION" && (uncertain || awaitingVerification) && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onVerifyReconnection}>Verificar con servidor</button> : null}
+        {item.action === "CUT" && awaitingVerification && !uncertain && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar con servidor</button> : null}
         {item.status === "failed" && uncertain && !manualReview && item.action !== "RECONNECTION" ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar estado</button> : null}
         {operation && canVerify ? <NewAuthorizationAction record={operation} busy={busy} onConfirm={onRetryWithNewAuthorization} /> : null}
         {mobile && (item.errorCode || manualReview || uncertain) ? <button type="button" className="queue-item__detail" onClick={onViewFullDetails}>Ver error y contexto</button> : null}
