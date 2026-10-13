@@ -96,6 +96,16 @@ const CATALOG: Record<string, Omit<ErrorGuidance, "code">> = {
     saved: "El resultado queda guardado como incierto.",
     nextStep: `${NOT_REPEATED} ${ADMIN_REVIEW}`,
   },
+  ENABLEMENT_NOT_FOUND: {
+    title: "El servidor no tiene habilitación para esta operación",
+    saved: "El resultado queda guardado como incierto.",
+    nextStep: `${NOT_REPEATED} ${ADMIN_REVIEW}`,
+  },
+  ENABLEMENT_RESERVATION_EXPIRED: {
+    title: "La reserva venció antes de confirmarse el consumo",
+    saved: "El resultado queda guardado como incierto.",
+    nextStep: `${NOT_REPEATED} ${ADMIN_REVIEW}`,
+  },
   ENABLEMENT_LOOKUP_MISMATCH: {
     title: "El servidor respondió con otra habilitación",
     saved: "El resultado queda guardado como incierto.",

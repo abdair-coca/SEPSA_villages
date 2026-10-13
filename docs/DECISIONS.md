@@ -97,3 +97,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** Los mensajes de error que ve el técnico o el administrador, tanto del backend como de `DomainError`, están en español. Los `code` siguen en inglés: son el contrato.
 **Consecuencia:** Las pruebas comparan códigos; un texto puede cambiar sin cambiar el contrato. Los errores internos de IndexedDB y los identificadores técnicos siguen en inglés.
+
+## D017 — Verificación de reconexión por habilitación, no por sincronización
+
+**Estado:** vigente
+**Decisión:** Una reconexión que no se confirmó localmente (`INTENT_PERSISTED` o `PHYSICAL_UNKNOWN`) se verifica solo consultando su habilitación por `operationId` (`recoverReconnection`), desde el botón "Verificar con servidor" o al sincronizar. La cola de sincronización no la consulta en `/v1/sync/operations` ni la reintenta. Una consulta no concluyente conserva la causa original del registro.
+**Consecuencia:** `/v1/sync/operations` solo se consulta para reconexiones confirmadas localmente. Una habilitación `expired`, `not_found` o no consultable deja la reconexión incierta con su código (`ENABLEMENT_RESERVATION_EXPIRED`, `ENABLEMENT_NOT_FOUND`, `ENABLEMENT_LOOKUP_UNKNOWN`) y sin envío. Resolver esos casos corresponde a la revisión del administrador, pendiente de la política de SEPSA (`TODO: VALIDAR CON SEPSA`).

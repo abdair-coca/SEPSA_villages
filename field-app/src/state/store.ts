@@ -131,6 +131,7 @@ export interface AppStore {
   registerVisit(orderId: string, input?: ActionInput): Promise<ActionResult>;
   executeCut(orderId: string, input?: ActionInput): Promise<ActionResult>;
   executeReconnection(orderId: string, input?: ActionInput): Promise<ActionResult>;
+  verifyReconnection(operationId: string): Promise<void>;
   sync(): Promise<void>;
 }
 
@@ -164,6 +165,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   const syncCoordinator = createSyncCoordinator({
     dependencies,
     technicianId,
+    deviceId,
     now,
     getSnapshot: () => snapshot,
     ensureReady,
@@ -299,6 +301,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     registerVisit: actionCoordinator.registerVisit,
     executeCut: actionCoordinator.executeCut,
     executeReconnection: actionCoordinator.executeReconnection,
+    verifyReconnection: actionCoordinator.verifyReconnection,
     sync: syncCoordinator.requestSync,
   };
 
@@ -392,6 +395,7 @@ export function createUnavailableAppStore(): AppStore {
     registerVisit: async () => ({ requestedAction: "VISIT", recordedAction: "VISIT", outcome: "review", localSaved: false }),
     executeCut: async () => ({ requestedAction: "CUT", recordedAction: "CUT", outcome: "review", localSaved: false }),
     executeReconnection: async () => ({ requestedAction: "RECONNECTION", recordedAction: "RECONNECTION", outcome: "review", localSaved: false }),
+    verifyReconnection: async () => undefined,
     sync: async () => undefined,
   };
 }

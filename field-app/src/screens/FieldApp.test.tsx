@@ -422,6 +422,7 @@ describe("FieldApp SSR shell", () => {
     expect(markup).toContain("Causa original: RESPONSE_LOST");
     expect(markup).toContain("Último aviso: LOOKUP_NOT_FOUND");
     expect(markup).toContain("Resultado incierto: Se perdió la respuesta del servidor");
+    expect(markup).toContain(">Verificar con servidor</button>");
   });
 
   it("lets manual review override uncertainty messaging and verification", async () => {

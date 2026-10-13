@@ -9,6 +9,7 @@ import type { CutProcessResult } from "../use-cases/process";
 import type { OfflineVisitResult } from "../use-cases/visit";
 import type { ReconnectionResult } from "../use-cases/reconnection";
 import type { ActionResult, ActionResultOutcome, AppMessage, AppState } from "./store";
+import { errorGuidance } from "../utils/error-catalog";
 
 export function formatSyncMessage(synced: number): string {
   const count = Number.isFinite(synced) ? Math.max(0, Math.trunc(synced)) : 0;
@@ -135,6 +136,18 @@ export function messageForCut(result: CutProcessResult, mode: ConnectivityMode):
   if (result.outcome === "physical_unknown" || result.outcome === "recovery_required") return { tone: "warning", text: "Resultado incierto. Revisión humana requerida; no repetir esta acción." };
   if (result.outcome === "duplicate") return { tone: "info", text: "Operación ya registrada; no se creó duplicado." };
   return { tone: "warning", text: "Corte bloqueado por validación externa; visita conservada si correspondía." };
+}
+
+/** Mensaje tras verificar una reconexión con el servidor. Nunca presenta una consulta no concluyente como confirmada. */
+export function messageForReconnectionVerification(result: ReconnectionResult | undefined): AppMessage {
+  if (!result) return { tone: "info", text: "No hay una reconexión pendiente de verificar en este dispositivo." };
+  if (result.outcome === "executed") return { tone: "success", text: "Reconexión confirmada por el servidor. Se enviará con la sincronización." };
+  if (result.outcome === "duplicate") return { tone: "info", text: "La reconexión ya estaba confirmada." };
+  if (result.outcome === "physical_unknown") {
+    const guidance = errorGuidance(result.errorCode ?? result.operation.errorCode, { uncertain: true });
+    return { tone: "warning", text: guidance ? `Resultado incierto: ${guidance.title}. ${guidance.nextStep}` : "No se pudo verificar la reconexión. No repita la acción." };
+  }
+  return { tone: "info", text: "La reconexión no requiere verificación." };
 }
 
 export function messageForReconnection(result: ReconnectionResult, mode: ConnectivityMode): AppMessage {

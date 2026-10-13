@@ -3,7 +3,7 @@
  * conexión útil (la cola se conserva) y antes de sincronizar intenta recuperar reconexiones que quedaron a
  * medias. Un fallo nunca borra operaciones: solo deja un aviso.
  */
-import { executeReconnection as runReconnection } from "../use-cases/reconnection";
+import { recoverReconnection } from "../use-cases/reconnection";
 import { SyncEngine } from "../use-cases/sync";
 import type { AppState, AppStoreDependencies } from "./store";
 import { formatSyncMessage } from "./store-results";
@@ -12,6 +12,7 @@ import type { ActionKind } from "../domain/types";
 export interface SyncCoordinatorContext {
   dependencies: AppStoreDependencies;
   technicianId: string;
+  deviceId: string;
   now: () => string;
   getSnapshot: () => AppState;
   ensureReady: () => Promise<void>;
@@ -27,7 +28,7 @@ export interface SyncCoordinator {
 }
 
 export function createSyncCoordinator(context: SyncCoordinatorContext): SyncCoordinator {
-  const { dependencies, technicianId, now, getSnapshot, ensureReady, refresh, update, runWithBusy } = context;
+  const { dependencies, technicianId, deviceId, now, getSnapshot, ensureReady, refresh, update, runWithBusy } = context;
   let syncInFlight: Promise<void> | undefined;
 
   function requestSync(): Promise<void> {
@@ -67,23 +68,8 @@ export function createSyncCoordinator(context: SyncCoordinatorContext): SyncCoor
     const items = await dependencies.repository.listSyncItems();
     for (const item of items) {
       if (item.action !== "RECONNECTION" || item.status === "synced" || item.manualReview) continue;
-      const record = await dependencies.repository.getRecord(item.operationId);
-      if (!record || record.kind !== "RECONNECTION" || (record.status !== "INTENT_PERSISTED" && record.status !== "PHYSICAL_UNKNOWN")) continue;
-      const order = await dependencies.repository.getOrder(record.orderId);
-      if (!order || order.assignedTechnicianId !== technicianId) continue;
       try {
-        await runReconnection({
-          repository: dependencies.repository,
-          enablement: dependencies.enablement,
-          order,
-          operationId: record.operationId,
-          technicianId: record.technicianId,
-          technicianNameSnapshot: record.technicianNameSnapshot,
-          deviceId: record.deviceId,
-          now: now(),
-          demora: record.demora,
-          exceptionReason: record.exceptionReason,
-        });
+        await recoverReconnection({ repository: dependencies.repository, enablement: dependencies.enablement, operationId: item.operationId, technicianId, deviceId, now: now() });
       } catch {
         // La operación sigue guardada e incierta; la recuperación nunca inventa un éxito.
       }

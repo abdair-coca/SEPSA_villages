@@ -38,6 +38,8 @@ export function OrderDetail({
   const [actionCompletion, setActionCompletion] = useState<ActionResult>();
   const [mobileView, setMobileView] = useState<OrderReviewView>("review");
   const [kardexIndex, setKardexIndex] = useState(0);
+  // Reconexión de esta orden que quedó incierta y que el técnico puede verificar con el servidor.
+  const unresolvedReconnection = state.activity.find((entry) => entry.record.orderId === order.orderId && entry.record.kind === "RECONNECTION" && entry.record.physicalStatus === "PHYSICAL_UNKNOWN")?.record;
   const [detailsPageIndex, setDetailsPageIndex] = useState(0);
   const [activityPageIndex, setActivityPageIndex] = useState(0);
   const isCancelled = order.status === "ANULADO";
@@ -121,7 +123,12 @@ export function OrderDetail({
         {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
           <div className="review-callout" role="alert">
             <strong>Resultado incierto</strong>
-            <span>Espere conciliación operativa. No hay acción de repetición disponible.</span>
+            {unresolvedReconnection ? (
+              <>
+                <span>Verifique la reconexión con el servidor. No repita la acción.</span>
+                <button type="button" className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => void store.verifyReconnection(unresolvedReconnection.operationId)}>Verificar con servidor</button>
+              </>
+            ) : <span>Espere conciliación operativa. No hay acción de repetición disponible.</span>}
           </div>
         ) : null}
 

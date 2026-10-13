@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { executeReconnection } from "./reconnection";
+import { executeReconnection, recoverReconnection } from "./reconnection";
 import { SyncEngine } from "./sync";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { deleteFieldDatabase } from "../adapters/indexeddb/database";
@@ -186,7 +186,7 @@ describe("reconnection process", () => {
     expect(enablement.lookupReconnectionCalls).toEqual([operationId]);
   });
 
-  it("recovers a persisted reconnection intent before lookup and marks sync uncertain", async () => {
+  it("recovers a persisted reconnection intent through enablement and keeps it out of sync lookup", async () => {
     const repository = await createRepository("reconnect-recovery");
     const operationId = "reconnect-recovery-00000000-0000-4000-8000-000000000026";
     const operation: OperationRecord = {
@@ -228,12 +228,91 @@ describe("reconnection process", () => {
     await expect(reopened.getOrder("order-reconnect")).resolves.toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN", version: 6 });
     await expect(reopened.listSyncItems()).resolves.toMatchObject([{ status: "failed", uncertain: true }]);
 
+    // Nunca se confirmó localmente: la cola no la consulta ni la reintenta; solo la habilitación la resuelve.
     const transport = new MockSyncTransport();
     transport.lookupResponse = { status: "not_found", operationId };
     const report = await new SyncEngine(reopened, new MockConnectivity("online"), transport).syncOnce();
-    expect(report.failed).toBe(1);
-    expect(transport.lookups).toEqual([operationId]);
+    expect(report).toMatchObject({ failed: 0, skipped: 1 });
+    expect(transport.lookups).toEqual([]);
     expect(transport.sent).toHaveLength(0);
-    await expect(reopened.listSyncItems()).resolves.toMatchObject([{ status: "failed", uncertain: true }]);
+    await expect(reopened.listSyncItems()).resolves.toMatchObject([{ status: "failed", uncertain: true, attempts: 0 }]);
+  });
+
+  describe("verification of an uncertain reconnection", () => {
+    const verifyInput = (repository: IndexedDbLocalRepository, enablement: MockEnablementAdapter, operationId: string) => ({ repository, enablement, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:10:00.000Z" });
+
+    async function uncertainReconnection(name: string, operationId: string) {
+      const repository = await createRepository(name);
+      const enablement = new MockEnablementAdapter();
+      enablement.requestResponse = { status: "enabled", grant: grant(operationId) };
+      enablement.consumeError = Object.assign(new Error("response lost"), { code: "RESPONSE_LOST" });
+      // Sin foto: la prueba del envío no tiene un subidor de evidencias; la excepción justificada evita ese paso.
+      const result = await executeReconnection({ ...input(repository, enablement, operationId), evidence: undefined, exceptionReason: "saltar_control_fotos: prueba sin foto" });
+      expect(result.outcome).toBe("physical_unknown");
+      enablement.consumeError = undefined;
+      return { repository, enablement };
+    }
+
+    it("completes the reconnection when enablement shows it was consumed, and sends it exactly once", async () => {
+      const operationId = "reconnect-verify-consumed-00000000-0000-4000-8000-000000000033";
+      const { repository, enablement } = await uncertainReconnection("reconnect-verify-consumed", operationId);
+      enablement.lookupReconnectionResponse = { status: "consumed", operationId };
+
+      const result = await recoverReconnection(verifyInput(repository, enablement, operationId));
+
+      expect(result).toMatchObject({ outcome: "executed", operation: { status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: "pending" } });
+      expect(enablement.consumeCalls).toHaveLength(1);
+      await expect(repository.getOrder("order-reconnect")).resolves.toMatchObject({ status: "RECONEXIÓN", physicalStatus: "CONFIRMED" });
+
+      const transport = new MockSyncTransport();
+      await expect(new SyncEngine(repository, new MockConnectivity("online"), transport).syncOnce()).resolves.toMatchObject({ synced: 1 });
+      expect(transport.sent).toHaveLength(1);
+      expect(transport.lookups).toEqual([]);
+    });
+
+    it("keeps the original cause when the reservation expired before the consume was confirmed", async () => {
+      const operationId = "reconnect-verify-expired-00000000-0000-4000-8000-000000000034";
+      const { repository, enablement } = await uncertainReconnection("reconnect-verify-expired", operationId);
+      enablement.lookupReconnectionResponse = { status: "expired", operationId };
+
+      const result = await recoverReconnection(verifyInput(repository, enablement, operationId));
+
+      expect(result).toMatchObject({ outcome: "physical_unknown", lookupStatus: "expired", errorCode: "ENABLEMENT_RESERVATION_EXPIRED" });
+      expect(enablement.consumeCalls).toHaveLength(1);
+      await expect(repository.getRecord(operationId)).resolves.toMatchObject({ status: "PHYSICAL_UNKNOWN", errorCode: "RESPONSE_LOST" });
+      await expect(repository.getOrder("order-reconnect")).resolves.toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN" });
+    });
+
+    it("reports a missing enablement as not found and stays uncertain without sending", async () => {
+      const operationId = "reconnect-verify-missing-00000000-0000-4000-8000-000000000035";
+      const { repository, enablement } = await uncertainReconnection("reconnect-verify-missing", operationId);
+      enablement.lookupReconnectionResponse = { status: "not_found", operationId };
+
+      const result = await recoverReconnection(verifyInput(repository, enablement, operationId));
+
+      expect(result).toMatchObject({ outcome: "physical_unknown", errorCode: "ENABLEMENT_NOT_FOUND" });
+      await expect(repository.getRecord(operationId)).resolves.toMatchObject({ errorCode: "RESPONSE_LOST" });
+    });
+
+    it("leaves the record untouched when the enablement cannot be consulted", async () => {
+      const operationId = "reconnect-verify-offline-00000000-0000-4000-8000-000000000036";
+      const { repository, enablement } = await uncertainReconnection("reconnect-verify-offline", operationId);
+      enablement.lookupError = new Error("offline");
+
+      const result = await recoverReconnection(verifyInput(repository, enablement, operationId));
+
+      expect(result).toMatchObject({ outcome: "physical_unknown", errorCode: "ENABLEMENT_LOOKUP_UNKNOWN" });
+      await expect(repository.getRecord(operationId)).resolves.toMatchObject({ status: "PHYSICAL_UNKNOWN", errorCode: "RESPONSE_LOST" });
+      expect(enablement.consumeCalls).toHaveLength(1);
+    });
+
+    it("ignores a reconnection that belongs to another technician or device", async () => {
+      const operationId = "reconnect-verify-scope-00000000-0000-4000-8000-000000000037";
+      const { repository, enablement } = await uncertainReconnection("reconnect-verify-scope", operationId);
+
+      await expect(recoverReconnection({ ...verifyInput(repository, enablement, operationId), technicianId: "tech-2" })).resolves.toBeUndefined();
+      await expect(recoverReconnection({ ...verifyInput(repository, enablement, operationId), deviceId: "device-2" })).resolves.toBeUndefined();
+      expect(enablement.lookupReconnectionCalls).toEqual([]);
+    });
   });
 });

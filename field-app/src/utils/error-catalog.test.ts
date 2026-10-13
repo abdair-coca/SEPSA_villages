@@ -24,6 +24,13 @@ describe("error catalog", () => {
     expect(guidance?.nextStep).not.toContain("Reintentar");
   });
 
+  it("explains the enablement codes used when verifying an uncertain reconnection", () => {
+    for (const code of ["ENABLEMENT_NOT_FOUND", "ENABLEMENT_RESERVATION_EXPIRED", "ENABLEMENT_LOOKUP_UNKNOWN"]) {
+      expect(errorGuidance(code, { uncertain: true })?.title).not.toContain("no clasificado");
+      expect(errorGuidance(code, { uncertain: true })?.nextStep).toContain("No repita la acción");
+    }
+  });
+
   it("returns nothing when there is no code", () => {
     expect(errorGuidance(undefined)).toBeUndefined();
   });

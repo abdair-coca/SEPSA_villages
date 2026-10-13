@@ -23,7 +23,7 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
   const canRunQueueSync = isUsable(state.mode) && state.busyAction !== "SYNC";
   const { page, pageCount, item: mobileItem } = queuePageItem(items, requestedPage);
   const renderItem = (item: SyncItem, mobile: boolean) => (
-    <QueueItem key={item.operationId} item={item} displayedAt={syncItemTimestamp(item, activityByOperation)} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} onViewFullDetails={() => setShowFullDetails(true)} canRetry={!mobile || canRunQueueSync} canVerify={canRunQueueSync} mobile={mobile} />
+    <QueueItem key={item.operationId} item={item} displayedAt={syncItemTimestamp(item, activityByOperation)} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onVerifyReconnection={() => void store.verifyReconnection(item.operationId)} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} onViewFullDetails={() => setShowFullDetails(true)} canRetry={!mobile || canRunQueueSync} canVerify={canRunQueueSync} mobile={mobile} />
   );
   return (
     <section className="queue-panel panel" aria-label="Cola de sincronización">
@@ -37,7 +37,7 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
   );
 }
 
-function QueueItem({ item, displayedAt, order, onRetry, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: SyncItem; displayedAt?: string; order?: WorkOrder; onRetry: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
+function QueueItem({ item, displayedAt, order, onRetry, onVerifyReconnection, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: SyncItem; displayedAt?: string; order?: WorkOrder; onRetry: () => void; onVerifyReconnection: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
   const manualReview = Boolean(item.manualReview);
   const uncertain = Boolean(item.uncertain);
   const protectedFromRetry = manualReview || uncertain;
@@ -50,7 +50,8 @@ function QueueItem({ item, displayedAt, order, onRetry, onViewOrder, onViewFullD
       {mobile && item.errorCode && item.errorCode.length <= 36 ? <p className="queue-error queue-error--mobile">Error: {item.errorCode}</p> : null}
       <div className="queue-item__actions">
         {(item.status === "pending" || item.status === "failed") && !protectedFromRetry ? <button type="button" className="queue-item__retry" disabled={!canRetry} onClick={onRetry}>Reintentar</button> : null}
-        {mobile && item.status === "failed" && uncertain && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar estado</button> : null}
+        {item.action === "RECONNECTION" && uncertain && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onVerifyReconnection}>Verificar con servidor</button> : null}
+        {mobile && item.status === "failed" && uncertain && !manualReview && item.action !== "RECONNECTION" ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar estado</button> : null}
         {mobile && (item.errorCode || manualReview || uncertain) ? <button type="button" className="queue-item__detail" onClick={onViewFullDetails}>Ver error y contexto</button> : null}
         {!mobile && item.errorCode ? <p className="queue-error">{manualReview ? "Requiere revisión humana. " : "Último aviso: "}{item.errorCode}</p> : null}
         {!mobile && item.uncertainCause && item.uncertainCause !== item.errorCode ? <p className="queue-error">Causa original: {item.uncertainCause}</p> : null}

@@ -5,12 +5,12 @@
  */
 import { executeCut as runCut, type CutProcessResult } from "../use-cases/process";
 import { executeOfflineVisit, type OfflineVisitResult } from "../use-cases/visit";
-import { executeReconnection as runReconnection, type ReconnectionResult } from "../use-cases/reconnection";
+import { executeReconnection as runReconnection, recoverReconnection, type ReconnectionResult } from "../use-cases/reconnection";
 import { generateOperationId, type WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
 import { prepareEvidence } from "./evidence";
 import type { ActionInput, ActionResult, AppState, AppStoreDependencies } from "./store";
-import { actionResultForCut, actionResultForReconnection, actionResultForVisit, messageForCut, messageForReconnection } from "./store-results";
+import { actionResultForCut, actionResultForReconnection, actionResultForVisit, messageForCut, messageForReconnection, messageForReconnectionVerification } from "./store-results";
 import type { ActionKind } from "../domain/types";
 
 export interface ActionCoordinatorContext {
@@ -33,6 +33,7 @@ export interface ActionCoordinator {
   registerVisit(orderId: string, input?: ActionInput): Promise<ActionResult>;
   executeCut(orderId: string, input?: ActionInput): Promise<ActionResult>;
   executeReconnection(orderId: string, input?: ActionInput): Promise<ActionResult>;
+  verifyReconnection(operationId: string): Promise<void>;
 }
 
 export function createActionCoordinator(context: ActionCoordinatorContext): ActionCoordinator {
@@ -129,6 +130,24 @@ export function createActionCoordinator(context: ActionCoordinatorContext): Acti
       });
       await syncAfterLocalAction();
       return actionResultForReconnection(result, getSnapshot());
+    },
+    async verifyReconnection(operationId) {
+      await ensureReady();
+      if (!dependencies.connectivity.isUsable()) {
+        update({ message: { tone: "warning", text: "Sin conexión útil. La reconexión sigue guardada; verifíquela cuando haya conexión." } });
+        return;
+      }
+      const result = await runWithBusy("RECONNECTION", () => recoverReconnection({
+        repository: dependencies.repository,
+        enablement: dependencies.enablement,
+        operationId,
+        technicianId,
+        deviceId,
+        now: now(),
+      }));
+      const refreshed = await refreshAfterCommit();
+      if (refreshed) update({ message: messageForReconnectionVerification(result) });
+      if (result?.outcome === "executed") await syncAfterLocalAction();
     },
   };
 }

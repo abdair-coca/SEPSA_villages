@@ -61,7 +61,7 @@ export class SyncEngine {
     const report: SyncReport = { processed: 0, synced: 0, failed: 0, skipped: 0 };
     const items = await this.repository.listSyncItems();
     for (const item of items) {
-      if (item.status === "synced" || item.manualReview) {
+      if (item.status === "synced" || item.manualReview || await this.awaitsEnablementRecovery(item)) {
         report.skipped += 1;
         continue;
       }
@@ -88,6 +88,16 @@ export class SyncEngine {
     return report;
   }
 
+  /**
+   * Una reconexión que no se confirmó localmente nunca llegó a enviarse: `/v1/sync/operations` no puede
+   * demostrar su consumo. Solo la habilitación (`verifyReconnection`) la puede resolver, así que la cola la omite.
+   */
+  private async awaitsEnablementRecovery(item: SyncItem): Promise<boolean> {
+    const record = await this.repository.getRecord(item.operationId);
+    if (!record || record.kind === "VISIT" || record.action !== "RECONNECTION" || record.status === "CONFIRMED") return false;
+    return record.physicalStatus === "PHYSICAL_UNKNOWN" || record.status === "PHYSICAL_UNKNOWN" || isPendingPhysicalOperation(record);
+  }
+
   private async claim(item: SyncItem, allowManualReview = false): Promise<SyncClaimResult> {
     return this.repository.claimSync(item.operationId, this.owner, this.now(), this.leaseMilliseconds, { allowManualReview });
   }
@@ -102,8 +112,7 @@ export class SyncEngine {
 
     // Rama de solo consulta: el envío pudo haber llegado al servidor, así que no se repite el POST.
     const cutLookupOnly = record.kind !== "VISIT" && record.action === "CUT" && (item.cutSendPhase !== "preparing" || record.physicalStatus === "PHYSICAL_UNKNOWN" || record.status === "PHYSICAL_UNKNOWN");
-    const reconnectionLookupOnly = record.kind !== "VISIT" && record.action === "RECONNECTION" && (record.physicalStatus === "PHYSICAL_UNKNOWN" || record.status === "PHYSICAL_UNKNOWN");
-    if (cutLookupOnly || reconnectionLookupOnly || (isPendingPhysicalOperation(record) && !hasDeferredAuthorization(record))) {
+    if (cutLookupOnly || (isPendingPhysicalOperation(record) && !hasDeferredAuthorization(record))) {
       if (isPendingPhysicalOperation(record)) {
         await this.repository.recoverPhysicalUnknown(item.operationId, this.now(), {
           owner: this.owner,
