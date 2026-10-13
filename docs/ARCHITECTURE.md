@@ -80,7 +80,7 @@ Contrato HTTP provisional, evidencia observada y pendientes: [Contrato del pilot
 
 ## Mapa del código
 
-Dónde vive cada responsabilidad. Cada archivo empieza con un comentario que explica qué hace y qué no hace; los invariantes críticos (autorización de un solo uso, leases de la cola, `cutSendPhase`, idempotencia) están comentados junto al código que los aplica.
+Dónde vive cada responsabilidad. Los archivos del servidor empiezan con un comentario que explica qué hace y qué no hace. En la aplicación lo hacen todos, salvo cinco sin comentario de cabecera: `field-app/src/adapters/indexeddb/package-validation.ts`, `field-app/src/adapters/mock/connectivity.ts`, `field-app/src/adapters/mock/transport.ts`, `field-app/src/ports/connectivity.ts` y `field-app/src/ports/identity.ts`; los invariantes críticos (autorización de un solo uso, leases de la cola, `cutSendPhase`, idempotencia) están comentados junto al código que los aplica.
 
 ### field-app (`field-app/src/`)
 

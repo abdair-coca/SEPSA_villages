@@ -69,5 +69,6 @@ La falta de conexión permite trabajo local, nunca autoriza un corte físico. Un
 - [Cortes y captura](features/cuts.md)
 - [Lecturas](features/readings.md)
 - [Sincronización](features/synchronization.md)
+- [Guía de campo del piloto](operations/guia-de-campo.md)
 
 El material anterior se conserva en [archive/](archive/README.md) solo para investigación histórica o revisión de decisiones previas.
