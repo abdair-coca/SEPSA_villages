@@ -166,6 +166,16 @@ const CATALOG: Record<string, Omit<ErrorGuidance, "code">> = {
     saved: "La visita queda guardada si correspondía.",
     nextStep: "No se creó duplicado. Revise la actividad de la orden.",
   },
+  AUTHORIZATION_CLOSED_NOT_CONSUMED: {
+    title: "Operación cerrada: el servidor confirmó que la autorización no se usó",
+    saved: "La foto y los datos se reutilizaron en la nueva solicitud; esta operación queda como constancia.",
+    nextStep: "No hay nada que hacer con esta operación. Siga la nueva en la cola.",
+  },
+  ENABLEMENT_REJECTED: {
+    title: "La habilitación fue reemplazada o rechazada sin usarse",
+    saved: SAVED_LOCALLY,
+    nextStep: `${NOT_REPEATED} Puede solicitar una nueva habilitación desde la orden o la cola.`,
+  },
   UNAUTHENTICATED: {
     title: "La sesión venció antes de confirmar con el servidor",
     saved: SAVED_LOCALLY,

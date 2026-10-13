@@ -114,7 +114,7 @@ export interface ReconnectionConsumeResult {
 }
 
 export interface ReconnectionLookupResult {
-  status: "not_found" | "consumed" | "reserved" | "expired" | "unknown";
+  status: "not_found" | "consumed" | "reserved" | "expired" | "rejected" | "unknown";
   operation_id: string;
   source: string;
 }
@@ -230,7 +230,7 @@ export function createAuthorizationService(context: ServiceContext): Authorizati
     return withTransaction(context.pool, async (client) => {
       const grant = await findGrantStatusByOperationForUpdate(client, operationId, "RECONNECTION");
       if (!grant || grant.technician_id !== user.userId) return { status: "not_found" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
-      let status = reconnectionStatus(grant.status);
+      let status = authorizationStatus(grant.status);
       if (status === "reserved" && Date.parse(grant.expires_at) <= Date.now()) {
         await expireReservedAuthorization(client, grant.authorization_id);
         status = "expired";
@@ -288,7 +288,7 @@ export function createAuthorizationService(context: ServiceContext): Authorizati
     return withTransaction(context.pool, async (client) => {
       const grant = await findGrantStatusByOperationForUpdate(client, operationId, "CUT");
       if (!grant || grant.technician_id !== user.userId) return { status: "not_found" as const, operation_id: operationId, source: PROVISIONAL_SOURCE };
-      let status: CutAuthorizationLookupResult["status"] = grant.status === "REJECTED" ? "rejected" : reconnectionStatus(grant.status);
+      let status = authorizationStatus(grant.status);
       if (status === "reserved" && Date.parse(grant.expires_at) <= Date.now()) {
         await expireReservedAuthorization(client, grant.authorization_id);
         status = "expired";
@@ -320,10 +320,12 @@ function isCurrentReconnectionOrder(order: OrderState, version: number): boolean
   return order.status === "EJECUTADO" && order.physical_status === "CONFIRMED" && order.version === version;
 }
 
-function reconnectionStatus(status: string): "consumed" | "reserved" | "expired" | "unknown" {
+/** `REJECTED` (reserva reemplazada o con la orden cambiada) tampoco se consumió: se informa como `rejected`. */
+function authorizationStatus(status: string): "consumed" | "reserved" | "expired" | "rejected" | "unknown" {
   if (status === "CONSUMED") return "consumed";
   if (status === "RESERVED") return "reserved";
   if (status === "EXPIRED") return "expired";
+  if (status === "REJECTED") return "rejected";
   return "unknown";
 }
 

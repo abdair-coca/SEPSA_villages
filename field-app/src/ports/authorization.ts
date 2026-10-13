@@ -165,7 +165,7 @@ export interface ConsumeEnablementResponse {
 }
 
 export interface EnablementLookupResult {
-  status: "reserved" | "consumed" | "expired" | "not_found" | "unknown";
+  status: "reserved" | "consumed" | "expired" | "rejected" | "not_found" | "unknown";
   operationId: string;
   errorCode?: string;
 }

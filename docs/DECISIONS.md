@@ -102,7 +102,7 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 
 **Estado:** vigente
 **Decisión:** Una reconexión que no se confirmó localmente (`INTENT_PERSISTED` o `PHYSICAL_UNKNOWN`) se verifica solo consultando su habilitación por `operationId` (`recoverReconnection`), desde el botón "Verificar con servidor" o al sincronizar. La cola de sincronización no la consulta en `/v1/sync/operations` ni la reintenta. Una consulta no concluyente conserva la causa original del registro.
-**Consecuencia:** `/v1/sync/operations` solo se consulta para reconexiones confirmadas localmente. Una habilitación `expired`, `not_found` o no consultable deja la reconexión incierta con su código (`ENABLEMENT_RESERVATION_EXPIRED`, `ENABLEMENT_NOT_FOUND`, `ENABLEMENT_LOOKUP_UNKNOWN`) y sin envío. Resolver esos casos corresponde a la revisión del administrador, pendiente de la política de SEPSA (`TODO: VALIDAR CON SEPSA`).
+**Consecuencia:** `/v1/sync/operations` solo se consulta para reconexiones confirmadas localmente. Una habilitación `expired`, `not_found` o no consultable deja la reconexión incierta con su código (`ENABLEMENT_RESERVATION_EXPIRED`, `ENABLEMENT_NOT_FOUND`, `ENABLEMENT_LOOKUP_UNKNOWN`) y sin envío. Cuando la consulta demuestra que la habilitación no se usó, el técnico la resuelve según D022; los demás casos siguen inciertos.
 
 ## D018 — Tamaño de la foto de evidencia
 
@@ -127,3 +127,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** La documentación de entrega para SEPSA vive en `docs/entrega-sepsa/`. Es una copia autocontenida y fechada, derivada de las fuentes activas (`docs/RULES.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/features/`, `docs/api/`, `docs/operations/` y el código). No reemplaza ninguna fuente activa.
 **Consecuencia:** Cada documento de la entrega indica su fuente y su fecha. Un cambio en una fuente se refleja en la entrega en la misma tarea. Si la entrega y una fuente difieren, manda la fuente y la entrega se corrige. Los pendientes de SEPSA se listan en `docs/entrega-sepsa/14-pendientes-sepsa.md` y no se presentan como reglas oficiales.
+
+## D022 — Nueva autorización cuando el servidor demuestra que la anterior no se usó
+
+**Estado:** vigente
+**Decisión:** Si la consulta de la autorización de un corte o una reconexión incierta devuelve `expired`, `rejected` o `not_found`, el técnico puede pedir una nueva tras confirmarlo. La app vuelve a consultar al servidor en ese momento; con la prueba, cierra la operación (`BLOCKED`, `AUTHORIZATION_CLOSED_NOT_CONSUMED`, fuera de la cola), devuelve la orden a su estado previo, registra una visita `closure-<uuid>` que se sincroniza como constancia y repite la acción con un `operationId` nuevo, la misma foto (copiada y ligada a la operación nueva) y los mismos datos (`demora`, captura de campo). `effectiveAt` es la hora de la nueva autorización. Un corte cuyo POST de sync ya empezó no se cierra así.
+**Consecuencia:** Una orden no queda bloqueada sin salida cuando el servidor demuestra que la autorización no se consumió, y el técnico no recaptura datos. La prueba es sobre la autorización, no sobre el medidor: la interfaz no afirma que la acción física no ocurrió. El administrador no interviene. La consulta de reconexión informa `rejected` en lugar de `unknown`.

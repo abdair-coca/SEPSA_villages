@@ -1698,7 +1698,7 @@
         "type": "object",
         "required": ["status", "operation_id", "source"],
         "properties": {
-          "status": {"enum": ["reserved", "consumed", "expired", "not_found", "unknown"]},
+          "status": {"enum": ["reserved", "consumed", "expired", "rejected", "not_found", "unknown"]},
           "operation_id": {"type": "string"},
           "error_code": {"type": "string"},
           "source": {"$ref": "#/components/schemas/Source"}

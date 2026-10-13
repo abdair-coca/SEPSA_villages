@@ -4,7 +4,8 @@
  */
 import { useState } from "react";
 import type { AppState, AppStore } from "../state/store";
-import type { WorkOrder } from "../domain/types";
+import type { OperationRecord, WorkOrder } from "../domain/types";
+import { NewAuthorizationAction } from "./NewAuthorizationAction";
 import type { SyncItem } from "../ports/sync";
 import { PaginationControls } from "./common/PaginationControls";
 import { AppStateCard } from "./common/UiState";
@@ -22,8 +23,9 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
   const items = sortSyncItemsForDisplay(state.syncItems, state.activity);
   const canRunQueueSync = isUsable(state.mode) && state.busyAction !== "SYNC";
   const { page, pageCount, item: mobileItem } = queuePageItem(items, requestedPage);
+  const operations = new Map(state.activity.flatMap((entry) => entry.record.kind === "VISIT" ? [] : [[entry.record.operationId, entry.record as OperationRecord] as const]));
   const renderItem = (item: SyncItem, mobile: boolean) => (
-    <QueueItem key={item.operationId} item={item} displayedAt={syncItemTimestamp(item, activityByOperation)} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onVerifyReconnection={() => void store.verifyReconnection(item.operationId)} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} onViewFullDetails={() => setShowFullDetails(true)} canRetry={!mobile || canRunQueueSync} canVerify={canRunQueueSync} mobile={mobile} />
+    <QueueItem key={item.operationId} item={item} operation={operations.get(item.operationId)} busy={Boolean(state.busyAction)} onRetryWithNewAuthorization={() => void store.retryWithNewAuthorization(item.operationId)} displayedAt={syncItemTimestamp(item, activityByOperation)} order={state.orders.find((order) => order.orderId === item.orderId)} onRetry={() => void store.sync()} onVerifyReconnection={() => void store.verifyReconnection(item.operationId)} onViewOrder={(orderId) => { store.setTab("orders"); store.selectOrder(orderId); }} onViewFullDetails={() => setShowFullDetails(true)} canRetry={!mobile || canRunQueueSync} canVerify={canRunQueueSync} mobile={mobile} />
   );
   return (
     <section className="queue-panel panel" aria-label="Cola de sincronización">
@@ -37,7 +39,7 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
   );
 }
 
-function QueueItem({ item, displayedAt, order, onRetry, onVerifyReconnection, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: SyncItem; displayedAt?: string; order?: WorkOrder; onRetry: () => void; onVerifyReconnection: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
+function QueueItem({ item, operation, busy, onRetryWithNewAuthorization, displayedAt, order, onRetry, onVerifyReconnection, onViewOrder, onViewFullDetails, canRetry, canVerify, mobile }: { item: SyncItem; operation?: OperationRecord; busy: boolean; onRetryWithNewAuthorization: () => void; displayedAt?: string; order?: WorkOrder; onRetry: () => void; onVerifyReconnection: () => void; onViewOrder: (orderId: string) => void; onViewFullDetails: () => void; canRetry: boolean; canVerify: boolean; mobile: boolean }) {
   const manualReview = Boolean(item.manualReview);
   const uncertain = Boolean(item.uncertain);
   const protectedFromRetry = manualReview || uncertain;
@@ -51,9 +53,10 @@ function QueueItem({ item, displayedAt, order, onRetry, onVerifyReconnection, on
       <div className="queue-item__actions">
         {(item.status === "pending" || item.status === "failed") && !protectedFromRetry ? <button type="button" className="queue-item__retry" disabled={!canRetry} onClick={onRetry}>Reintentar</button> : null}
         {item.action === "RECONNECTION" && uncertain && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onVerifyReconnection}>Verificar con servidor</button> : null}
-        {mobile && item.status === "failed" && uncertain && !manualReview && item.action !== "RECONNECTION" ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar estado</button> : null}
+        {item.status === "failed" && uncertain && !manualReview && item.action !== "RECONNECTION" ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar estado</button> : null}
+        {operation && canVerify ? <NewAuthorizationAction record={operation} busy={busy} onConfirm={onRetryWithNewAuthorization} /> : null}
         {mobile && (item.errorCode || manualReview || uncertain) ? <button type="button" className="queue-item__detail" onClick={onViewFullDetails}>Ver error y contexto</button> : null}
-        {!mobile && item.errorCode ? <p className="queue-error">{manualReview ? "Requiere revisión humana. " : "Último aviso: "}{item.errorCode}</p> : null}
+        {!mobile && item.errorCode && !reviewMessage?.startsWith("Cerrada") ? <p className="queue-error">{manualReview ? "Requiere revisión humana. " : "Último aviso: "}{item.errorCode}</p> : null}
         {!mobile && item.uncertainCause && item.uncertainCause !== item.errorCode ? <p className="queue-error">Causa original: {item.uncertainCause}</p> : null}
         {!mobile && reviewMessage ? <p className="queue-review">{reviewMessage}</p> : null}
         {item.orderId ? <button type="button" className="queue-item__detail" onClick={() => onViewOrder(item.orderId ?? "")}>Ver detalle</button> : null}

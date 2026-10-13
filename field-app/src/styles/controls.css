@@ -214,3 +214,15 @@
     line-height: 24px;
   }
 }
+
+/* Confirmación de "Solicitar nueva autorización" (D022). */
+.new-authorization-confirm {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.new-authorization-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}

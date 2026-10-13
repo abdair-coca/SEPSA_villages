@@ -1,12 +1,14 @@
 /**
- * Acciones de campo del store: registrar visita, ejecutar corte y reconexión, y borradores de captura.
+ * Acciones de campo del store: registrar visita, ejecutar corte y reconexión, verificar una reconexión incierta y
+ * pedir una autorización nueva cuando el servidor demuestra que la anterior no se usó (D022).
  * Prepara la evidencia, llama al caso de uso correspondiente y convierte su resultado para la UI.
  * La confirmación al técnico solo se muestra después de que el caso de uso guardó todo localmente.
  */
 import { executeCut as runCut, type CutProcessResult } from "../use-cases/process";
 import { executeOfflineVisit, type OfflineVisitResult } from "../use-cases/visit";
 import { executeReconnection as runReconnection, recoverReconnection, type ReconnectionResult } from "../use-cases/reconnection";
-import { generateOperationId, type WorkOrder } from "../domain/types";
+import { closeUnconsumedOperation } from "../use-cases/close-unconsumed";
+import { generateOperationId, type OperationRecord, type WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
 import { prepareEvidence } from "./evidence";
 import type { ActionInput, ActionResult, AppState, AppStoreDependencies } from "./store";
@@ -34,12 +36,23 @@ export interface ActionCoordinator {
   executeCut(orderId: string, input?: ActionInput): Promise<ActionResult>;
   executeReconnection(orderId: string, input?: ActionInput): Promise<ActionResult>;
   verifyReconnection(operationId: string): Promise<void>;
+  /** Cierra la operación si el servidor demuestra que su autorización no se usó y repite la acción con otra, sin recapturar. */
+  retryWithNewAuthorization(operationId: string): Promise<ActionResult | undefined>;
 }
 
 export function createActionCoordinator(context: ActionCoordinatorContext): ActionCoordinator {
   const { dependencies, technicianId, technicianName, deviceId, now, getSnapshot, ensureReady, getAssignedOrder, runWithBusy, finishDraftIfCommitted, refreshAfterCommit, syncAfterLocalAction, update } = context;
 
-  return {
+  /** Foto de la operación cerrada como borrador: `prepareEvidence` la liga a la operación nueva con otro id. */
+  async function evidenceDraftFrom(operation: OperationRecord): Promise<ActionInput["evidence"]> {
+    const evidenceId = operation.evidenceRefs[0];
+    if (!evidenceId) return undefined;
+    const evidence = await dependencies.repository.getEvidence?.(evidenceId);
+    if (!evidence?.content || !evidence.contentHash) return undefined;
+    return { mimeType: evidence.mimeType, width: evidence.width, height: evidence.height, optimized: true, content: evidence.content, contentHash: evidence.contentHash };
+  }
+
+  const coordinator: ActionCoordinator = {
     async registerVisit(orderId, input = {}) {
       await ensureReady();
       const order = getAssignedOrder(orderId);
@@ -149,5 +162,36 @@ export function createActionCoordinator(context: ActionCoordinatorContext): Acti
       if (refreshed) update({ message: messageForReconnectionVerification(result) });
       if (result?.outcome === "executed") await syncAfterLocalAction();
     },
+    async retryWithNewAuthorization(operationId) {
+      await ensureReady();
+      if (!dependencies.connectivity.isUsable()) {
+        update({ message: { tone: "warning", text: "Sin conexión útil. Pedir una autorización nueva exige conexión; la operación sigue guardada." } });
+        return undefined;
+      }
+      const record = await dependencies.repository.getRecord(operationId);
+      if (!record || record.kind === "VISIT") return undefined;
+      const action = record.kind;
+      const closure = await runWithBusy(action, () => closeUnconsumedOperation({
+        repository: dependencies.repository,
+        authorization: dependencies.authorization,
+        enablement: dependencies.enablement,
+        operationId,
+        technicianId,
+        deviceId,
+        now: now(),
+      }));
+      await refreshAfterCommit();
+      if (closure.outcome !== "closed") {
+        const text = closure.outcome === "not_proven"
+          ? `El servidor no confirma que la autorización anterior quedara sin usar (estado: ${closure.lookupStatus}). No repita la acción; verifique de nuevo más tarde.`
+          : "Esta operación ya no admite una autorización nueva.";
+        update({ message: { tone: "warning", text } });
+        return undefined;
+      }
+      const closed = closure.operation;
+      const input: ActionInput = { evidence: await evidenceDraftFrom(closed), exceptionReason: closed.exceptionReason, demora: closed.demora, fieldCapture: closed.fieldCapture };
+      return closed.action === "CUT" ? coordinator.executeCut(closed.orderId, input) : coordinator.executeReconnection(closed.orderId, input);
+    },
   };
+  return coordinator;
 }

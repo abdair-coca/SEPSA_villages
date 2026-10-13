@@ -358,6 +358,8 @@ export interface OperationRecord {
   evidenceRefs: string[];
   errorCode?: string;
   fieldCapture?: FieldCapture;
+  /** Última consulta de la autorización en el servidor que demostró que no se usó (habilita pedir otra, D022). */
+  lastAuthorizationLookup?: { status: "expired" | "rejected" | "not_found"; at: string };
 }
 
 /** Cambio auditado del estado físico de una orden (antes/después y motivo). */

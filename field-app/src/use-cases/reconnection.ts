@@ -23,6 +23,7 @@ import type { EvidenceReference, OperationRecord, VisitRecord, WorkOrder } from 
 import { isUncertainError, type EnablementAdapter, type EnablementGrant, type EnablementResponse } from "../ports/authorization";
 import type { AtomicOperationChange, LocalRepository, StoredRecord } from "../ports/repository";
 import { consumeWithRetries, type Sleep } from "./consume-retry";
+import { provesUnconsumed } from "./close-unconsumed";
 
 export interface ReconnectionProcessInput {
   repository: LocalRepository;
@@ -230,6 +231,7 @@ type EnablementVerdict = { consumed: true } | { consumed: false; code: string; l
 function unresolvedEnablementCode(status: string): string {
   if (status === "expired") return "ENABLEMENT_RESERVATION_EXPIRED";
   if (status === "not_found") return "ENABLEMENT_NOT_FOUND";
+  if (status === "rejected") return "ENABLEMENT_REJECTED";
   if (status === "unknown") return "ENABLEMENT_LOOKUP_UNKNOWN";
   return "RECOVERY_REQUIRED";
 }
@@ -268,10 +270,14 @@ async function consultEnablement(input: RecoveryContext, operation: OperationRec
 async function lookupExisting(input: RecoveryContext, operation: OperationRecord): Promise<ReconnectionResult> {
   const verdict = await consultEnablement(input, operation);
   if (verdict.consumed) return completeReconnection(input, operation);
+  // Una consulta que demuestra que la habilitación no se usó se guarda: permite pedir otra (D022).
+  const lookupStatus = verdict.lookupStatus;
+  const proven = provesUnconsumed(lookupStatus) ? { ...operation, lastAuthorizationLookup: { status: lookupStatus, at: input.now } } : operation;
   if (operation.physicalStatus === "PHYSICAL_UNKNOWN") {
-    return { outcome: "physical_unknown", operation, lookupStatus: verdict.lookupStatus, errorCode: verdict.code };
+    if (proven !== operation) await input.repository.updateOperationAndOrder(operationChange(proven));
+    return { outcome: "physical_unknown", operation: proven, lookupStatus: verdict.lookupStatus, errorCode: verdict.code };
   }
-  const uncertain = await persistUnknown(input, operation, await input.repository.getOrder(operation.orderId), verdict.code);
+  const uncertain = await persistUnknown(input, proven, await input.repository.getOrder(operation.orderId), verdict.code);
   return { outcome: "physical_unknown", operation: uncertain.operation, lookupStatus: verdict.lookupStatus, errorCode: verdict.code };
 }
 

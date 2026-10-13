@@ -3,9 +3,10 @@
  * las acciones permitidas (visita, corte, reconexión). Abre `CaptureForm` para registrar una acción y muestra
  * el resultado distinguiendo confirmado, guardado localmente, bloqueado e incierto.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ActionResult, ActivityEntry, AppState, AppStore } from "../state/store";
-import type { ConnectivityMode, WorkOrder, ActionKind } from "../domain/types";
+import type { ConnectivityMode, WorkOrder, ActionKind, OperationRecord } from "../domain/types";
+import { NewAuthorizationAction } from "./NewAuthorizationAction";
 import { FieldMap } from "./FieldMap";
 import { IconAlertTriangle, IconCheckCircle, IconMap, IconPin, IconScissors } from "./common/Icons";
 import { AppModal } from "./common/Modal";
@@ -38,8 +39,16 @@ export function OrderDetail({
   const [actionCompletion, setActionCompletion] = useState<ActionResult>();
   const [mobileView, setMobileView] = useState<OrderReviewView>("review");
   const [kardexIndex, setKardexIndex] = useState(0);
-  // Reconexión de esta orden que quedó incierta y que el técnico puede verificar con el servidor.
-  const unresolvedReconnection = state.activity.find((entry) => entry.record.orderId === order.orderId && entry.record.kind === "RECONNECTION" && entry.record.physicalStatus === "PHYSICAL_UNKNOWN")?.record;
+  // Corte o reconexión de esta orden que quedó incierto y que el técnico puede verificar con el servidor.
+  const unresolvedOperation = state.activity.map((entry) => entry.record).find((record): record is OperationRecord => record.orderId === order.orderId && record.kind !== "VISIT" && record.physicalStatus === "PHYSICAL_UNKNOWN");
+  const verifyUnresolved = () => {
+    if (!unresolvedOperation) return;
+    void (unresolvedOperation.kind === "RECONNECTION" ? store.verifyReconnection(unresolvedOperation.operationId) : store.sync());
+  };
+  const uncertainActions = unresolvedOperation ? <>
+    <button type="button" className="secondary-action" disabled={Boolean(state.busyAction)} onClick={verifyUnresolved}>Verificar con servidor</button>
+    <NewAuthorizationAction record={unresolvedOperation} busy={Boolean(state.busyAction)} onConfirm={() => void store.retryWithNewAuthorization(unresolvedOperation.operationId)} />
+  </> : null;
   const [detailsPageIndex, setDetailsPageIndex] = useState(0);
   const [activityPageIndex, setActivityPageIndex] = useState(0);
   const isCancelled = order.status === "ANULADO";
@@ -83,6 +92,7 @@ export function OrderDetail({
         activityPageIndex={activityPageIndex}
         onActivityPageIndexChange={setActivityPageIndex}
         hidden={Boolean(draft)}
+        uncertainActions={uncertainActions}
       />
       <div className="order-detail-legacy">
         <div className="detail-navigation-bar">
@@ -123,10 +133,10 @@ export function OrderDetail({
         {order.physicalStatus === "PHYSICAL_UNKNOWN" ? (
           <div className="review-callout" role="alert">
             <strong>Resultado incierto</strong>
-            {unresolvedReconnection ? (
+            {unresolvedOperation ? (
               <>
-                <span>Verifique la reconexión con el servidor. No repita la acción.</span>
-                <button type="button" className="secondary-action" disabled={Boolean(state.busyAction)} onClick={() => void store.verifyReconnection(unresolvedReconnection.operationId)}>Verificar con servidor</button>
+                <span>Verifique {unresolvedOperation.kind === "CUT" ? "el corte" : "la reconexión"} con el servidor. No repita la acción.</span>
+                {uncertainActions}
               </>
             ) : <span>Espere conciliación operativa. No hay acción de repetición disponible.</span>}
           </div>
@@ -236,7 +246,7 @@ function completionDialogContent(result: ActionResult): { title: string; message
 function MobileOrderReview({
   order, mode, entries, view, onViewChange, onBack, canCut, canRegisterVisit, canReconnect, busy,
   onCut, onVisit, onReconnect, kardexIndex, onKardexIndexChange, detailsPageIndex, onDetailsPageIndexChange,
-  activityPageIndex, onActivityPageIndexChange, hidden,
+  activityPageIndex, onActivityPageIndexChange, hidden, uncertainActions,
 }: {
   order: WorkOrder;
   mode: ConnectivityMode;
@@ -258,6 +268,7 @@ function MobileOrderReview({
   activityPageIndex: number;
   onActivityPageIndexChange: (index: number) => void;
   hidden: boolean;
+  uncertainActions?: ReactNode;
 }) {
   const context = order.context;
   const kardex = context?.kardex ?? [];
@@ -296,7 +307,7 @@ function MobileOrderReview({
         <div className="order-review-screen order-review-screen--summary" aria-label="Resumen prioritario de la orden">
           <header className="order-review-identity"><h2>Cuenta {displayValue(account)} · Medidor {displayValue(meter)}</h2><p>{displayValue(context?.customerName)}</p></header>
           {order.status === "ANULADO" ? <div className="order-review-alert order-review-alert--cancelled" role="alert"><strong>Corte bloqueado</strong><span>La orden fue anulada administrativamente. No registrar corte ni visita.</span></div> : null}
-          {order.physicalStatus === "PHYSICAL_UNKNOWN" ? <div className="order-review-alert order-review-alert--unknown" role="alert"><strong>No repetir acción</strong><span>Revisión humana requerida.</span></div> : null}
+          {order.physicalStatus === "PHYSICAL_UNKNOWN" ? <div className="order-review-alert order-review-alert--unknown" role="alert"><strong>No repetir acción</strong><span>{uncertainActions ? "Verifique con el servidor." : "Revisión humana requerida."}</span>{uncertainActions}</div> : null}
           <div className="order-review-facts">
             <div className="order-review-fact order-review-fact--address"><span>Dirección</span><strong>{displayValue(context?.address)}</strong></div>
             <div className="order-review-fact"><span>Deuda</span><strong className="order-review-debt">{displayValue(debt)}</strong><small>{context?.monthsPending === undefined ? "Dato no disponible" : `${context.monthsPending} facturas pendientes`}</small></div>

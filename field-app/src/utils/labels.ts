@@ -81,6 +81,7 @@ export function syncStatusLabel(status: SyncStatus): string {
 }
 
 export function queueReviewMessage(item: Pick<SyncItem, "manualReview" | "uncertain"> & Partial<Pick<SyncItem, "errorCode" | "uncertainCause">>): string | undefined {
+  if (item.errorCode === "AUTHORIZATION_CLOSED_NOT_CONSUMED") return "Cerrada: la autorización no se usó. La nueva solicitud queda como otra operación.";
   if (item.errorCode === "RECONNECTION_NOT_COMPLETED") return "Habilitación denegada; no se registró una reposición. Puede iniciar una nueva solicitud si corresponde.";
   if (item.manualReview) return "Revisión humana · no reenviar";
   if (item.uncertain) {

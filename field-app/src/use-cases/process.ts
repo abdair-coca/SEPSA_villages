@@ -39,6 +39,7 @@ import type {
 } from "../ports/repository";
 import { OrderVersionConflictError } from "../ports/repository";
 import { consumeWithRetries, type Sleep } from "./consume-retry";
+import { provesUnconsumed } from "./close-unconsumed";
 
 export interface CutProcessInput {
   repository: LocalRepository;
@@ -575,7 +576,14 @@ export async function recoverCut(input: CutRecoveryInput): Promise<CutProcessRes
     const attempt = await consumeWithRetries(() => input.authorization.consumeCut(request), input.sleep).catch(() => undefined);
     consumed = attempt?.kind === "response" && attempt.response.operationId === record.operationId && attempt.response.status === "consumed";
   }
-  if (!consumed) return { outcome: "physical_unknown", operation: record, lookupStatus: lookup.status };
+  if (!consumed) {
+    // Una consulta que demuestra que la autorización no se usó se guarda: permite pedir otra (D022).
+    const lookupStatus = lookup.status;
+    if (!provesUnconsumed(lookupStatus)) return { outcome: "physical_unknown", operation: record, lookupStatus };
+    const proven: OperationRecord = { ...record, lastAuthorizationLookup: { status: lookupStatus, at: input.now } };
+    await input.repository.updateOperationAndOrder(operationChange(proven, undefined));
+    return { outcome: "physical_unknown", operation: proven, lookupStatus };
+  }
 
   const currentOrder = await input.repository.getOrder(record.orderId);
   if (!currentOrder || currentOrder.version === undefined || currentOrder.status !== "GENERADO" || !["CLAIMED", "PHYSICAL_UNKNOWN"].includes(currentOrder.physicalStatus)) {

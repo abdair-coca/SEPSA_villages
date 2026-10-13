@@ -132,6 +132,7 @@ export interface AppStore {
   executeCut(orderId: string, input?: ActionInput): Promise<ActionResult>;
   executeReconnection(orderId: string, input?: ActionInput): Promise<ActionResult>;
   verifyReconnection(operationId: string): Promise<void>;
+  retryWithNewAuthorization(operationId: string): Promise<ActionResult | undefined>;
   sync(): Promise<void>;
 }
 
@@ -302,6 +303,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
     executeCut: actionCoordinator.executeCut,
     executeReconnection: actionCoordinator.executeReconnection,
     verifyReconnection: actionCoordinator.verifyReconnection,
+    retryWithNewAuthorization: actionCoordinator.retryWithNewAuthorization,
     sync: syncCoordinator.requestSync,
   };
 
@@ -396,6 +398,7 @@ export function createUnavailableAppStore(): AppStore {
     executeCut: async () => ({ requestedAction: "CUT", recordedAction: "CUT", outcome: "review", localSaved: false }),
     executeReconnection: async () => ({ requestedAction: "RECONNECTION", recordedAction: "RECONNECTION", outcome: "review", localSaved: false }),
     verifyReconnection: async () => undefined,
+    retryWithNewAuthorization: async () => undefined,
     sync: async () => undefined,
   };
 }
