@@ -50,4 +50,4 @@ RPO, RTO, frecuencia de restauración, cifrado administrado y retención necesit
 
 ## Material para técnicos
 
-- [Guía de campo del piloto (PDF, una página)](guia-tecnico-campo-piloto.pdf): instrucciones para técnicos con y sin conexión. Las reglas de corte siguen en [RULES.md](../RULES.md).
+- [Guía de campo del piloto](guia-de-campo.md): instrucciones para técnicos con y sin conexión. Sustituye al PDF retirado. Las reglas de corte siguen en [RULES.md](../RULES.md).
