@@ -23,11 +23,12 @@ import {
 } from "../domain/policies";
 import { DomainError } from "../domain/errors";
 import type { EvidenceReference, FieldCapture, OperationRecord, VisitRecord, WorkOrder } from "../domain/types";
-import type {
-  AuthorizationAdapter,
-  AuthorizationGrant,
-  AuthResponse,
-  ConsumeResponse,
+import {
+  isUncertainError,
+  type AuthorizationAdapter,
+  type AuthorizationGrant,
+  type AuthResponse,
+  type ConsumeResponse,
 } from "../ports/authorization";
 import type {
   AtomicOperationChange,
@@ -78,22 +79,6 @@ export type CutProcessResult =
   | { outcome: "recovery_required"; operation: OperationRecord; lookupStatus: string }
   | { outcome: "blocked"; reason: CutBlockReason; operation?: OperationRecord }
   | { outcome: "duplicate"; operation: OperationRecord };
-
-/** Errores que no prueban ni éxito ni fracaso (timeout, red, respuesta perdida). Nunca autorizan. */
-function uncertainError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const code = "code" in error ? error.code : undefined;
-  const name = "name" in error ? error.name : undefined;
-  const message = "message" in error ? error.message : undefined;
-  return (
-    code === "TIMEOUT" ||
-    code === "RESPONSE_LOST" ||
-    code === "NETWORK_UNKNOWN" ||
-    name === "TimeoutError" ||
-    name === "ResponseLostError" ||
-    (typeof message === "string" && /timeout|network|offline|unknown|response.*lost/i.test(message))
-  );
-}
 
 /** Agrupa operación, orden, elemento de cola y evidencia para escribirlos en una sola transacción. */
 function operationChange(
@@ -413,7 +398,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
       orderVersion: input.order.authoritativeVersion ?? input.order.version,
     });
   } catch (error) {
-    if (!uncertainError(error)) throw error;
+    if (!isUncertainError(error)) throw error;
     const visit = createVisitFor(
       input,
       error instanceof Error && error.name === "TimeoutError" ? "AUTHORIZATION_TIMEOUT" : "AUTHORIZATION_UNKNOWN",
@@ -477,7 +462,7 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
       version: authorizationResponse.grant.version,
     });
   } catch (error) {
-    if (!uncertainError(error)) throw error;
+    if (!isUncertainError(error)) throw error;
     const errorCode = error instanceof Error && "code" in error ? String(error.code) : "RESPONSE_UNKNOWN";
     return recordPhysicalUnknown(input, intent, claimedOrder, errorCode);
   }

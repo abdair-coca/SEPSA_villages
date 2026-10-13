@@ -331,6 +331,16 @@ describe("cut process integration boundaries", () => {
     expect(authorization.consumeCalls).toHaveLength(0);
   });
 
+  it("propagates a programming error even when its message mentions network or unknown", async () => {
+    const repository = new MemoryRepository();
+    const authorization = new StubAuthorization();
+    authorization.requestError = new Error("unknown network offline state in the cut payload");
+
+    await expect(executeCut(input(repository, authorization, "operation-bug-00000000-0000-4000-8000-000000000014"))).rejects.toThrow("unknown network offline");
+    expect(repository.claims).toHaveLength(0);
+    expect(authorization.consumeCalls).toHaveLength(0);
+  });
+
   it("does not consume a second stale operation or overwrite current order state", async () => {
     const repository = new MemoryRepository();
     const authorization = new StubAuthorization();

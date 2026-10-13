@@ -20,7 +20,7 @@ import {
 } from "../domain/policies";
 import { DomainError } from "../domain/errors";
 import type { EvidenceReference, OperationRecord, VisitRecord, WorkOrder } from "../domain/types";
-import type { EnablementAdapter, EnablementGrant, EnablementResponse } from "../ports/authorization";
+import { isUncertainError, type EnablementAdapter, type EnablementGrant, type EnablementResponse } from "../ports/authorization";
 import type { AtomicOperationChange, LocalRepository, StoredRecord } from "../ports/repository";
 
 export interface ReconnectionProcessInput {
@@ -45,14 +45,6 @@ export type ReconnectionResult =
   | { outcome: "recovery_required"; operation: OperationRecord; lookupStatus: string }
   | { outcome: "blocked"; reason: "NOT_ENABLED" | "ENABLEMENT_UNKNOWN" | "ENABLEMENT_EXPIRED"; operation?: OperationRecord }
   | { outcome: "duplicate"; operation: OperationRecord };
-
-/** Timeout, red o respuesta perdida: no prueban nada y nunca habilitan. */
-function uncertainError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const code = "code" in error ? error.code : undefined;
-  const name = "name" in error ? error.name : undefined;
-  return code === "TIMEOUT" || code === "RESPONSE_LOST" || code === "NETWORK_UNKNOWN" || name === "TimeoutError" || name === "ResponseLostError";
-}
 
 function versionOf(order: WorkOrder): number {
   if (order.version === undefined) throw new DomainError("Se requiere la versión de la orden para reclamar de forma atómica.", "ORDER_VERSION_REQUIRED");
@@ -298,7 +290,7 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
       orderVersion: input.order.authoritativeVersion ?? input.order.version,
     });
   } catch (error) {
-    if (!uncertainError(error)) throw error;
+    if (!isUncertainError(error)) throw error;
     return persistVisit(input, makeVisit(input, "ENABLEMENT_UNKNOWN", error instanceof Error && "code" in error ? String(error.code) : "ENABLEMENT_UNKNOWN"));
   }
 
@@ -337,7 +329,7 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
   try {
     consumed = await input.enablement.consumeReconnection(consumeInput(intent));
   } catch (error) {
-    if (!uncertainError(error)) throw error;
+    if (!isUncertainError(error)) throw error;
     return persistUnknown(input, intent, claim.order, error instanceof Error && "code" in error ? String(error.code) : "RESPONSE_UNKNOWN");
   }
 

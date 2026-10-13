@@ -191,3 +191,20 @@ export class ResponseLostError extends Error {
     this.name = "ResponseLostError";
   }
 }
+
+/**
+ * Timeout, red o respuesta perdida: no prueban ni éxito ni fracaso, y nunca autorizan.
+ * Se decide solo por `code` o `name`; el texto del mensaje no se usa.
+ */
+export function isUncertainError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? error.code : undefined;
+  const name = "name" in error ? error.name : undefined;
+  return (
+    code === "TIMEOUT" ||
+    code === "RESPONSE_LOST" ||
+    code === "NETWORK_UNKNOWN" ||
+    name === "TimeoutError" ||
+    name === "ResponseLostError"
+  );
+}
