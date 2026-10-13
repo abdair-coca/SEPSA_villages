@@ -30,6 +30,16 @@ function smokeBuildMode(): Plugin {
 
 export default defineConfig({
   plugins: [react(), smokeBuildMode()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/[\/]node_modules[\/](react|react-dom|scheduler)[\/]/.test(id)) return "vendor-react";
+          return undefined;
+        },
+      },
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
