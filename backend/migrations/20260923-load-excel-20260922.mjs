@@ -19,7 +19,9 @@ if (!databaseUrl) {
 }
 
 const dataPath = resolve(dirname(fileURLToPath(import.meta.url)), "data", "EXCEL_20260922.json");
-const dataText = await readFile(dataPath, "utf8");
+const dataText = await readFile(dataPath, "utf8").catch((error) => {
+  throw new Error(`Falta el conjunto de datos de prueba ${dataPath}. Este comando solo se usa en desarrollo: ${error.code}`);
+});
 const dataChecksum = createHash("sha256").update(dataText).digest("hex");
 const rows = JSON.parse(dataText);
 validateDataset(rows);

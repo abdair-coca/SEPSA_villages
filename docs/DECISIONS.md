@@ -151,3 +151,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** `SESSION_TTL_SECONDS` vale `604800` (7 días) en `render.yaml` y en `backend/.env.example`, igual que el valor por defecto de `backend/src/config.ts`. La pantalla de acceso dice «La sesión dura 7 días». Sustituye a la sesión de 14 horas (`50400`, tarea 2.4 del plan de consolidación).
 **Consecuencia:** Con la sesión vigente se trabaja sin conexión; entrar sí exige conexión (`docs/RULES.md`, Offline-first). Si la duración cambia, debe cambiar también el texto de la pantalla de acceso. Render aplica el valor al sincronizar el blueprint o al cambiar la variable en su panel.
+
+## D026 — La carga de datos de prueba no se ejecuta al arrancar
+
+**Estado:** vigente
+**Decisión:** El `CMD` de la imagen aplica solo el esquema de arranque (`002`, `007_work_package_versions` y `008`) y los grants de roles. La carga `migrations/20260923-load-excel-20260922.mjs` (99 morosos de prueba y 10 órdenes) se ejecuta a mano con `npm run pilot:migrate:field-test` y necesita el archivo `backend/migrations/data/EXCEL_20260922.json`, que dejó de estar en el repo. Sustituye la parte de la tarea 0.2 del plan de consolidación que ejecutaba la carga en cada arranque.
+**Consecuencia:** Un arranque nuevo no crea órdenes de prueba ni escribe morosos. La guarda `pilot_migrations` se mantiene para la ejecución manual. El archivo de datos se gestiona fuera del repo. Los seeds `005` y `006` siguen en el repo y tienen filas de personas; su tratamiento está pendiente. El umbral de tres meses sigue sin confirmar (P-01).
