@@ -54,6 +54,7 @@ The user authorizes committing every finished task on `main`. Commit at the end 
 | Offline queue or retry | `docs/features/synchronization.md` |
 | Folder layout, naming or code comments | `docs/ARCHITECTURE.md` (Mapa del código) |
 | Open findings from the structural cleanup | `docs/archive/limpieza-estructural/TASK.md` (Hallazgos section) |
+| Open pending items and conflicts from the SEPSA delivery | `docs/archive/entrega-sepsa/TASK.md` (Pendientes and Hallazgos sections) |
 
 ## Before editing
 
