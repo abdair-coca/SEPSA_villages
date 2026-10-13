@@ -261,6 +261,26 @@ const CATALOG: Record<string, Omit<ErrorGuidance, "code">> = {
     saved: SAVED_LOCALLY,
     nextStep: `${CHECK_STATUS} ${CONTACT_ADMIN}`,
   },
+  EVIDENCE_PREPARATION_INTERRUPTED: {
+    title: "Se interrumpió la preparación de la foto",
+    saved: SAVED_LOCALLY,
+    nextStep: "La operación queda pendiente. Use Reintentar cuando haya conexión.",
+  },
+  AUTHORIZATION_UNKNOWN: {
+    title: "No se pudo confirmar la autorización del corte",
+    saved: "Se registró una visita; el corte no quedó autorizado.",
+    nextStep: "No corte. Puede volver a intentar el corte cuando haya conexión.",
+  },
+  AUTHORIZATION_OPERATION_ID_MISMATCH: {
+    title: "El servidor respondió con otra autorización",
+    saved: "Se registró una visita; el corte no quedó autorizado.",
+    nextStep: "No corte. Puede volver a intentar el corte cuando haya conexión.",
+  },
+  AUTHORIZATION_CONSUMPTION_UNKNOWN: {
+    title: "No se confirmó el consumo de la autorización",
+    saved: "El resultado queda guardado como incierto.",
+    nextStep: `${NOT_REPEATED} ${CHECK_STATUS}`,
+  },
 };
 
 /**

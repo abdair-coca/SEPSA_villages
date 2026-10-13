@@ -15,7 +15,7 @@ services:
       - key: HOST
         value: 0.0.0.0
       - key: SESSION_TTL_SECONDS
-        value: "28800"
+        value: "50400"
       - key: AUTHORIZATION_TTL_SECONDS
         value: "300"
       - key: HTTP_MAX_BODY_BYTES

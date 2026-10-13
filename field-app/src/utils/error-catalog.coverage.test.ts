@@ -1,0 +1,139 @@
+import { describe, expect, it } from "vitest";
+import { DomainError } from "../domain/errors";
+import { readableError } from "../state/store-results";
+import { errorGuidance } from "./error-catalog";
+
+const GENERIC_DOMAIN_MESSAGE = "La operación no pudo continuar. Revise datos locales.";
+
+/** Códigos de DomainError lanzados en field-app/src (grep `new DomainError(`). */
+const DOMAIN_ERROR_CODES = [
+  "ACTIVE_ORDER_EXISTS",
+  "AUTHENTICATION_EXPIRED",
+  "AUTHENTICATION_FAILED",
+  "AUTHENTICATION_REQUIRED",
+  "AUTHORIZATION_REQUIRED",
+  "BATCH_REQUEST_INVALID",
+  "CUT_ALREADY_CLAIMED",
+  "CUT_STATUS_INVALID",
+  "CUT_TYPE_INVALID",
+  "DEVICE_ID_REQUIRED",
+  "DEVICE_NOT_PROVISIONED",
+  "DEVICE_OWNERSHIP_CONFLICT",
+  "EVIDENCE_BINDING_MISMATCH",
+  "EVIDENCE_CONTENT_INVALID",
+  "EVIDENCE_CONTENT_REQUIRED",
+  "EVIDENCE_CONTENT_TYPE_INVALID",
+  "EVIDENCE_DIMENSIONS_INVALID",
+  "EVIDENCE_FORMAT_INVALID",
+  "EVIDENCE_HASH_INVALID",
+  "EVIDENCE_HASH_MISMATCH",
+  "EVIDENCE_HASH_REQUIRED",
+  "EVIDENCE_ID_REQUIRED",
+  "EVIDENCE_NOT_OPTIMIZED",
+  "EVIDENCE_REQUIRED",
+  "EVIDENCE_TOO_LARGE",
+  "FIELD_CAPTURE_REQUIRED",
+  "FORBIDDEN",
+  "GPS_ACCURACY_INVALID",
+  "GPS_COORDINATES_INVALID",
+  "GPS_REQUIRED",
+  "IDEMPOTENCY_CONFLICT",
+  "METER_READING_INVALID",
+  "METER_READING_MISMATCH",
+  "METER_READING_REQUIRED",
+  "NEARBY_METERS_REQUIRED",
+  "OPERATION_BINDING_MISMATCH",
+  "OPERATION_ID_INVALID",
+  "OPERATION_ID_REQUIRED",
+  "OPERATION_IMMUTABLE",
+  "ORDER_ALREADY_ASSIGNED",
+  "ORDER_CLAIM_REJECTED",
+  "ORDER_NOT_ASSIGNED",
+  "ORDER_NOT_EXECUTED",
+  "ORDER_NOT_FOUND",
+  "ORDER_STATE_INVALID",
+  "ORDER_STATUS_INVALID",
+  "ORDER_TRANSITION_INVALID",
+  "ORDER_VERSION_CONFLICT",
+  "ORDER_VERSION_REQUIRED",
+  "RECONNECTION_DEMORA_REQUIRED",
+  "RECONNECTION_DEMORA_TOO_LONG",
+  "RECONNECTION_ENABLEMENT_MISSING",
+  "ROLE_NOT_RECOGNIZED",
+  "SUPPLY_ID_REQUIRED",
+  "TECHNICIAN_NAME_REQUIRED",
+  "TECHNICIAN_REQUIRED",
+  "VISIT_CLAIM_REJECTED",
+  "VISIT_NOT_ALLOWED_AFTER_CUT",
+  "VISIT_REASON_REQUIRED",
+];
+
+/** Códigos que pueden quedar en `errorCode` de un elemento cola de sincronización (casos de uso y repositorio). */
+const QUEUE_ERROR_CODES = [
+  "LOCAL_RECORD_MISSING",
+  "LOOKUP_UNKNOWN",
+  "LOOKUP_NOT_FOUND",
+  "LOOKUP_OPERATION_ID_MISMATCH",
+  "LOOKUP_RECEIPT_MISMATCH",
+  "RESPONSE_UNKNOWN",
+  "RESPONSE_OPERATION_ID_MISMATCH",
+  "RESPONSE_RECEIPT_MISMATCH",
+  "REMOTE_CONFLICT",
+  "CUT_AUTHORIZATION_NOT_CONFIRMED",
+  "CUT_AUTHORIZATION_MISSING",
+  "CUT_SEND_FENCING_UNAVAILABLE",
+  "CUT_PREPARATION_FAILED",
+  "RECONNECTION_DATA_INCOMPLETE",
+  "EVIDENCE_UPLOAD_FAILED",
+  "EVIDENCE_UPLOAD_NOT_VERIFIED",
+  "EVIDENCE_UPLOAD_UNAVAILABLE",
+  "EVIDENCE_PREPARATION_INTERRUPTED",
+  "LOCAL_EVIDENCE_BYTES_MISSING",
+  "LOCAL_EVIDENCE_BINDING_MISMATCH",
+  "RECOVERY_REQUIRED",
+  "CONSUME_OPERATION_ID_MISMATCH",
+  "NOT_AUTHORIZED",
+  "AUTHORIZATION_UNKNOWN",
+  "AUTHORIZATION_OPERATION_ID_MISMATCH",
+  "AUTHORIZATION_CONSUMPTION_UNKNOWN",
+  "AUTHORIZATION_ALREADY_CONSUMED",
+  "AUTHORIZATION_EXPIRED",
+  "AUTHORIZATION_CLOSED_NOT_CONSUMED",
+  "ORDER_CLAIM_CONFLICT",
+  "ORDER_VERSION_CONFLICT",
+  "ORDER_STATE_CONFLICT",
+  "ORDER_RECOVERY_UNAVAILABLE",
+  "RECONNECTION_NOT_COMPLETED",
+  "NOT_ENABLED",
+  "ENABLEMENT_UNKNOWN",
+  "ENABLEMENT_EXPIRED",
+  "ENABLEMENT_RESERVATION_EXPIRED",
+  "ENABLEMENT_NOT_FOUND",
+  "ENABLEMENT_REJECTED",
+  "ENABLEMENT_LOOKUP_UNKNOWN",
+  "ENABLEMENT_LOOKUP_MISMATCH",
+  "ENABLEMENT_CONSUME_UNKNOWN",
+  "ENABLEMENT_OPERATION_ID_MISMATCH",
+  "UNAUTHENTICATED",
+];
+
+describe("cobertura de textos de error", () => {
+  it.each(DOMAIN_ERROR_CODES)("readableError tiene texto propio para %s", (code) => {
+    const message = readableError(new DomainError("mensaje técnico", code));
+    expect(message).not.toBe(GENERIC_DOMAIN_MESSAGE);
+    expect(message.trim().length).toBeGreaterThan(0);
+  });
+
+  it.each(QUEUE_ERROR_CODES)("CATALOG explica %s con texto propio", (code) => {
+    const guidance = errorGuidance(code);
+    const uncertainGuidance = errorGuidance(code, { uncertain: true });
+    expect(guidance).toBeDefined();
+    expect(uncertainGuidance).toBeDefined();
+    // Un código sin entrada devuelve el texto genérico; cada entrada debe diferir de él.
+    const fallback = errorGuidance("CODIGO_INEXISTENTE_PARA_PRUEBA");
+    const fallbackUncertain = errorGuidance("CODIGO_INEXISTENTE_PARA_PRUEBA", { uncertain: true });
+    expect(guidance?.title).not.toBe(fallback?.title);
+    expect(uncertainGuidance?.title).not.toBe(fallbackUncertain?.title);
+    expect(guidance?.code).toBe(code);
+  });
+});
