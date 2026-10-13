@@ -9,7 +9,7 @@ Enviar operaciones locales sin perderlas, duplicarlas ni convertir un resultado 
 1. Validar la acción localmente.
 2. Guardar entidad, registro y `operationId` de forma atómica en IndexedDB.
 3. Mostrar “guardado en dispositivo” si aún no hay confirmación remota.
-4. Cuando hay conexión útil, subir primero blobs locales de un CUT con foto.
+4. Cuando hay conexión útil, subir primero las fotos locales de la operación (corte, reconexión o visita). Sin adaptador de carga (modo simulado), una visita se envía con sus referencias como antes.
 5. Enviar CUT solo después de recibo de upload verificado ligado a operación, orden, técnico y dispositivo.
 6. Marcar `synced` solo con recibo ligado a operación, orden, técnico, dispositivo, versión de autorización y captura guardada.
 7. Ante respuesta perdida, timeout, respuesta ambigua o conflicto, persistir `PHYSICAL_UNKNOWN` y consultar estado; ningún resultado de lookup permite otro POST.

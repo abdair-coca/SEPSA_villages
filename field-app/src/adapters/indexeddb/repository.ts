@@ -754,7 +754,7 @@ export class IndexedDbLocalRepository implements LocalRepository {
     if (lease) {
       const actionCanUpload = currentSync?.action === "CUT"
         ? currentSync.cutSendPhase === "preparing"
-        : currentSync?.action === "RECONNECTION" && !currentSync.uncertain && !currentSync.manualReview;
+        : (currentSync?.action === "RECONNECTION" || currentSync?.action === "VISIT") && !currentSync.uncertain && !currentSync.manualReview;
       if (!currentSync || !this.identityMatches(currentSync) || currentSync.status !== "syncing" || !actionCanUpload || currentSync.leaseOwner !== lease.owner || currentSync.leaseToken !== lease.leaseToken || !currentSync.leaseExpiresAt || currentSync.leaseExpiresAt <= lease.now) {
         transaction.abort();
         throw new Error("Sync lease fencing token is invalid.");

@@ -255,7 +255,10 @@ export class SyncEngine {
    * operación/orden/técnico/dispositivo. Devuelve un código de error si alguna falla (la operación no se envía).
    */
   private async uploadOperationEvidence(item: SyncItem, record: StoredRecord): Promise<string | undefined> {
-    if (record.kind === "VISIT" || record.evidenceRefs.length === 0) return undefined;
+    if (record.evidenceRefs.length === 0) return undefined;
+    // La foto de una visita también se sube para que no exista solo en el móvil; sin subidor (modo simulado) la
+    // visita se envía como antes, con sus referencias.
+    if (record.kind === "VISIT" && !this.evidenceUpload) return undefined;
     if (!this.evidenceUpload || !this.repository.getEvidence || !this.repository.updateEvidenceUploadState) return "EVIDENCE_UPLOAD_UNAVAILABLE";
     for (const evidenceId of record.evidenceRefs) {
       const evidence = await this.repository.getEvidence(evidenceId);

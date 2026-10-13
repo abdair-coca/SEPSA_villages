@@ -223,6 +223,34 @@ describe("durable sync engine", () => {
     expect(transport.sent[0]).toMatchObject({ action: "VISIT", attemptedAction: "CUT", operationId: "operation-visit-payload-00000000-0000-4000-8000-00000000001b" });
   });
 
+  it("uploads the visit photo before sending the visit when an uploader exists", async () => {
+    const repository = await setup("sync-visit-photo");
+    const visitId = "visit-photo-00000000-0000-4000-8000-000000000051";
+    const evidence: EvidenceReference = { evidenceId: "evidence-visit-photo", orderId: "order-sync", operationId: visitId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true, content: new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }), contentHash: "a".repeat(64) };
+    await executeOfflineVisit({ repository, order: cutOrder, operationId: visitId, technicianId: "tech-1", deviceId: "device-1", reason: "Cliente ausente", evidence, now: "2026-09-12T09:00:00.000Z" });
+    const events: string[] = [];
+    const transport = new MockSyncTransport();
+    const send = transport.send.bind(transport);
+    transport.send = async (payload) => { events.push("send"); return send(payload); };
+    const uploader = { uploadEvidence: async (uploaded: EvidenceReference) => { events.push(`upload:${uploaded.evidenceId}:${uploaded.operationId}`); return "verified" as const; } };
+    await expect(new SyncEngine(repository, new MockConnectivity("online"), transport, {}, uploader).syncOnce()).resolves.toMatchObject({ synced: 1 });
+    expect(events).toEqual([`upload:evidence-visit-photo:${visitId}`, "send"]);
+    await expect(repository.getEvidence("evidence-visit-photo")).resolves.toMatchObject({ uploadStatus: "verified" });
+  });
+
+  it("keeps the visit pending and unsent when its photo upload fails", async () => {
+    const repository = await setup("sync-visit-photo-failed");
+    const visitId = "visit-photo-failed-00000000-0000-4000-8000-000000000052";
+    const evidence: EvidenceReference = { evidenceId: "evidence-visit-photo-failed", orderId: "order-sync", operationId: visitId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true, content: new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }), contentHash: "b".repeat(64) };
+    await executeOfflineVisit({ repository, order: cutOrder, operationId: visitId, technicianId: "tech-1", deviceId: "device-1", reason: "Cliente ausente", evidence, now: "2026-09-12T09:00:00.000Z" });
+    const transport = new MockSyncTransport();
+    const uploader = { uploadEvidence: async () => { throw Object.assign(new Error("payload"), { code: "PAYLOAD_TOO_LARGE" }); } };
+    await expect(new SyncEngine(repository, new MockConnectivity("online"), transport, {}, uploader).syncOnce()).resolves.toMatchObject({ failed: 1 });
+    expect(transport.sent).toHaveLength(0);
+    await expect(repository.listSyncItems()).resolves.toMatchObject([{ action: "VISIT", status: "failed", errorCode: "PAYLOAD_TOO_LARGE" }]);
+    expect((await repository.listSyncItems())[0]?.uncertain).toBeFalsy();
+  });
+
   it("allows cut authorization with authoritative version after a synced visit", async () => {
     const repository = await setup("sync-visit-then-cut");
     const visitId = "operation-visit-before-cut-00000000-0000-4000-8000-00000000002b";
