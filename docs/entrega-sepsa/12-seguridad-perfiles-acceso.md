@@ -10,6 +10,7 @@ Estado: entrega, copia fechada. Describe lo que el piloto implementa hoy. No es 
 - **Tokens y contraseñas:** la base guarda solo la huella de los tokens y un hash scrypt de las contraseñas.
 - **Sesión revocable y vencible:** las sesiones vencidas, revocadas o de cuentas deshabilitadas no autentican. Duración de 7 días.
 - **Límite de intentos de acceso:** 5 intentos por 60 s, por dirección y usuario. No confía en `X-Forwarded-For`.
+- **Acceso sin pista de existencia:** si el usuario no existe o está deshabilitado, el servidor verifica igualmente la contraseña contra un hash ficticio, para que el tiempo de respuesta no revele qué cuentas existen.
 - **Origen de las escrituras:** CORS solo para el origen configurado; POST con cookie exige ese origen y rechaza `cross-site`.
 - **Cabeceras y límites:** cabeceras de protección en todas las respuestas, `Cache-Control: no-store` y límite del cuerpo.
 - **Autorización de un solo uso:** cada autorización de corte o reconexión queda ligada a operación, orden, técnico, dispositivo y versión.
@@ -61,4 +62,4 @@ Estas medidas no están confirmadas por SEPSA y aparecen en la lista de pendient
 
 ## 5. Limitaciones
 
-El piloto no es la API oficial de SEPSA y sus permisos pueden cambiar cuando SEPSA defina la integración. El límite de intentos se reinicia con el proceso. Las pruebas que dependen de la base de datos no se ejecutaron (ver los resultados de pruebas).
+El piloto no es la API oficial de SEPSA y sus permisos pueden cambiar cuando SEPSA defina la integración. El límite de intentos se reinicia con el proceso. Cuenta por la dirección del socket y no lee `X-Forwarded-For`: detrás de un proxy puede ver una sola dirección, de modo que quien conozca un usuario podría bloquearlo 60 s (verificar en producción). La sesión dura 7 días desde el acceso y no caduca por inactividad. Los permisos por rol y por orden asignada los cubre `backend/test/permissions.integration.test.ts`; los resultados de ejecución están en los resultados de pruebas.

@@ -20,7 +20,7 @@ import {
   updateSessionActiveRole,
 } from "../repositories/users.repository.js";
 import type { ServiceContext } from "../shared/application-context.js";
-import { createOpaqueToken, hashToken, verifyPassword } from "../shared/auth-crypto.js";
+import { createOpaqueToken, hashPassword, hashToken, verifyPassword } from "../shared/auth-crypto.js";
 import type { Role, SessionUser } from "../types.js";
 
 export interface LoginResult {
@@ -80,7 +80,13 @@ export function createAuthService(context: ServiceContext): AuthService {
   return { login, logout, resolveSession, switchRole };
 }
 
+/** Hash válido de una contraseña que nadie conoce: iguala el tiempo de respuesta cuando el usuario no puede entrar. */
+const decoyPasswordHash = hashPassword(randomUUID());
+
 async function findValidLoginUser(user: UserRow | undefined, password: string): Promise<UserRow | undefined> {
-  if (!user || !user.enabled || !user.roles.includes(user.role)) return undefined;
+  if (!user || !user.enabled || !user.roles.includes(user.role)) {
+    await verifyPassword(password, await decoyPasswordHash);
+    return undefined;
+  }
   return (await verifyPassword(password, user.password_hash)) ? user : undefined;
 }

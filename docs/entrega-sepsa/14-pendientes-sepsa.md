@@ -30,6 +30,7 @@ El proyecto entrega la información. SEPSA define estas decisiones.
 |---|---|
 | Proveedor de nube, topología, TLS y rotación de secretos | No definido en el repo |
 | Límite de intentos de acceso compartido entre réplicas | En la memoria de un proceso |
+| Límite de intentos tras un proxy y caducidad de la sesión por inactividad | Cuenta por la dirección del socket; la sesión dura 7 días sin caducidad por inactividad |
 | Sesiones por dispositivo, identidad del dispositivo y revocación | La sesión no se liga a un dispositivo |
 | Proveedor de métricas, alertas y umbrales | No definido |
 | Copias de seguridad cifradas, RPO, RTO y prueba de restauración | No implementadas; el repo solo describe el procedimiento |
