@@ -56,6 +56,8 @@ const CUT_AUTHORIZATION_REJECTIONS: ReadonlySet<string> = new Set([
  * el resultado es incierto y se guarda para revisión, como un timeout.
  */
 const AUTHORIZATION_REPLAY_CODES: ReadonlySet<string> = new Set(["AUTHORIZATION_OPERATION_REPLAY", "ENABLEMENT_OPERATION_REPLAY", "IDEMPOTENCY_CONFLICT"]);
+/** Tiempo límite de un consumo: agotado, el resultado es incierto y se reintenta con el mismo `operationId`. */
+const CONSUME_TIMEOUT_MS = 15_000;
 
 interface HttpClientOptions {
   baseUrl: string;
@@ -322,10 +324,12 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
         device_id: input.deviceId,
         operation_id: input.operationId,
         version: input.version,
-      } }, session);
+      }, timeoutMs: CONSUME_TIMEOUT_MS }, session);
       return { operationId: response.operation_id, status: response.status };
     } catch (error) {
       if (error instanceof HttpPilotError && error.status === 409) return { operationId: input.operationId, status: "not_enabled", errorCode: error.code };
+      // 5xx (p. ej. Render despertando detrás de Vercel) no prueba nada; 401 no llegó al consumo. Ambos se verifican después.
+      if (error instanceof HttpPilotError && (error.status >= 500 || error.status === 401)) return { operationId: input.operationId, status: "unknown", errorCode: error.code };
       throw error;
     }
   }

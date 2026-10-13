@@ -22,6 +22,7 @@ import { DomainError } from "../domain/errors";
 import type { EvidenceReference, OperationRecord, VisitRecord, WorkOrder } from "../domain/types";
 import { isUncertainError, type EnablementAdapter, type EnablementGrant, type EnablementResponse } from "../ports/authorization";
 import type { AtomicOperationChange, LocalRepository, StoredRecord } from "../ports/repository";
+import { consumeWithRetries, type Sleep } from "./consume-retry";
 
 export interface ReconnectionProcessInput {
   repository: LocalRepository;
@@ -35,6 +36,8 @@ export interface ReconnectionProcessInput {
   demora?: string;
   evidence?: EvidenceReference;
   exceptionReason?: string;
+  /** Espera entre reintentos del consumo; en pruebas se inyecta una inmediata. */
+  sleep?: Sleep;
 }
 
 /** Mismos resultados que el corte; ver `CutProcessResult` en `process.ts`. */
@@ -215,7 +218,7 @@ function isVisitRecord(record: StoredRecord): record is VisitRecord {
 }
 
 /** Lo que la recuperación necesita: no la orden, la evidencia ni los datos de la captura original. */
-export type RecoveryContext = Pick<ReconnectionProcessInput, "repository" | "enablement" | "now">;
+export type RecoveryContext = Pick<ReconnectionProcessInput, "repository" | "enablement" | "now" | "sleep">;
 
 /** Resultado de consultar la habilitación: consumo demostrado, o un código no concluyente con el estado remoto. */
 type EnablementVerdict = { consumed: true } | { consumed: false; code: string; lookupStatus: string };
@@ -242,12 +245,14 @@ async function consultEnablement(input: RecoveryContext, operation: OperationRec
   if (lookup.operationId !== operation.operationId) return { consumed: false, code: "ENABLEMENT_LOOKUP_MISMATCH", lookupStatus: "unknown" };
   if (lookup.status === "consumed") return { consumed: true };
   if (lookup.status === "reserved" && operation.authorizationToken && operation.authorizationId) {
-    let consumed;
+    let attempt;
     try {
-      consumed = await input.enablement.consumeReconnection(consumeInput(operation));
+      attempt = await consumeWithRetries(() => input.enablement.consumeReconnection(consumeInput(operation)), input.sleep);
     } catch {
       return { consumed: false, code: "ENABLEMENT_CONSUME_UNKNOWN", lookupStatus: lookup.status };
     }
+    if (attempt.kind === "uncertain") return { consumed: false, code: "ENABLEMENT_CONSUME_UNKNOWN", lookupStatus: lookup.status };
+    const consumed = attempt.response;
     if (consumed.operationId !== operation.operationId) return { consumed: false, code: "CONSUME_OPERATION_ID_MISMATCH", lookupStatus: lookup.status };
     if (isConsumed(consumed.status)) return { consumed: true };
     return { consumed: false, code: "RECOVERY_REQUIRED", lookupStatus: lookup.status };
@@ -370,20 +375,13 @@ export async function executeReconnection(input: ReconnectionProcessInput): Prom
     return persistVisit(input, makeVisit(input, "ORDER_CLAIM_CONFLICT", "ORDER_VERSION_CONFLICT"));
   }
 
-  let consumed;
-  try {
-    consumed = await input.enablement.consumeReconnection(consumeInput(intent));
-  } catch (error) {
-    if (!isUncertainError(error)) throw error;
-    return persistUnknown(input, intent, claim.order, error instanceof Error && "code" in error ? String(error.code) : "RESPONSE_UNKNOWN");
-  }
+  // Reintenta con el mismo operationId y token solo si el resultado es incierto (D019).
+  const attempt = await consumeWithRetries(() => input.enablement.consumeReconnection(consumeInput(intent)), input.sleep);
+  if (attempt.kind === "uncertain") return persistUnknown(input, intent, claim.order, attempt.errorCode);
+  const consumed = attempt.response;
 
   if (consumed.operationId !== input.operationId) {
     return persistUnknown(input, intent, claim.order, "CONSUME_OPERATION_ID_MISMATCH");
-  }
-
-  if (consumed.status === "unknown") {
-    return persistUnknown(input, intent, claim.order, consumed.errorCode ?? "RESPONSE_UNKNOWN");
   }
   if (consumed.status === "not_enabled") {
     const blocked: OperationRecord = { ...intent, status: "BLOCKED", physicalStatus: "NONE", syncStatus: "failed", authorizationToken: undefined, updatedAt: input.now, errorCode: "RECONNECTION_NOT_COMPLETED" };

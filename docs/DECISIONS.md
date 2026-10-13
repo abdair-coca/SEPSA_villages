@@ -109,3 +109,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** La app prepara cada foto en ≤ 5 MP, ≤ 4096 px por lado (límite del backend) y ≤ 1 000 000 bytes (`EVIDENCE_MAX_BYTES`, `field-app/src/state/evidence.ts`). Conserva el original si ya cumple; si no, baja la calidad JPEG y después la resolución. Un PNG que no cabe se convierte a JPEG. Si ningún intento cabe, la captura se bloquea con `EVIDENCE_TOO_LARGE`. El backend desplegado acepta cuerpos de hasta 2 MB (`HTTP_MAX_BODY_BYTES` = 2097152), suficiente para la foto en base64.
 **Consecuencia:** Con el límite anterior (1 MiB) una foto normal de móvil fallaba con `PAYLOAD_TOO_LARGE`, el corte no se enviaba y su autorización vencía. El hash SHA-256 y las dimensiones guardadas corresponden siempre a los bytes finales.
+
+## D019 — Reintento idempotente del consumo de una autorización
+
+**Estado:** vigente
+**Decisión:** Si el consumo de una habilitación de un solo uso termina en resultado incierto (red, tiempo agotado de 15 s o 5xx), la app lo reintenta con el mismo `operationId` y token, con esperas de 1 s y 3 s (`consumeWithRetries`, `field-app/src/use-cases/consume-retry.ts`). Un 401 (`UNAUTHENTICATED`) no se reintenta. No hay límite por vigencia: el backend devuelve `consumed` al replay del mismo `operationId` aunque la habilitación haya vencido, y `not_enabled` si no se consumió, así que toda respuesta concluyente es verdadera.
+**Consecuencia:** Una respuesta perdida deja de producir una reconexión incierta en la mayoría de los casos. Si los tres intentos fallan, la operación queda `PHYSICAL_UNKNOWN` con su causa y se verifica como en D017. Nunca se pide una habilitación nueva automáticamente.

@@ -166,6 +166,11 @@ const CATALOG: Record<string, Omit<ErrorGuidance, "code">> = {
     saved: "La visita queda guardada si correspondía.",
     nextStep: "No se creó duplicado. Revise la actividad de la orden.",
   },
+  UNAUTHENTICATED: {
+    title: "La sesión venció antes de confirmar con el servidor",
+    saved: SAVED_LOCALLY,
+    nextStep: `${NOT_REPEATED} Vuelva a entrar y use Verificar con servidor.`,
+  },
   PAYLOAD_TOO_LARGE: {
     title: "La foto pesa más de lo que acepta el servidor",
     saved: "La foto y la operación siguen guardadas en este dispositivo; no se envió nada.",

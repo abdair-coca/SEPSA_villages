@@ -35,7 +35,7 @@ function grant(operationId: string) {
 }
 
 function input(repository: IndexedDbLocalRepository, enablement: MockEnablementAdapter, operationId: string) {
-  return { repository, enablement, order: order(), operationId, technicianId: "tech-1", technicianNameSnapshot: "Técnico Uno", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", demora: "Sin demora", evidence: { evidenceId: `evidence-${operationId}`, orderId: "order-reconnect", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg" as const, width: 100, height: 100, optimized: true } };
+  return { repository, enablement, order: order(), operationId, technicianId: "tech-1", technicianNameSnapshot: "Técnico Uno", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", sleep: async () => undefined, demora: "Sin demora", evidence: { evidenceId: `evidence-${operationId}`, orderId: "order-reconnect", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg" as const, width: 100, height: 100, optimized: true } };
 }
 
 describe("reconnection process", () => {
@@ -165,9 +165,80 @@ describe("reconnection process", () => {
     enablement.consumeError = undefined;
     const replay = await executeReconnection(input(repository, enablement, "reconnect-lost-00000000-0000-4000-8000-000000000025"));
     expect(replay.outcome).toBe("executed");
-    expect(enablement.consumeCalls).toHaveLength(2);
+    // Tres intentos con el mismo operationId en la ejecución y uno en la recuperación.
+    expect(enablement.consumeCalls).toHaveLength(4);
+    expect(new Set(enablement.consumeCalls.map((call) => call.operationId)).size).toBe(1);
     expect(enablement.lookupReconnectionCalls).toEqual(["reconnect-lost-00000000-0000-4000-8000-000000000025"]);
     expect((await repository.getRecord("reconnect-lost-00000000-0000-4000-8000-000000000025"))?.kind).toBe("RECONNECTION");
+  });
+
+  describe("consume retries with the same operation id (D019)", () => {
+    const lost = () => Object.assign(new Error("response lost"), { code: "RESPONSE_LOST" });
+
+    it("completes when the first response is lost after the server consumed", async () => {
+      const repository = await createRepository("reconnect-retry-lost-after");
+      const operationId = "reconnect-retry-a-00000000-0000-4000-8000-000000000031";
+      const enablement = new MockEnablementAdapter();
+      enablement.requestResponse = { status: "enabled", grant: grant(operationId) };
+      enablement.consumeFailures.push({ error: lost(), afterConsume: true });
+      const result = await executeReconnection(input(repository, enablement, operationId));
+      expect(result.outcome).toBe("executed");
+      expect(enablement.consumeCalls.map((call) => call.operationId)).toEqual([operationId, operationId]);
+      expect(enablement.consumedGrantIds.size).toBe(1);
+      expect(await repository.getOrder("order-reconnect")).toMatchObject({ status: "RECONEXIÓN", physicalStatus: "CONFIRMED" });
+    });
+
+    it("completes when a server error is followed by consumed", async () => {
+      const repository = await createRepository("reconnect-retry-5xx");
+      const operationId = "reconnect-retry-c-00000000-0000-4000-8000-000000000033";
+      const enablement = new MockEnablementAdapter();
+      enablement.requestResponse = { status: "enabled", grant: grant(operationId) };
+      enablement.consumeResponse = { status: "consumed" };
+      const responses = [{ operationId, status: "unknown" as const, errorCode: "BAD_GATEWAY" }];
+      const consume = enablement.consumeReconnection.bind(enablement);
+      enablement.consumeReconnection = async (request) => responses.shift() ?? consume(request);
+      expect((await executeReconnection(input(repository, enablement, operationId))).outcome).toBe("executed");
+    });
+
+    it("waits between attempts and leaves the operation uncertain when every attempt is lost", async () => {
+      const repository = await createRepository("reconnect-retry-all-lost");
+      const operationId = "reconnect-retry-b-00000000-0000-4000-8000-000000000032";
+      const enablement = new MockEnablementAdapter();
+      enablement.requestResponse = { status: "enabled", grant: grant(operationId) };
+      enablement.consumeFailures.push({ error: lost() }, { error: lost() }, { error: lost() });
+      const waits: number[] = [];
+      const result = await executeReconnection({ ...input(repository, enablement, operationId), sleep: async (milliseconds) => { waits.push(milliseconds); } });
+      expect(result).toMatchObject({ outcome: "physical_unknown", operation: { errorCode: "RESPONSE_LOST" } });
+      expect(waits).toEqual([1000, 3000]);
+      expect(enablement.consumeCalls).toHaveLength(3);
+    });
+
+    it("does not retry an expired session and stays recoverable", async () => {
+      const repository = await createRepository("reconnect-retry-401");
+      const operationId = "reconnect-retry-d-00000000-0000-4000-8000-000000000034";
+      const enablement = new MockEnablementAdapter();
+      enablement.requestResponse = { status: "enabled", grant: grant(operationId) };
+      const consume = enablement.consumeReconnection.bind(enablement);
+      let calls = 0;
+      enablement.consumeReconnection = async (request) => (calls += 1) === 1 ? { operationId, status: "unknown", errorCode: "UNAUTHENTICATED" } : consume(request);
+      const result = await executeReconnection(input(repository, enablement, operationId));
+      expect(result).toMatchObject({ outcome: "physical_unknown", operation: { errorCode: "UNAUTHENTICATED" } });
+      expect(calls).toBe(1);
+      const recovered = await recoverReconnection({ repository, enablement, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:02:00.000Z", sleep: async () => undefined });
+      expect(recovered?.outcome).toBe("executed");
+    });
+
+    it("accepts a conclusive not_enabled after retrying and releases the order", async () => {
+      const repository = await createRepository("reconnect-retry-not-enabled");
+      const operationId = "reconnect-retry-e-00000000-0000-4000-8000-000000000035";
+      const enablement = new MockEnablementAdapter();
+      enablement.requestResponse = { status: "enabled", grant: grant(operationId) };
+      enablement.consumeFailures.push({ error: lost() });
+      enablement.consumeResponse = { status: "not_enabled", errorCode: "ENABLEMENT_EXPIRED_OR_UNAVAILABLE" };
+      const result = await executeReconnection(input(repository, enablement, operationId));
+      expect(result).toMatchObject({ outcome: "blocked", reason: "NOT_ENABLED" });
+      expect(await repository.getOrder("order-reconnect")).toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED" });
+    });
   });
 
   it("keeps an uncertain reconnection in review when lookup cannot prove the grant was consumed", async () => {
@@ -182,7 +253,7 @@ describe("reconnection process", () => {
     const replay = await executeReconnection(input(repository, enablement, operationId));
 
     expect(replay.outcome).toBe("physical_unknown");
-    expect(enablement.consumeCalls).toHaveLength(1);
+    expect(enablement.consumeCalls).toHaveLength(3);
     expect(enablement.lookupReconnectionCalls).toEqual([operationId]);
   });
 
@@ -239,7 +310,7 @@ describe("reconnection process", () => {
   });
 
   describe("verification of an uncertain reconnection", () => {
-    const verifyInput = (repository: IndexedDbLocalRepository, enablement: MockEnablementAdapter, operationId: string) => ({ repository, enablement, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:10:00.000Z" });
+    const verifyInput = (repository: IndexedDbLocalRepository, enablement: MockEnablementAdapter, operationId: string) => ({ repository, enablement, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:10:00.000Z", sleep: async () => undefined });
 
     async function uncertainReconnection(name: string, operationId: string) {
       const repository = await createRepository(name);
@@ -261,7 +332,7 @@ describe("reconnection process", () => {
       const result = await recoverReconnection(verifyInput(repository, enablement, operationId));
 
       expect(result).toMatchObject({ outcome: "executed", operation: { status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: "pending" } });
-      expect(enablement.consumeCalls).toHaveLength(1);
+      expect(enablement.consumeCalls).toHaveLength(3); // solo los tres intentos de la ejecución inicial
       await expect(repository.getOrder("order-reconnect")).resolves.toMatchObject({ status: "RECONEXIÓN", physicalStatus: "CONFIRMED" });
 
       const transport = new MockSyncTransport();
@@ -278,7 +349,7 @@ describe("reconnection process", () => {
       const result = await recoverReconnection(verifyInput(repository, enablement, operationId));
 
       expect(result).toMatchObject({ outcome: "physical_unknown", lookupStatus: "expired", errorCode: "ENABLEMENT_RESERVATION_EXPIRED" });
-      expect(enablement.consumeCalls).toHaveLength(1);
+      expect(enablement.consumeCalls).toHaveLength(3); // solo los tres intentos de la ejecución inicial
       await expect(repository.getRecord(operationId)).resolves.toMatchObject({ status: "PHYSICAL_UNKNOWN", errorCode: "RESPONSE_LOST" });
       await expect(repository.getOrder("order-reconnect")).resolves.toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN" });
     });
@@ -303,7 +374,7 @@ describe("reconnection process", () => {
 
       expect(result).toMatchObject({ outcome: "physical_unknown", errorCode: "ENABLEMENT_LOOKUP_UNKNOWN" });
       await expect(repository.getRecord(operationId)).resolves.toMatchObject({ status: "PHYSICAL_UNKNOWN", errorCode: "RESPONSE_LOST" });
-      expect(enablement.consumeCalls).toHaveLength(1);
+      expect(enablement.consumeCalls).toHaveLength(3); // solo los tres intentos de la ejecución inicial
     });
 
     it("ignores a reconnection that belongs to another technician or device", async () => {

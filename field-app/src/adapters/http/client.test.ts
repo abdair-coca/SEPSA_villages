@@ -271,6 +271,26 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     await expect(client.requestReconnection({ orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", operationId: "reconnect-1", orderVersion: 2 })).resolves.toEqual({ operationId: "reconnect-1", status: expected, errorCode: code });
   });
 
+  it.each([
+    [502, "BAD_GATEWAY"],
+    [503, "HTTP_ERROR"],
+    [401, "UNAUTHENTICATED"],
+  ])("returns an uncertain consume for HTTP %i with a timeout signal", async (status, code) => {
+    const signals: Array<AbortSignal | null | undefined> = [];
+    const client = new HttpPilotClient({
+      baseUrl: "http://localhost:8080",
+      fetchImpl: async (input, init = {}) => {
+        if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Técnico Uno", role: "TECHNICIAN" } });
+        signals.push(init.signal);
+        return new Response(code === "HTTP_ERROR" ? "<html>Bad gateway</html>" : JSON.stringify({ code, message: "x" }), { status, headers: { "content-type": "application/json" } });
+      },
+    });
+    await client.authenticate({ username: "tech", password: "password" });
+    await expect(client.consumeReconnection({ enablementId: "enablement-1", token: "one-use-token", orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", operationId: "reconnect-1", version: 4 }))
+      .resolves.toEqual({ operationId: "reconnect-1", status: "unknown", errorCode: code });
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
+  });
+
   it("uses provisional reconnection habilitation and sync contracts without resending the consumed token", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const operationId = "reconnection-http-1";

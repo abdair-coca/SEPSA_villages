@@ -31,6 +31,7 @@ Este es el documento operativo principal para agentes. Si una regla aquí contra
 - No eliminar una operación hasta confirmación válida. Reintentos deben ser idempotentes.
 - No usar “última escritura gana” para asignaciones, anulaciones, autorizaciones o resultados físicos.
 - Conservar conflictos y resultados inciertos para revisión humana; no repetir automáticamente una acción física.
+- Excepción acotada: el consumo de una autorización de un solo uso se reintenta con el mismo `operationId` y token cuando su resultado es incierto, porque el servidor responde de forma idempotente ([D019](DECISIONS.md)). Nunca se pide una autorización nueva automáticamente.
 
 ## Datos e integración
 

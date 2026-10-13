@@ -134,6 +134,8 @@ export class MockEnablementAdapter implements EnablementAdapter {
   lookupReconnectionResponse?: EnablementLookupResult;
   requestError: unknown;
   consumeError: unknown;
+  /** Fallos de un solo uso por intento de consumo; `afterConsume` simula una respuesta perdida tras consumir. */
+  readonly consumeFailures: Array<{ error: unknown; afterConsume?: boolean }> = [];
   lookupError: unknown;
   weakFailures = 1;
   private weakAttempts = 0;
@@ -173,11 +175,14 @@ export class MockEnablementAdapter implements EnablementAdapter {
       this.consumeAttempts += 1;
       return this.networkCall(signal, () => {
         if (this.consumeError) throw this.consumeError;
+        const failure = this.consumeFailures.shift();
+        if (failure && !failure.afterConsume) throw failure.error;
         const grant = this.issuedGrants.get(input.enablementId);
          if (!grant || !matchesGrant(grant, input)) return { operationId: input.operationId, status: "not_enabled", errorCode: "GRANT_BINDING_MISMATCH" };
          if (this.consumedGrantIds.has(grant.enablementId)) return { operationId: input.operationId, status: "already_consumed", errorCode: "ENABLEMENT_ALREADY_CONSUMED" };
          const response = { ...clone(this.consumeResponse), operationId: this.consumeResponse.operationId ?? input.operationId };
         if (response.status === "consumed" || response.status === "already_consumed") this.consumedGrantIds.add(grant.enablementId);
+        if (failure) throw failure.error;
         return response;
       });
     }, { ...this.retryPolicy, attempts: 1 });
