@@ -2,7 +2,7 @@
 
 Fuente: ejecución de los comandos del plan de pruebas sobre el repo.
 Fecha: 2026-10-13
-Estado: entrega, copia fechada. Resultados parciales: las suites que necesitan una base PostgreSQL de prueba no se han ejecutado. Las salidas completas no se versionan.
+Estado: entrega, copia fechada. La primera ejecución (sección 3) fue sin base de datos; la segunda (sección 6) añade las suites con PostgreSQL local. Las salidas completas no se versionan.
 Commit ejecutado: `da7af84`, sin cambios sin commitear en las carpetas probadas.
 
 ## 1. Resumen
@@ -48,3 +48,17 @@ No se usó el servidor en `localhost:5432` porque no hay credenciales de prueba 
 - `smoke:ui` y `smoke:pwa` usan un perfil temporal y el build simulado. No necesitan PostgreSQL.
 
 Para cerrar la fase, hay que ejecutar en este orden, con una base de prueba: `npm run db:migrate:test`, `npm test` y `npm run e2e:browser`.
+
+## 6. Segunda ejecución, con PostgreSQL local (2026-10-13)
+
+Commit `358d00c`, sin cambios sin commitear en `backend/`, `field-app/` ni `docs/`. PostgreSQL 18.3 en `127.0.0.1:55432`, base aislada creada para la prueba y distinta de la de desarrollo. Servidor con Node.js v22.23.3 (`npx node@22`); el recorrido en navegador se ejecutó con el Node del sistema (v24.14.1) y Chrome instalado, y no se repitió con Node 22.
+
+| Suite | Comando | Código | Resultado |
+|---|---|---|---|
+| S4 | `npm run db:migrate:test` | 0 | Migraciones aplicadas |
+| S2, S3 | `npm test` (servidor) | 0 | 69 pruebas, todas pasan (incluye `permissions.integration.test.ts`, `cut-consume.integration.test.ts` y `db.integration.test.ts`) |
+| S7 | `npm run e2e:browser` | 0 | Resultado `passed`: 10 comprobaciones (acceso del administrador, orden y asignación, visita sin conexión, recarga, sincronización y auditoría, corte desde la interfaz con foto y GPS sintéticos, respuesta de consumo perdida reintentada con la misma operación, reconexión y evidencia en PostgreSQL) |
+| S8 | `npm test -- --run` (app) | 0 | 45 archivos, 488 pruebas, todas pasan |
+| — | Arranque idempotente: `apply-startup-schema-migrations.mjs` y `20261002-role-grants.mjs`, dos veces | 0 | `orders`, `users`, `debtors`, `audit_events`, `cut_authorizations` y `sessions` sin cambios (conteo y huella) |
+
+La carga del Excel ya no forma parte del arranque (D026), por lo que no se probó en esa ejecución. Con los datos sintéticos de la prueba no se comprobó nada sobre producción.
