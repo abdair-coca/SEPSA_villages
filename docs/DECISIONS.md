@@ -156,7 +156,7 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 
 **Estado:** vigente
 **Decisión:** El `CMD` de la imagen aplica solo el esquema de arranque (`002`, `007_work_package_versions` y `008`) y los grants de roles. La carga `migrations/20260923-load-excel-20260922.mjs` (99 morosos de prueba y 10 órdenes) se ejecuta a mano con `npm run pilot:migrate:field-test` y necesita el archivo `backend/migrations/data/EXCEL_20260922.json`, que dejó de estar en el repo. Sustituye la parte de la tarea 0.2 del plan de consolidación que ejecutaba la carga en cada arranque.
-**Consecuencia:** Un arranque nuevo no crea órdenes de prueba ni escribe morosos. La guarda `pilot_migrations` se mantiene para la ejecución manual. El archivo de datos se gestiona fuera del repo. Los seeds `005` y `006` siguen en el repo y tienen filas de personas; su tratamiento está pendiente. El umbral de tres meses sigue sin confirmar (P-01).
+**Consecuencia:** Un arranque nuevo no crea órdenes de prueba ni escribe morosos. La guarda `pilot_migrations` se mantiene para la ejecución manual. El archivo de datos se gestiona fuera del repo. Los seeds `005` y `006` tenían filas de personas y se retiraron en D031. El umbral de tres meses no es constante: lo define el administrador al cargar (P-01).
 
 ## D027 — Alcance del SC08 y responsabilidades de SEPSA
 
@@ -181,3 +181,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** La entrega (`docs/entrega-sepsa/`) se mantiene en unas 36 páginas medidas en A4 con letra de 10 pt, sin anexos separados. Dentro de la entrega no se enlazan archivos `.md` internos; solo se citan rutas de código o de documentos cuando hacen falta para verificar una fuente. La copia en Word (`.docx`) se genera fuera del repo a partir de la entrega y no se commitea salvo petición.
 **Consecuencia:** Si la entrega cambia, la copia Word se regenera. Reducir más la entrega exige quitar contenido de algún punto de la carta, decisión que no se ha tomado.
+
+## D031 — Se retiran los seeds con datos de personas
+
+**Estado:** vigente
+**Decisión:** `backend/sql/seeds/005_definitive_seed.sql` (28 filas) y `006_replace-betanzos-20260923-jhonny.sql` (948 filas) se eliminan del repo, de `scripts/bootstrap-pilot.mjs` y de `docker-compose.yml`. Bootstrap y Compose crean el esquema y los usuarios de `002_seed.sql`, sin deudores. Los datos de prueba se cargan fuera del repo (D026).
+**Consecuencia:** El historial de git conserva ambos archivos y no se reescribe. Mientras eso sea así, la entrega no afirma que el repositorio completo carezca de datos de personas; afirma que el árbol de trabajo actual no los contiene.

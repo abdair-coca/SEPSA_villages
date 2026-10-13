@@ -14,7 +14,6 @@ services:
       - ./sql/seeds/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
       - ./sql/003_reference_fields.sql:/docker-entrypoint-initdb.d/003_reference_fields.sql:ro
       - ./sql/seeds/004_e2e_seed.sql:/docker-entrypoint-initdb.d/004_e2e_seed.sql:ro
-      - ./sql/seeds/005_definitive_seed.sql:/docker-entrypoint-initdb.d/005_definitive_seed.sql:ro
       - ./sql/007_role_grants.sql:/docker-entrypoint-initdb.d/007_role_grants.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pilot_provisional -d pilot_provisional"]

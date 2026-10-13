@@ -36,6 +36,7 @@ El proyecto entrega la información. SEPSA define estas decisiones.
 | Copias de seguridad cifradas, RPO, RTO y prueba de restauración | No implementadas; el repo solo describe el procedimiento |
 | Registro de cambios operativos | No definido en el repo |
 | Responsable, custodia y retención de datos personales (clientes, técnicos, sesiones y auditoría) | Sin definir. El sistema no borra datos |
+| Datos de personas en el historial de git | Los seeds `005` y `006` se retiraron del árbol de trabajo (D031); el historial los conserva y no se reescribe. Decidir si SEPSA exige purgarlo |
 | API oficial y su integración | Hay un adaptador provisional |
 | Destino del SC08: archivo o API | El sistema no genera hoy un archivo SC08. `TODO: VALIDAR CON SEPSA` |
 | Relación cliente, cuenta y suministro | Supuesto del piloto: una cuenta y un suministro por fila. `TODO: VALIDAR CON SEPSA` |

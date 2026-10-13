@@ -72,7 +72,7 @@ Estas asociaciones describen el importador provisional, PostgreSQL piloto y las 
 
 La fuente observada de estos valores es la carga Excel y el backend piloto, ambos provisionales. Mantener las normalizaciones y presentaciones existentes; confirmar con SEPSA cualquier equivalencia o formato de salida SC08 antes de tratarlos como datos oficiales.
 
-Trazabilidad de esta revisión: esquema en `backend/sql/001_init.sql`, mapeo de importación en `backend/sql/seeds/005_definitive_seed.sql`, proyección del backend en `backend/src/mappers/` (`order.mapper.ts`, `debtor.mapper.ts`), adaptación al contexto de campo en `field-app/src/adapters/http/client.ts` y etiquetas en `field-app/src/screens/OperationsApp.tsx` / `FieldApp.tsx`.
+Trazabilidad de esta revisión: esquema en `backend/sql/001_init.sql`, mapeo de importación en `backend/migrations/20260923-load-excel-20260922.mjs`, proyección del backend en `backend/src/mappers/` (`order.mapper.ts`, `debtor.mapper.ts`), adaptación al contexto de campo en `field-app/src/adapters/http/client.ts` y etiquetas en `field-app/src/screens/OperationsApp.tsx` / `FieldApp.tsx`.
 
 - `NRO_CORREL`: lo asigna SEPSA. La aplicación lo recibe tal cual, como el código de domicilio. Todavía no existe en el modelo.
 - `NIV_CALIDAD`: lo asigna SEPSA. La aplicación lo recibe; no lo calcula.

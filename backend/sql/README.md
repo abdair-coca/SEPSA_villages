@@ -21,8 +21,6 @@ Orden real de los scripts de `backend/sql/`, de los `.mjs` de `backend/migration
 | `008_reconnection_schema.sql` | Esquema de RECONEXIÓN | 2026-10-04 · `f50fc64` | **arranque**, bootstrap, pruebas |
 | `seeds/002_seed.sql` | Usuarios de prueba | 2026-09-13 · `3f9c58e` | bootstrap, Compose |
 | `seeds/004_e2e_seed.sql` | Vacío a propósito (deprecado) | 2026-09-13 · `c84b84a` | bootstrap, Compose |
-| `seeds/005_definitive_seed.sql` | Deudores de la prueba definitiva (28 filas) | 2026-09-14 · `51acddb` | bootstrap, Compose |
-| `seeds/006_replace-betanzos-20260923-jhonny.sql` | Carga de 948 registros que reemplaza datos `PILOT_PROVISIONAL` | 2026-09-27 · `c5ecff7` | ninguno |
 
 **arranque** = `scripts/apply-startup-schema-migrations.mjs`, que se ejecuta en cada arranque del contenedor.
 
@@ -36,9 +34,9 @@ Orden real de los scripts de `backend/sql/`, de los `.mjs` de `backend/migration
 
 La carga de datos de prueba (`20260923-load-excel-20260922.mjs`) no está en el arranque desde D026. Se ejecuta a mano con `npm run pilot:migrate:field-test`.
 
-**Bootstrap** (`npm run pilot:bootstrap`, una vez, sobre base vacía; se niega si hay datos): `001_init` → `002_evidence_assets` → `seeds/002_seed` → `003_reference_fields` → `seeds/004_e2e_seed` → `seeds/005_definitive_seed` → `007_work_package_versions` → `007_role_grants` → `008_reconnection_schema`.
+**Bootstrap** (`npm run pilot:bootstrap`, una vez, sobre base vacía; se niega si hay datos): `001_init` → `002_evidence_assets` → `seeds/002_seed` → `003_reference_fields` → `seeds/004_e2e_seed` → `007_work_package_versions` → `007_role_grants` → `008_reconnection_schema`.
 
-**Compose** (`backend/docker-compose.yml`, solo al crear un volumen vacío). PostgreSQL ejecuta los archivos montados en orden alfabético: `001_init` → `002_evidence_assets` → `seeds/002_seed` → `003_reference_fields` → `seeds/004_e2e_seed` → `seeds/005_definitive_seed` → `007_role_grants`. No monta `007_work_package_versions` ni `008`: la API los aplica al arrancar.
+**Compose** (`backend/docker-compose.yml`, solo al crear un volumen vacío). PostgreSQL ejecuta los archivos montados en orden alfabético: `001_init` → `002_evidence_assets` → `seeds/002_seed` → `003_reference_fields` → `seeds/004_e2e_seed` → `007_role_grants`. No monta `007_work_package_versions` ni `008`: la API los aplica al arrancar.
 
 **Base de pruebas** (`npm run db:migrate:test`, CI y pruebas E2E): `001_init` → `002_evidence_assets` → `003_reference_fields` → `007_role_grants` → `007_work_package_versions` → `008_reconnection_schema`. Sin seeds: las pruebas crean sus propios datos sintéticos. `007_role_grants` y `007_work_package_versions` no dependen entre sí; por eso este orden difiere del bootstrap.
 
@@ -55,7 +53,8 @@ Los `.mjs` existen porque su decisión depende del estado de la base (checksum o
 
 ## Pendiente de validar
 
-- `003_payment_observations.sql` y `seeds/006_…` se dejan como están: ningún script los ejecuta y no afectan a ningún flujo. Su estado en cada base no se ha verificado.
+- `003_payment_observations.sql` se deja como está: ningún script lo ejecuta y no afecta a ningún flujo. Su estado en cada base no se ha verificado.
+- Los seeds `005_definitive_seed.sql` y `006_replace-betanzos-20260923-jhonny.sql` se retiraron del repo (D031); el historial de git los conserva.
 - `003_reference_fields.sql` no lo aplica el arranque. Un entorno creado antes de esa migración debe revisarse con su historial.
 - `008_reconnection_schema.sql` vuelve a crear `orders_status_check` y `sync_operations_action_check` en cada arranque. El resultado es el mismo, pero cada despliegue toma un bloqueo exclusivo sobre esas tablas mientras revalida las filas.
-- `seeds/004_e2e_seed.sql` comenta la ruta anterior `backend/sql/005_definitive_seed.sql`. No se edita porque es SQL aplicado.
+- `seeds/004_e2e_seed.sql` comenta una ruta anterior a un seed ya retirado. No se edita porque es SQL aplicado.

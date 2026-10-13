@@ -12,7 +12,7 @@ También puedes usar `docker compose up --build`; publica PostgreSQL en `15432` 
 
 ## Datos y migraciones
 
-- `npm run pilot:bootstrap` inicializa una base vacía, aplica, en este orden, `001_init.sql`, `002_evidence_assets.sql`, los seeds `002_seed.sql`, `004_e2e_seed.sql` y `005_definitive_seed.sql` (con `003_reference_fields.sql` entre ellos), `007_work_package_versions.sql`, `007_role_grants.sql` y `008_reconnection_schema.sql` (la lista exacta está en `scripts/bootstrap-pilot.mjs`, que es la fuente), y se niega a borrar datos existentes.
+- `npm run pilot:bootstrap` inicializa una base vacía, aplica, en este orden, `001_init.sql`, `002_evidence_assets.sql`, los seeds `002_seed.sql` y `004_e2e_seed.sql` (con `003_reference_fields.sql` entre ellos), `007_work_package_versions.sql`, `007_role_grants.sql` y `008_reconnection_schema.sql` (la lista exacta está en `scripts/bootstrap-pilot.mjs`, que es la fuente), y se niega a borrar datos existentes.
 - `npm run pilot:field-test` importa un workbook mediante el script de carga.
 - `npm run pilot:migrate:field-test` aplica la carga idempotente del dataset de prueba disponible.
 - Compose ejecuta los SQL de inicialización solo al crear un volumen PostgreSQL vacío. Al iniciar la API, `scripts/apply-startup-schema-migrations.mjs` aplica `002_evidence_assets.sql`, `007_work_package_versions.sql` y `008_reconnection_schema.sql` antes del servidor, también con volúmenes existentes. Las migraciones son idempotentes y requieren el esquema base instalado.
