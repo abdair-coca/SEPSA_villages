@@ -67,7 +67,15 @@ jobs:
         working-directory: field-app
       - run: npm test -- --run
         working-directory: field-app
-      - run: npm run build
+      - name: Production build without the simulated mode (D023)
+        run: |
+          npm run build
+          if grep -l "seedE2eData\|SIMULATED_AUTHORITY\|dirección simulada" dist/assets/*.js; then echo "Simulated mode leaked into the production build"; exit 1; fi
+        working-directory: field-app
+      - name: Smoke build with the simulated mode
+        run: npm run build
+        env:
+          VITE_ENABLE_SIMULATION: "true"
         working-directory: field-app
       - name: Browser smoke for responsive admin and field flow
         run: npm run smoke:ui

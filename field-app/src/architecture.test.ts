@@ -83,7 +83,7 @@ describe("regla de dependencias", () => {
   });
 
   it("solo los puntos de composición conocen adaptadores concretos", () => {
-    const composition = ["App.tsx", "main.tsx", "bootstrap", "adapters"];
+    const composition = ["App.tsx", "SimulatedApp.tsx", "TechnicianRuntime.tsx", "main.tsx", "bootstrap", "adapters"];
     const found = violations((edge) => edge.to === "adapters" && !composition.includes(edge.from));
     expect(found.filter((violation) => !KNOWN_ADAPTER_EXCEPTIONS.has(violation))).toEqual([]);
   });

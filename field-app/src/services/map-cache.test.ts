@@ -8,7 +8,7 @@ import {
   lon2tile,
   type RouteBoundingBox,
 } from "./map-cache";
-import { createDemoPackage } from "../bootstrap/runtime";
+import { createDemoPackage } from "../bootstrap/simulated-runtime";
 import type { WorkOrder } from "../domain/types";
 
 afterEach(() => {

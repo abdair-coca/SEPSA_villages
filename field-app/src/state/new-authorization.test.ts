@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
 import { createAppStore, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID } from "./store";
-import { createDemoPackage, prepareDemoExternalValidation } from "../bootstrap/runtime";
+import { createDemoPackage, prepareDemoExternalValidation } from "../bootstrap/simulated-runtime";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { deleteFieldDatabase } from "../adapters/indexeddb/database";
 import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/mock/authorization";

@@ -10,7 +10,7 @@ import { deleteAuthorityDatabase } from "../adapters/indexeddb/authority-databas
 import { MockConnectivity } from "../adapters/mock/connectivity";
 import type { OperationRecord, WorkOrder } from "../domain/types";
 import { SyncEngine } from "../use-cases/sync";
-import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "./runtime";
+import { createSimulatedTechnicianStore, SimulatedAuthoritySyncTransport } from "./simulated-runtime";
 
 const authorityRepositories: IndexedDbAuthorityRepository[] = [];
 const localRepositories: IndexedDbLocalRepository[] = [];
@@ -58,7 +58,7 @@ describe("simulated authoritative technician runtime", () => {
   it("does not grant a stale local order after authoritative reassignment", async () => {
     const setup = await createRuntime("runtime-authorization");
     const transport = new SimulatedAuthoritySyncTransport(setup.authority, setup.technician, setup.repository);
-    const store = createAuthenticatedTechnicianStore(setup.technician.userId, setup.deviceId, { repository: setup.repository, seedPackage: await setup.repository.loadAssignedPackage(), transport });
+    const store = createSimulatedTechnicianStore(setup.technician.userId, setup.deviceId, { repository: setup.repository, seedPackage: await setup.repository.loadAssignedPackage(), transport });
     await store.init();
     await assignOrder(setup.authority, setup.admin, { operationId: "runtime-authorization-reassign", orderId: setup.order.orderId, technicianId: setup.otherTechnician.userId, expectedOrderVersion: 2 });
 
@@ -70,7 +70,7 @@ describe("simulated authoritative technician runtime", () => {
   it("refreshes technician tray after a new order is assigned", async () => {
     const setup = await createRuntime("runtime-tray-refresh");
     const transport = new SimulatedAuthoritySyncTransport(setup.authority, setup.technician, setup.repository);
-    const store = createAuthenticatedTechnicianStore(setup.technician.userId, setup.deviceId, { repository: setup.repository, seedPackage: await setup.repository.loadAssignedPackage(), transport });
+    const store = createSimulatedTechnicianStore(setup.technician.userId, setup.deviceId, { repository: setup.repository, seedPackage: await setup.repository.loadAssignedPackage(), transport });
     await store.init();
 
     const [debtor] = await findDebtors(setup.authority, setup.admin, { query: "SUM-1002" });

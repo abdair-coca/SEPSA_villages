@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDemoPackage } from "../bootstrap/runtime";
+import { createDemoPackage } from "../bootstrap/simulated-runtime";
 import type { WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
 import { DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type ActivityEntry } from "../state/store";

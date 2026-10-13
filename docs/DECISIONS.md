@@ -133,3 +133,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** Si la consulta de la autorización de un corte o una reconexión incierta devuelve `expired`, `rejected` o `not_found`, el técnico puede pedir una nueva tras confirmarlo. La app vuelve a consultar al servidor en ese momento; con la prueba, cierra la operación (`BLOCKED`, `AUTHORIZATION_CLOSED_NOT_CONSUMED`, fuera de la cola), devuelve la orden a su estado previo, registra una visita `closure-<uuid>` que se sincroniza como constancia y repite la acción con un `operationId` nuevo, la misma foto (copiada y ligada a la operación nueva) y los mismos datos (`demora`, captura de campo). `effectiveAt` es la hora de la nueva autorización. Un corte cuyo POST de sync ya empezó no se cierra así.
 **Consecuencia:** Una orden no queda bloqueada sin salida cuando el servidor demuestra que la autorización no se consumió, y el técnico no recaptura datos. La prueba es sobre la autorización, no sobre el medidor: la interfaz no afirma que la acción física no ocurrió. El administrador no interviene. La consulta de reconexión informa `rejected` en lugar de `unknown`.
+
+## D023 — El modo simulado no viaja en producción
+
+**Estado:** vigente
+**Decisión:** La autoridad simulada, los datos de demostración y su store (`SimulatedApp.tsx`, `bootstrap/simulated-runtime.ts`) se cargan con `import()` solo si `simulationEnabled()`: en desarrollo o con `VITE_ENABLE_SIMULATION=true`. El build de producción no los incluye; sin URL de backend ni simulación, la app muestra que no tiene servidor configurado. El CI construye el build de producción, comprueba que no contiene el modo simulado y después construye el build de humo con la bandera.
+**Consecuencia:** Un evaluador nunca ve datos de demostración en el despliegue. Las pruebas de humo (`smoke:ui`, `smoke:pwa`) exigen el marcador `simulated-explicit`, que ahora requiere también la bandera.

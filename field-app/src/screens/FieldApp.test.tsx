@@ -8,7 +8,7 @@ import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/moc
 import { MockConnectivity } from "../adapters/mock/connectivity";
 import { MockSyncTransport } from "../adapters/mock/transport";
 import { createAppStore, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type ActivityEntry, type AppStore } from "../state/store";
-import { createDemoPackage } from "../bootstrap/runtime";
+import { createDemoPackage } from "../bootstrap/simulated-runtime";
 import type { WorkOrder, WorkPackage } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
 import { AppModal, type AppModalProps } from "../components/common/Modal";

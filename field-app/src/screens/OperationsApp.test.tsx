@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AdminOrderDetail } from "../components/AdminOrderDetail";
 import { AdminSelectionSummary } from "../components/DebtorSearchPanel";
 import { OrderCreationModal } from "../components/AdminOrderModals";
-import { createDemoPackage } from "../bootstrap/runtime";
+import { createDemoPackage } from "../bootstrap/simulated-runtime";
 import type { DebtorRecord } from "../domain/types";
 import { getMissingOrderCreationDebtorIds } from "../utils/filters";
 

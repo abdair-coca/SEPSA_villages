@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDemoPackage } from "../bootstrap/runtime";
+import { createDemoPackage } from "../bootstrap/simulated-runtime";
 import {
   assertAssignedOrder,
   assertCan,

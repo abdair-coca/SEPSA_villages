@@ -9,7 +9,7 @@ La fuente oficial de SEPSA todavía no está integrada. El backend actual es un 
 ## Estado actual
 
 - El flujo principal implementado es: administrador busca morosos → crea/asigna una orden → técnico descarga sus órdenes → consulta contexto → registra visita o corte → sincroniza.
-- La aplicación tiene modo simulado local y modo conectado al backend provisional.
+- La aplicación desplegada usa el modo conectado al backend provisional; el modo simulado local existe solo para desarrollo y pruebas.
 - La creación masiva existe en el piloto, pero la validación funcional prioritaria sigue siendo una orden individual de extremo a extremo.
 - Reconexión se guarda localmente y sincroniza con el backend piloto mediante habilitación provisional ligada a orden/técnico/dispositivo/operación/versión; la fuente oficial y sus reglas siguen pendientes de SEPSA.
 - La integración oficial, políticas definitivas de datos y validación en campo todavía están pendientes.

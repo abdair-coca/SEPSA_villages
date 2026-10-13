@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAuthenticatedTechnicianStore, SimulatedAuthoritySyncTransport } from "../bootstrap/runtime";
+import { createSimulatedTechnicianStore, SimulatedAuthoritySyncTransport } from "../bootstrap/simulated-runtime";
 import { IndexedDbAuthorityRepository } from "../adapters/indexeddb/authority-repository";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { deleteAuthorityDatabase } from "../adapters/indexeddb/authority-database";
@@ -42,7 +42,7 @@ describe("complete cut order flow", () => {
     const repository = new IndexedDbLocalRepository({ dbName: fieldDb, technicianId: technician.userId, deviceId });
     repositories.push(repository);
     const transport = new SimulatedAuthoritySyncTransport(authority, technician, repository);
-    const store = createAuthenticatedTechnicianStore(technician.userId, deviceId, { repository, seedPackage: packageEnvelope.package, transport });
+    const store = createSimulatedTechnicianStore(technician.userId, deviceId, { repository, seedPackage: packageEnvelope.package, transport });
 
     await store.init();
     expect(store.getSnapshot().orders).toEqual(expect.arrayContaining([expect.objectContaining({ orderId: assigned.orderId, assignedTechnicianId: technician.userId, status: "GENERADO" })]));

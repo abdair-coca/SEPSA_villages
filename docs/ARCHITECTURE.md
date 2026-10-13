@@ -35,11 +35,11 @@ Los patrones visuales compartidos deben tener una interfaz pequeña y más de un
 
 Los estilos tienen un punto de entrada en `src/styles/app.css`, que solo importa hojas en orden de cascada. Los tokens visuales viven en `src/styles/tokens.css`, el frame compartido en `src/styles/shell.css` y los controles compartidos en `src/styles/controls.css`; cada sección del CSS original tiene su hoja (`base.css`, `tech-*.css`, `admin-*.css`, …). El orden de importación forma parte de la cascada: reordenar hojas exige verificar el CSS compilado. La hoja de estilos no contiene reglas de autorización ni de negocio.
 
-`npm run smoke:ui` complementa las pruebas de componentes con Chrome/CDP sobre un build simulado, usando un perfil temporal y sin contactar servicios externos. Captura vistas responsive y verifica foco, filtros, mapa, GPS tardío, desplazamiento de captura y restauración de borradores. `npm run smoke:pwa` verifica por separado el guardado local, cola y recuperación offline.
+`npm run smoke:ui` complementa las pruebas de componentes con Chrome/CDP sobre un build simulado (`VITE_PILOT_BACKEND_URL` vacía y `VITE_ENABLE_SIMULATION=true`), usando un perfil temporal y sin contactar servicios externos. Captura vistas responsive y verifica foco, filtros, mapa, GPS tardío, desplazamiento de captura y restauración de borradores. `npm run smoke:pwa` verifica por separado el guardado local, cola y recuperación offline.
 
 La aplicación arranca en uno de estos modos:
 
-- **Local/simulado:** sin `VITE_PILOT_BACKEND_URL`; autoridad y datos de demostración locales.
+- **Local/simulado:** sin URL de backend, solo en desarrollo o con `VITE_ENABLE_SIMULATION=true`; autoridad y datos de demostración locales. `SimulatedApp.tsx` y `bootstrap/simulated-runtime.ts` se cargan con `import()` y no viajan en el build de producción; sin URL ni simulación, la app avisa que no tiene servidor ([D023](DECISIONS.md)).
 - **Piloto conectado:** con URL configurada o en el despliegue; `HttpPilotClient` usa el backend provisional.
 
 El técnico mantiene su paquete, borradores, evidencias, operaciones y cola en IndexedDB. El estado React solo representa la vista actual.
@@ -86,7 +86,7 @@ Dónde vive cada responsabilidad. Cada archivo empieza con un comentario que exp
 
 | Carpeta | Responsabilidad | Empezar por |
 |---|---|---|
-| `main.tsx`, `App.tsx` | Arranque, modo (simulado o piloto), sesión y pantalla según rol (`bootstrap/environment.ts` resuelve URL del backend y dispositivo) | `App.tsx` |
+| `main.tsx`, `App.tsx`, `TechnicianRuntime.tsx`, `SimulatedApp.tsx` | Arranque, modo (conectado o simulado), sesión, jornada del técnico y pantalla según rol (`bootstrap/environment.ts` resuelve URL del backend y dispositivo) | `App.tsx` |
 | `domain/` | Tipos y reglas de negocio puras; no importa nada del proyecto | `policies.ts`, `types.ts` |
 | `ports/` | Contratos entre casos de uso y adaptadores | `repository.ts`, `authorization.ts`, `sync.ts` |
 | `use-cases/` | Corte, reconexión, visita, sincronización, descarga y comandos de admin | `process.ts`, `sync.ts` |
@@ -94,7 +94,7 @@ Dónde vive cada responsabilidad. Cada archivo empieza con un comentario que exp
 | `adapters/http/` | Cliente del backend piloto (todos los puertos remotos) | `client.ts` |
 | `adapters/browser/`, `adapters/mock/` | Conectividad, sesión y Service Worker; adaptadores simulados | — |
 | `state/` | Store de la jornada del técnico (acciones, sync, mensajes) | `store.ts` |
-| `bootstrap/` | Construcción de stores con sus adaptadores | `runtime.ts` |
+| `bootstrap/` | Construcción de stores con sus adaptadores: conectado (`runtime.ts`) y simulado (`simulated-runtime.ts`) | `runtime.ts` |
 | `screens/` | Pantallas: técnico (`FieldApp`), administrador (`OperationsApp`), login; guardan estado y handlers, y componen `components/` | — |
 | `components/`, `components/common/` | Componentes con lógica visible (técnico: `FieldHome`, `OrderList`, `FieldMap`, `OrderDetail`, `CaptureForm`; admin: `Admin*`, `DebtorSearchPanel`); primitivas genéricas | `OrderDetail.tsx`, `CaptureForm.tsx` |
 | `services/`, `utils/`, `styles/` | Servicios del navegador sin UI (`mobile-back-guard.ts`, `map-cache.ts`); funciones puras de presentación; CSS por sección | `styles/app.css` |
@@ -120,7 +120,7 @@ Regla de dependencias: `controllers → services → repositories → db`. Excep
 
 1. **Admin busca morosos.** `screens/OperationsApp.tsx` → `refresh()` → `HttpPilotClient.findDebtors` → `GET /v1/debtors` → `controllers/debtors.controller.ts` `listDebtors` → `repositories/debtors.repository.ts` `searchDebtors`.
 2. **Admin crea y asigna.** `screens/OperationsApp.tsx` `confirmOrderCreation()` (diálogos en `components/AdminOrderModals.tsx`) → `createOrder` / `createOrdersBatch` + `assignOrder` → `POST /v1/orders` y `POST /v1/orders/{id}/assignment` → `controllers/orders.controller.ts` → `services/orders.service.ts` `createOrder` / `createOrdersBatch` / `assignOrder` (idempotencia en `services/command-idempotency.service.ts`, SQL en `repositories/orders.repository.ts`).
-3. **Técnico descarga su jornada.** `App.tsx` `TechnicianRuntime` → `loadPackage()` → `use-cases/download.ts` `downloadAssigned` → `GET /v1/technician/orders` → `controllers/orders.controller.ts` `technicianOrders` → `services/orders.service.ts` `buildWorkPackage`; se guarda con `IndexedDbLocalRepository.savePackage`.
+3. **Técnico descarga su jornada.** `TechnicianRuntime.tsx` → `loadPackage()` → `use-cases/download.ts` `downloadAssigned` → `GET /v1/technician/orders` → `controllers/orders.controller.ts` `technicianOrders` → `services/orders.service.ts` `buildWorkPackage`; se guarda con `IndexedDbLocalRepository.savePackage`.
 4. **Técnico captura el corte.** `components/OrderDetail.tsx` → `components/CaptureForm.tsx` → `state/store-actions.ts` `executeCut` → `state/evidence.ts` `prepareEvidence`.
 5. **Autorización online y guardado local.** `use-cases/process.ts` `executeCut` → `HttpPilotClient.requestCut` → `POST /v1/authorizations/cut` → `controllers/authorizations.controller.ts` → `services/authorizations.service.ts` `authorizeCut`; luego `IndexedDbLocalRepository.claimCut` guarda operación, orden y cola en una transacción.
 6. **Sincronización.** `state/store-sync.ts` `requestSync` → `use-cases/sync.ts` `SyncEngine.syncOnce` → subida de fotos (`POST /v1/evidence/assets` → `controllers/evidence.controller.ts` → `services/evidence.service.ts` `uploadEvidence`) → `markCutSendStarted` → `POST /v1/sync/operations` → `controllers/sync.controller.ts` → `services/sync.service.ts` → `services/sync-apply.service.ts` `applySync` → `services/sync-physical-operations.service.ts` (acepta la autorización ya consumida al confirmar el corte, o consume una reserva vigente de una app anterior, y confirma la orden).

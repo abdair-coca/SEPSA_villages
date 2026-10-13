@@ -4,7 +4,7 @@ import type { DebtorRecord, Session, TechnicianRecord } from "../domain/types";
 import type { OperationsAuthorityPort } from "../ports/authority";
 import { OperationsApp } from "./OperationsApp";
 import { DebtorSearchPanel } from "../components/DebtorSearchPanel";
-import { createDemoPackage } from "../bootstrap/runtime";
+import { createDemoPackage } from "../bootstrap/simulated-runtime";
 
 // Minimal hook scheduler: callbacks run from the actual component, effects retain
 // dependencies/cleanup, and renders explicitly flush state. No browser dependency.

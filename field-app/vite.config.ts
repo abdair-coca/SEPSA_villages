@@ -16,7 +16,8 @@ function smokeBuildMode(): Plugin {
     name: "smoke-build-mode",
     apply: "build",
     configResolved(config) {
-      simulated = configuredBackendUrl() === "" && config.env.VITE_PILOT_BACKEND_URL === "";
+      // Build de humo: sin backend y con el modo simulado incluido explícitamente (D023).
+      simulated = configuredBackendUrl() === "" && config.env.VITE_PILOT_BACKEND_URL === "" && config.env.VITE_ENABLE_SIMULATION === "true";
     },
     generateBundle() {
       this.emitFile({
