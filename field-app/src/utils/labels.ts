@@ -5,6 +5,7 @@
 import type { ActionKind, SyncStatus, WorkOrder } from "../domain/types";
 import type { StoredRecord } from "../ports/repository";
 import type { SyncItem } from "../ports/sync";
+import { errorGuidance } from "./error-catalog";
 
 export function actionLabel(action: ActionKind): string {
   return action === "VISIT" ? "Visita" : action === "CUT" ? "Corte" : "Reconexión";
@@ -79,10 +80,13 @@ export function syncStatusLabel(status: SyncStatus): string {
         : "Falló";
 }
 
-export function queueReviewMessage(item: Pick<SyncItem, "manualReview" | "uncertain"> & Partial<Pick<SyncItem, "errorCode">>): string | undefined {
+export function queueReviewMessage(item: Pick<SyncItem, "manualReview" | "uncertain"> & Partial<Pick<SyncItem, "errorCode" | "uncertainCause">>): string | undefined {
   if (item.errorCode === "RECONNECTION_NOT_COMPLETED") return "Habilitación denegada; no se registró una reposición. Puede iniciar una nueva solicitud si corresponde.";
   if (item.manualReview) return "Revisión humana · no reenviar";
-  if (item.uncertain) return "Resultado incierto: verificar estado podría continuar sincronización según el motor.";
+  if (item.uncertain) {
+    const guidance = errorGuidance(item.uncertainCause ?? item.errorCode, { uncertain: true });
+    return guidance ? `Resultado incierto: ${guidance.title}. ${guidance.nextStep}` : "Resultado incierto. No repita la acción; use Verificar estado.";
+  }
   return undefined;
 }
 

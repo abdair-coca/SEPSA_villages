@@ -515,11 +515,18 @@ export class IndexedDbLocalRepository implements LocalRepository {
       transaction.abort();
       throw new Error("Sync lease fencing token is invalid.");
     }
+    const operation = await requestResult(transaction.objectStore("operations").get(operationId));
+    const visit = await requestResult(transaction.objectStore("visits").get(operationId));
+    const record = operation ?? visit;
+    const uncertain = options.uncertain ?? current.uncertain;
+    // Causa original: el primer código incierto se conserva; los reintentos de consulta solo cambian `errorCode`.
+    const uncertainCause = uncertain ? current.uncertainCause ?? (record && isPhysicalUnknownRecord(record) ? record.errorCode : undefined) ?? options.errorCode : undefined;
     const next: SyncItem = {
       ...current,
       status,
       errorCode: options.errorCode,
-      uncertain: options.uncertain ?? current.uncertain,
+      uncertain,
+      uncertainCause,
       attempts: options.attempts ?? current.attempts,
       manualReview: options.manualReview ?? current.manualReview,
       leaseOwner: status === "syncing" ? current.leaseOwner : undefined,
@@ -528,9 +535,6 @@ export class IndexedDbLocalRepository implements LocalRepository {
       updatedAt: new Date().toISOString(),
     };
     syncStore.put(next);
-    const operation = await requestResult(transaction.objectStore("operations").get(operationId));
-    const visit = await requestResult(transaction.objectStore("visits").get(operationId));
-    const record = operation ?? visit;
     if (record) {
       if (!this.identityMatches(record as { technicianId?: string; deviceId?: string })) {
         transaction.abort();
@@ -555,7 +559,8 @@ export class IndexedDbLocalRepository implements LocalRepository {
           transaction.objectStore("orders").put(toStoredOrder({ ...order, authoritativeVersion: options.authoritativeVersion }, this.orderKey(order.orderId)));
         }
       } else {
-        await this.putRecord(transaction, { ...record, syncStatus: status, errorCode: options.errorCode } as StoredRecord);
+        // Un resultado incierto conserva su causa original en el registro; `errorCode` de la cola muestra el último aviso.
+        await this.putRecord(transaction, { ...record, syncStatus: status, errorCode: uncertainCause ?? options.errorCode } as StoredRecord);
       }
     }
     await transactionComplete(transaction);
@@ -931,6 +936,11 @@ function evidenceEquivalent(left: EvidenceReference, right: EvidenceReference): 
     left.contentHash?.toLowerCase() === right.contentHash?.toLowerCase() &&
     left.content?.size === right.content?.size &&
     left.content?.type === right.content?.type;
+}
+
+/** Operación física con resultado incierto (la causa original está en su `errorCode`). */
+function isPhysicalUnknownRecord(record: { status?: string; physicalStatus?: string }): boolean {
+  return record.physicalStatus === "PHYSICAL_UNKNOWN" || record.status === "PHYSICAL_UNKNOWN";
 }
 
 function secureRandomUuid(): string {

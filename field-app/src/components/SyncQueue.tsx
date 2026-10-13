@@ -10,6 +10,7 @@ import { PaginationControls } from "./common/PaginationControls";
 import { AppStateCard } from "./common/UiState";
 import { isUsable } from "../domain/policies";
 import { queueActionLabel, syncStatusLabel, queueReviewMessage } from "../utils/labels";
+import { errorGuidance } from "../utils/error-catalog";
 import { sortSyncItemsForDisplay, activityTimestampsByOperation, syncItemTimestamp } from "../utils/sorting";
 import { formatDate, shortTechnicalId } from "../utils/format";
 import { queuePageItem } from "../utils/pagination";
@@ -29,7 +30,7 @@ export function QueuePanel({ state, store }: { state: AppState; store: AppStore 
       <div className="panel-heading"><div><div className="eyebrow">TRAZABILIDAD LOCAL</div><h2>Cola de sincronización</h2></div><div className="queue-panel__actions"><button type="button" className="toolbar-action" onClick={() => store.setTab("orders")}>Volver a mis órdenes</button></div></div>
       <p className="queue-intro">Los registros permanecen en este dispositivo hasta recibir confirmación válida.</p>
       {items.length ? <>
-        {showFullDetails && mobileItem ? <section className="queue-full-details" aria-label="Detalle completo de operación"><button type="button" className="queue-item__detail" onClick={() => setShowFullDetails(false)}>Volver a cola</button><h3>Detalle de operación</h3><p><strong>Identificador:</strong> <span className="queue-full-details__technical" title={mobileItem.operationId}>{mobileItem.operationId}</span></p>{mobileItem.orderId ? <p><strong>Orden:</strong> {mobileItem.orderId}</p> : null}{state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName ? <p><strong>Cliente:</strong> {state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName}</p> : null}<p><strong>Estado:</strong> {syncStatusLabel(mobileItem.status)}</p><p><strong>Fecha:</strong> {formatDate(syncItemTimestamp(mobileItem, activityByOperation))}</p><p><strong>Intentos:</strong> {mobileItem.attempts}</p>{mobileItem.errorCode ? <p className="queue-error"><strong>Error:</strong> {mobileItem.errorCode}</p> : null}{queueReviewMessage(mobileItem) ? <p className="queue-review">{queueReviewMessage(mobileItem)}</p> : null}</section> : <><div className="queue-list queue-list--desktop">{items.map((item) => renderItem(item, false))}</div><div className="queue-list queue-list--mobile" aria-label="Operación de cola">{mobileItem ? renderItem(mobileItem, true) : null}</div></>}
+        {showFullDetails && mobileItem ? <section className="queue-full-details" aria-label="Detalle completo de operación"><button type="button" className="queue-item__detail" onClick={() => setShowFullDetails(false)}>Volver a cola</button><h3>Detalle de operación</h3><p><strong>Identificador:</strong> <span className="queue-full-details__technical" title={mobileItem.operationId}>{mobileItem.operationId}</span></p>{mobileItem.orderId ? <p><strong>Orden:</strong> {mobileItem.orderId}</p> : null}{state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName ? <p><strong>Cliente:</strong> {state.orders.find((order) => order.orderId === mobileItem.orderId)?.context?.customerName}</p> : null}<p><strong>Estado:</strong> {syncStatusLabel(mobileItem.status)}</p><p><strong>Fecha:</strong> {formatDate(syncItemTimestamp(mobileItem, activityByOperation))}</p><p><strong>Intentos:</strong> {mobileItem.attempts}</p>{mobileItem.errorCode ? <p className="queue-error"><strong>Último aviso:</strong> {mobileItem.errorCode}</p> : null}<ErrorDetails item={mobileItem} />{queueReviewMessage(mobileItem) ? <p className="queue-review">{queueReviewMessage(mobileItem)}</p> : null}</section> : <><div className="queue-list queue-list--desktop">{items.map((item) => renderItem(item, false))}</div><div className="queue-list queue-list--mobile" aria-label="Operación de cola">{mobileItem ? renderItem(mobileItem, true) : null}</div></>}
         <PaginationControls className="queue-pagination" label="Paginación de cola" page={page} totalPages={pageCount} onPrevious={() => setRequestedPage(Math.max(1, page - 1))} onNext={() => setRequestedPage(Math.min(pageCount, page + 1))} />
       </> : <AppStateCard layout="inline" tone="empty" className="empty-state" title="Cola despejada" description="No hay operaciones locales para mostrar." />}
     </section>
@@ -52,6 +53,7 @@ function QueueItem({ item, displayedAt, order, onRetry, onViewOrder, onViewFullD
         {mobile && item.status === "failed" && uncertain && !manualReview ? <button type="button" className="queue-item__verify" disabled={!canVerify} onClick={onRetry}>Verificar estado</button> : null}
         {mobile && (item.errorCode || manualReview || uncertain) ? <button type="button" className="queue-item__detail" onClick={onViewFullDetails}>Ver error y contexto</button> : null}
         {!mobile && item.errorCode ? <p className="queue-error">{manualReview ? "Requiere revisión humana. " : "Último aviso: "}{item.errorCode}</p> : null}
+        {!mobile && item.uncertainCause && item.uncertainCause !== item.errorCode ? <p className="queue-error">Causa original: {item.uncertainCause}</p> : null}
         {!mobile && reviewMessage ? <p className="queue-review">{reviewMessage}</p> : null}
         {item.orderId ? <button type="button" className="queue-item__detail" onClick={() => onViewOrder(item.orderId ?? "")}>Ver detalle</button> : null}
       </div>
@@ -59,3 +61,16 @@ function QueueItem({ item, displayedAt, order, onRetry, onViewOrder, onViewFullD
   );
 }
 
+/** Qué pasó, qué quedó guardado y qué hacer, con la causa original cuando la operación quedó incierta. */
+function ErrorDetails({ item }: { item: SyncItem }) {
+  const guidance = errorGuidance(item.uncertainCause ?? item.errorCode, { uncertain: Boolean(item.uncertain) });
+  if (!guidance) return null;
+  return (
+    <div className="queue-guidance">
+      <p><strong>Qué pasó:</strong> {guidance.title}</p>
+      <p><strong>Qué quedó guardado:</strong> {guidance.saved}</p>
+      <p><strong>Qué hacer:</strong> {guidance.nextStep}</p>
+      {item.uncertainCause ? <p className="queue-error"><strong>Causa original:</strong> {item.uncertainCause}</p> : null}
+    </div>
+  );
+}

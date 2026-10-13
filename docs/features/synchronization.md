@@ -16,7 +16,7 @@ Enviar operaciones locales sin perderlas, duplicarlas ni convertir un resultado 
 
 ## Estados
 
-`pending`, `syncing`, `synced` y `failed`. Cada elemento conserva intentos, error, operación, orden y si requiere revisión manual.
+`pending`, `syncing`, `synced` y `failed`. Cada elemento conserva intentos, error, operación, orden y si requiere revisión manual. En un resultado incierto, `uncertainCause` guarda el primer código que lo produjo y el registro conserva esa causa en `errorCode`; el `errorCode` de la cola muestra el último aviso. La app explica cada código en `field-app/src/utils/error-catalog.ts`.
 
 Evidencia conserva estado propio: `pending`, `uploading`, `verified`, `failed` o `review-required`. Fallo/interrupción conserva bytes y evita POST CUT. Reintento usa mismo ID y binding; backend devuelve mismo recibo solo para mismo contenido y hash. CUT con foto se acepta solo cuando todas sus referencias están verificadas dentro de la transacción de aceptación. Excepción controlada sin foto conserva motivo en payload y auditoría.
 

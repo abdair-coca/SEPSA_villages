@@ -388,7 +388,8 @@ describe("FieldApp SSR shell", () => {
     expect(uncertainMobile).toContain(">verificar estado</button>");
     expect(uncertainMobile).not.toContain(">reintentar</button>");
     expect(uncertainMobile).toContain("resultado incierto");
-    expect(uncertainMobile).toContain("podría continuar sincronización según el motor");
+    expect(uncertainMobile).not.toContain("podría continuar");
+    expect(uncertainMobile).not.toContain("use reintentar");
     expect(uncertainMobile).toContain(">ver error y contexto</button>");
     expect(uncertainMarkup).toContain("remote_result_unknown_long_detail");
     expect(uncertain.operationId).toBe("uncertain-full-id-100");
@@ -411,6 +412,16 @@ describe("FieldApp SSR shell", () => {
     expect(unavailable).toContain('class="queue-item__verify" disabled=""');
     const busy = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), busyAction: "SYNC", syncItems: [uncertain] }} store={store} />).toLocaleLowerCase();
     expect(busy).toContain('class="queue-item__verify" disabled=""');
+  });
+
+  it("shows the original uncertain cause and the explanation of what happened", async () => {
+    const store = await readyStore("ui-queue-original-cause");
+    const item: SyncItem = { operationId: "cause-full-id-300", orderId: "ORD-24017", action: "RECONNECTION", status: "failed", attempts: 4, uncertain: true, errorCode: "LOOKUP_NOT_FOUND", uncertainCause: "RESPONSE_LOST" };
+    const markup = renderToStaticMarkup(<QueuePanel state={{ ...store.getSnapshot(), syncItems: [item] }} store={store} />);
+
+    expect(markup).toContain("Causa original: RESPONSE_LOST");
+    expect(markup).toContain("Último aviso: LOOKUP_NOT_FOUND");
+    expect(markup).toContain("Resultado incierto: Se perdió la respuesta del servidor");
   });
 
   it("lets manual review override uncertainty messaging and verification", async () => {

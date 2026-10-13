@@ -19,6 +19,8 @@ export interface SyncItem {
   errorCode?: string;
   /** El resultado remoto no se pudo determinar; no se reintenta automáticamente. */
   uncertain?: boolean;
+  /** Primer código que dejó la operación incierta. `errorCode` solo guarda el último aviso. */
+  uncertainCause?: string;
   updatedAt?: string;
   /** Lease de envío: dueño, vencimiento y token. Ver `LocalRepository.claimSync`. */
   leaseOwner?: string;

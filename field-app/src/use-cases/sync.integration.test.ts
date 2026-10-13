@@ -66,6 +66,21 @@ describe("durable sync engine", () => {
     expect(await repository.getRecord("operation-lookup-00000000-0000-4000-8000-000000000017")).toMatchObject({ status: "PHYSICAL_UNKNOWN", physicalStatus: "PHYSICAL_UNKNOWN" });
   });
 
+  it("keeps the original uncertain cause when repeated lookups report not found", async () => {
+    const repository = await setup("sync-cause");
+    const operationId = "operation-cause-00000000-0000-4000-8000-000000000031";
+    await persistUncertain(repository, operationId);
+    const transport = new MockSyncTransport();
+    transport.lookupResponse = { status: "not_found", operationId };
+    const engine = new SyncEngine(repository, new MockConnectivity("online"), transport);
+    await engine.syncOnce();
+    await engine.syncOnce();
+    expect(transport.lookups).toEqual([operationId, operationId]);
+    expect(transport.sent).toHaveLength(0);
+    expect(await repository.listSyncItems()).toMatchObject([{ status: "failed", uncertain: true, errorCode: "LOOKUP_NOT_FOUND", uncertainCause: "RESPONSE_LOST", attempts: 2 }]);
+    expect(await repository.getRecord(operationId)).toMatchObject({ status: "PHYSICAL_UNKNOWN", errorCode: "RESPONSE_LOST" });
+  });
+
   it("does not forward when lookup confirms remote processing", async () => {
     const repository = await setup("sync-confirmed");
     await persistUncertain(repository, "operation-confirmed-00000000-0000-4000-8000-000000000018");
