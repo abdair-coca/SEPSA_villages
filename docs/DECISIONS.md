@@ -121,3 +121,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** La autorización de corte se consume cuando el técnico confirma el corte (`POST /v1/authorizations/cut/consume`), con el reintento de D019, y no al aceptar la sincronización. El sync de un CUT acepta una autorización `CONSUMED` por esa misma operación sin volver a exigir vigencia. Una reserva `RESERVED` de una versión anterior de la app se sigue consumiendo en el sync, solo si no venció. `GET /v1/authorizations/cut/{operation_id}` permite verificar un consumo incierto.
 **Consecuencia:** Antes, un corte físico ya hecho cuya sincronización llegaba después de `AUTHORIZATION_TTL_SECONDS` (300 s) era rechazado y quedaba sin registro en el servidor. Ahora el vencimiento solo limita el tiempo entre autorizar y confirmar. El backend se despliega antes que la app: acepta ambos flujos.
+
+## D021 — Entrega documental como copia fechada
+
+**Estado:** vigente
+**Decisión:** La documentación de entrega para SEPSA vive en `docs/entrega-sepsa/`. Es una copia autocontenida y fechada, derivada de las fuentes activas (`docs/RULES.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/features/`, `docs/api/`, `docs/operations/` y el código). No reemplaza ninguna fuente activa.
+**Consecuencia:** Cada documento de la entrega indica su fuente y su fecha. Un cambio en una fuente se refleja en la entrega en la misma tarea. Si la entrega y una fuente difieren, manda la fuente y la entrega se corrige. Los pendientes de SEPSA se listan en `docs/entrega-sepsa/14-pendientes-sepsa.md` y no se presentan como reglas oficiales.
