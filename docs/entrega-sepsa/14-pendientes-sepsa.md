@@ -1,10 +1,10 @@
 # Pendientes para SEPSA
 
-Fuente: marcadores `TODO: VALIDAR CON SEPSA` en los documentos activos de `docs/` (excluido `docs/archive/`), al 2026-10-12. Cada entrada apunta a la línea de origen.
+Fuente: marcadores `TODO: VALIDAR CON SEPSA` en los documentos activos de `docs/` (excluido `docs/archive/`), al 2026-10-12, y pendientes sin marcador de `docs/DOMAIN.md` y `docs/ARCHITECTURE.md` (P-11, P-20 a P-22). Cada entrada apunta a la línea de origen.
 Fecha: 2026-10-12
 Estado: entrega, copia fechada. Ninguna entrada es una regla oficial: son preguntas que SEPSA debe responder.
 
-Las 18 ocurrencias activas del marcador tienen entrada; además hay una entrada sin marcador (P-11). Si una fuente cambia o se resuelve un pendiente, se actualiza esta lista en la misma tarea.
+Las 18 ocurrencias activas del marcador tienen entrada. Hay cuatro pendientes sin marcador: P-11, P-20, P-21 y P-22. Si una fuente cambia o se resuelve un pendiente, se actualiza esta lista en la misma tarea.
 
 ## Reglas de corte y reconexión
 
@@ -24,6 +24,9 @@ Las 18 ocurrencias activas del marcador tienen entrada; además hay una entrada 
 | P-07 | `DEMORA`: formato oficial y longitud máxima (el piloto limita a 1.000 caracteres). | `docs/DOMAIN.md:81` | 02, 05 |
 | P-08 | `ENER_PROM`: periodo de cálculo frente a frecuencia de actualización. | `docs/DOMAIN.md:84` | 02, 05 |
 | P-09 | `POT_FACT` e `IMP_REDUC`: significado y fuente. | `docs/DOMAIN.md:85` | 02, 05 |
+| P-20 | `NRO_CORREL`: lo asigna SEPSA; falta definir cómo lo recibirá la aplicación. **Sin marcador en el texto.** | `docs/DOMAIN.md:77` | 02, 05 |
+| P-21 | Fuente autorizada de la fecha y hora de pago (`FECHA_PAGO`, `HORA_PAGO`), necesaria para `TIEMPO`. El procesamiento de pagos queda fuera del alcance. **Sin marcador en el texto.** | `docs/DOMAIN.md:80` y `docs/DOMAIN.md:87` | 02, 05 |
+| P-22 | Formato y destino de salida SC08 (archivo o API). **Sin marcador en el texto.** | `docs/DOMAIN.md:89` | 02, 05 |
 
 ## Arquitectura, operación y datos
 
@@ -47,6 +50,6 @@ Las 18 ocurrencias activas del marcador tienen entrada; además hay una entrada 
 
 ---
 
-Conteo de control: las 18 ocurrencias del marcador en los documentos activos tienen una entrada: P-01 a P-10 y P-12 a P-19. P-11 es el único pendiente sin marcador (ver su entrada). Verificar con `grep -rc "TODO: VALIDAR CON SEPSA" docs --include=*.md --exclude-dir=archive` antes de cerrar F0.
+Conteo de control: las 18 ocurrencias del marcador en los documentos activos tienen una entrada: P-01 a P-10 y P-12 a P-19. P-11, P-20, P-21 y P-22 no tienen marcador en el texto fuente; se incluyen porque la entrega debe cubrirlos (ver cada entrada). Verificar con `grep -rc "TODO: VALIDAR CON SEPSA" docs --include=*.md --exclude-dir=archive` antes de cerrar F0.
 
 Se listan en el orden en que aparecen en la fuente, no por prioridad. Las prioridades se decidirán con SEPSA.
