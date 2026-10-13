@@ -30,7 +30,7 @@ Los archivos marcados como "pendiente, F_n" se generan en la fase indicada de `.
 
 ### 4. Plan de pruebas, casos de prueba, criterios de aceptación y resultados obtenidos
 
-- `10-plan-pruebas.md`: pendiente, F4.
+- `10-plan-pruebas.md`: estrategia, catálogo de pruebas, cobertura por requisito y criterios de aceptación propuestos (F4).
 - `11-resultados-pruebas.md`: pendiente, F5.
 
 ### 5. Medidas de seguridad, perfiles de acceso y tratamiento de la información
