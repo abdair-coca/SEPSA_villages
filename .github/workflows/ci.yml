@@ -67,6 +67,9 @@ jobs:
         working-directory: field-app
       - run: npm test -- --run
         working-directory: field-app
+      - name: Guard of the simulated smoke build
+        run: npm run test:smoke-guard
+        working-directory: field-app
       - name: Production build without the simulated mode (D023)
         run: |
           npm run build
