@@ -564,6 +564,34 @@
         }
       }
     },
+    "/v1/authorizations/cut/consume": {
+      "post": {
+        "tags": ["Field"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "description": "Consumes the bound CUT authorization once when the technician confirms, before cutting. Exact replay for the same operation is idempotent; a consumed authorization lets the later CUT sync be accepted after its expiry.",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CutAuthorizationConsumeRequest"}}}},
+        "responses": {
+          "200": {"description": "Consumed or rejected authorization status", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CutAuthorizationConsumeResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "401": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/authorizations/cut/{operation_id}": {
+      "get": {
+        "tags": ["Field"],
+        "security": [{"bearerAuth": []}, {"sessionCookie": []}],
+        "description": "Reads the state of the current technician's provisional CUT authorization without returning its token.",
+        "parameters": [{"$ref": "#/components/parameters/operation_id"}],
+        "responses": {
+          "200": {"description": "Authorization state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CutAuthorizationLookup"}}}},
+          "401": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
     "/v1/authorizations/reconnection": {
       "post": {
         "tags": ["Field"],
@@ -1604,6 +1632,40 @@
           "version": {"type": "integer", "minimum": 1},
           "issued_at": {"type": "string", "format": "date-time"},
           "expires_at": {"type": "string", "format": "date-time"},
+          "source": {"$ref": "#/components/schemas/Source"}
+        },
+        "additionalProperties": false
+      },
+      "CutAuthorizationConsumeRequest": {
+        "type": "object",
+        "required": ["authorization_id", "token", "order_id", "technician_id", "device_id", "operation_id", "version"],
+        "properties": {
+          "authorization_id": {"type": "string", "format": "uuid"},
+          "token": {"type": "string", "minLength": 1},
+          "order_id": {"type": "string", "format": "uuid"},
+          "technician_id": {"type": "string", "format": "uuid"},
+          "device_id": {"type": "string", "minLength": 1},
+          "operation_id": {"type": "string", "minLength": 1},
+          "version": {"type": "integer", "minimum": 1}
+        },
+        "additionalProperties": false
+      },
+      "CutAuthorizationConsumeResponse": {
+        "type": "object",
+        "required": ["status", "operation_id", "source"],
+        "properties": {
+          "status": {"enum": ["consumed", "not_authorized"]},
+          "operation_id": {"type": "string"},
+          "source": {"$ref": "#/components/schemas/Source"}
+        },
+        "additionalProperties": false
+      },
+      "CutAuthorizationLookup": {
+        "type": "object",
+        "required": ["status", "operation_id", "source"],
+        "properties": {
+          "status": {"enum": ["reserved", "consumed", "expired", "rejected", "not_found", "unknown"]},
+          "operation_id": {"type": "string"},
           "source": {"$ref": "#/components/schemas/Source"}
         },
         "additionalProperties": false

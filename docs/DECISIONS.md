@@ -115,3 +115,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** Si el consumo de una habilitación de un solo uso termina en resultado incierto (red, tiempo agotado de 15 s o 5xx), la app lo reintenta con el mismo `operationId` y token, con esperas de 1 s y 3 s (`consumeWithRetries`, `field-app/src/use-cases/consume-retry.ts`). Un 401 (`UNAUTHENTICATED`) no se reintenta. No hay límite por vigencia: el backend devuelve `consumed` al replay del mismo `operationId` aunque la habilitación haya vencido, y `not_enabled` si no se consumió, así que toda respuesta concluyente es verdadera.
 **Consecuencia:** Una respuesta perdida deja de producir una reconexión incierta en la mayoría de los casos. Si los tres intentos fallan, la operación queda `PHYSICAL_UNKNOWN` con su causa y se verifica como en D017. Nunca se pide una habilitación nueva automáticamente.
+
+## D020 — El corte consume su autorización al confirmar
+
+**Estado:** vigente
+**Decisión:** La autorización de corte se consume cuando el técnico confirma el corte (`POST /v1/authorizations/cut/consume`), con el reintento de D019, y no al aceptar la sincronización. El sync de un CUT acepta una autorización `CONSUMED` por esa misma operación sin volver a exigir vigencia. Una reserva `RESERVED` de una versión anterior de la app se sigue consumiendo en el sync, solo si no venció. `GET /v1/authorizations/cut/{operation_id}` permite verificar un consumo incierto.
+**Consecuencia:** Antes, un corte físico ya hecho cuya sincronización llegaba después de `AUTHORIZATION_TTL_SECONDS` (300 s) era rechazado y quedaba sin registro en el servidor. Ahora el vencimiento solo limita el tiempo entre autorizar y confirmar. El backend se despliega antes que la app: acepta ambos flujos.

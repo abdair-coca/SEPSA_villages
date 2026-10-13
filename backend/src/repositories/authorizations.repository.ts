@@ -27,7 +27,8 @@ export interface ActiveReconnectionAuthorization {
   status: string;
 }
 
-export interface ReconnectionGrant {
+/** Autorización (corte o reconexión) leída por `authorization_id` para consumirla. */
+export interface AuthorizationGrant {
   authorization_id: string;
   operation_id: string;
   order_id: string;
@@ -42,7 +43,7 @@ export interface ReconnectionGrant {
   action: string;
 }
 
-export interface ReconnectionLookupGrant {
+export interface AuthorizationLookupGrant {
   authorization_id: string;
   technician_id: string;
   status: string;
@@ -107,8 +108,8 @@ export async function expireReservedAuthorization(client: Queryable, authorizati
   await client.query("UPDATE cut_authorizations SET status = 'EXPIRED' WHERE authorization_id = $1 AND status = 'RESERVED'", [authorizationId]);
 }
 
-export async function findReconnectionGrantForUpdate(client: Queryable, authorizationId: string): Promise<ReconnectionGrant | undefined> {
-  const grantResult = await client.query<ReconnectionGrant>("SELECT authorization_id, operation_id, order_id, technician_id, technician_name_snapshot, device_id, order_version, token_hash, status, expires_at, consumed_operation_id, action FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE", [authorizationId]);
+export async function findAuthorizationGrantForUpdate(client: Queryable, authorizationId: string): Promise<AuthorizationGrant | undefined> {
+  const grantResult = await client.query<AuthorizationGrant>("SELECT authorization_id, operation_id, order_id, technician_id, technician_name_snapshot, device_id, order_version, token_hash, status, expires_at, consumed_operation_id, action FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE", [authorizationId]);
   return grantResult.rows[0];
 }
 
@@ -118,8 +119,9 @@ export async function consumeReconnectionAuthorization(client: Queryable, author
   return consumedResult.rowCount;
 }
 
-export async function findReconnectionByOperationForUpdate(client: Queryable, operationId: string): Promise<ReconnectionLookupGrant | undefined> {
-  const rows = await client.query<ReconnectionLookupGrant>("SELECT authorization_id, technician_id, status, expires_at FROM cut_authorizations WHERE operation_id = $1 AND action = 'RECONNECTION' FOR UPDATE", [operationId]);
+/** Estado de la autorización de una acción (`CUT` o `RECONNECTION`) por `operation_id`, sin token. */
+export async function findGrantStatusByOperationForUpdate(client: Queryable, operationId: string, action: "CUT" | "RECONNECTION"): Promise<AuthorizationLookupGrant | undefined> {
+  const rows = await client.query<AuthorizationLookupGrant>("SELECT authorization_id, technician_id, status, expires_at FROM cut_authorizations WHERE operation_id = $1 AND action = $2 FOR UPDATE", [operationId, action]);
   return rows.rows[0];
 }
 
@@ -147,6 +149,7 @@ export interface SyncCutAuthorizationRow {
   device_id: string;
   order_version: number;
   action: string;
+  consumed_operation_id: string | null;
 }
 
 /** Habilitación de reconexión ya consumida, leída al aceptar el sync de la reconexión. */
@@ -158,10 +161,10 @@ export async function findReconnectionAuthorizationForSyncForUpdate(client: Quer
   return authorization.rows[0];
 }
 
-/** Autorización de corte reservada, leída al aceptar el sync del CUT. */
+/** Autorización de corte (reservada o ya consumida por esta operación), leída al aceptar el sync del CUT. */
 export async function findCutAuthorizationForSyncForUpdate(client: Queryable, authorizationId: string): Promise<SyncCutAuthorizationRow | undefined> {
   const authorization = await client.query<SyncCutAuthorizationRow>(
-    "SELECT authorization_id, operation_id, token_hash, status, order_id, technician_id, technician_name_snapshot, device_id, order_version, action FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE",
+    "SELECT authorization_id, operation_id, token_hash, status, order_id, technician_id, technician_name_snapshot, device_id, order_version, action, consumed_operation_id FROM cut_authorizations WHERE authorization_id = $1 FOR UPDATE",
     [authorizationId],
   );
   return authorization.rows[0];

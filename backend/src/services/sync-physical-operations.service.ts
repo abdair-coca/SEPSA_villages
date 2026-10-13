@@ -60,9 +60,12 @@ async function acceptCut(client: PoolClient, user: SessionUser, payload: SyncPay
   if (!grant || !matchesCutAuthorization(grant, user, payload, authorizationToken)) {
     return rejectSync(client, user, payload, "La autorización no es válida, venció, ya fue consumida o no está ligada a esta operación.");
   }
-  // Consumo de un solo uso: solo pasa de RESERVED a CONSUMED si no venció (hora de la base, no del cliente).
-  const consumedCount = await consumeCutAuthorization(client, grant.authorization_id, payload.operation_id);
-  if (consumedCount !== 1) return rejectSync(client, user, payload, "La autorización no es válida, venció, ya fue consumida o no está ligada a esta operación.");
+  // Ya consumida al confirmar el corte (D020): no depende del vencimiento. Una reserva de una app anterior
+  // se consume aquí, una sola vez y solo si no venció (hora de la base, no del cliente).
+  if (grant.status === "RESERVED") {
+    const consumedCount = await consumeCutAuthorization(client, grant.authorization_id, payload.operation_id);
+    if (consumedCount !== 1) return rejectSync(client, user, payload, "La autorización no es válida, venció, ya fue consumida o no está ligada a esta operación.");
+  }
   const updatedCount = await markOrderCutExecuted(client, payload.order_id, payload.order_version);
   if (updatedCount !== 1) throw new HttpError(409, "VERSION_CONFLICT", "La orden cambió mientras se consumía la autorización.");
   await markSyncOperationAcknowledged(client, payload.operation_id);
@@ -90,7 +93,7 @@ function matchesCutAuthorization(grant: SyncCutAuthorizationRow, user: SessionUs
     grant.technician_id === user.userId &&
     grant.device_id === payload.device_id &&
     grant.order_version === payload.order_version &&
-    grant.status === "RESERVED" &&
+    (grant.status === "RESERVED" || (grant.status === "CONSUMED" && grant.consumed_operation_id === payload.operation_id)) &&
     grant.token_hash === hashToken(authorizationToken) &&
     grant.technician_name_snapshot === payload.technician_name_snapshot;
 }

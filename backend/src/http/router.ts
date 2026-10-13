@@ -64,6 +64,8 @@ export function createRoutes(c: RouteControllers): Route[] {
     { method: "POST", pattern: "/v1/orders/:order_id/assignment", access: "session", handler: ({ request, response, user, params }) => c.orders.assignOrder(request, response, user, params.order_id) },
     { method: "GET", pattern: "/v1/technician/orders", access: "session", handler: ({ response, user, url }) => c.orders.technicianOrders(response, user, url) },
     { method: "POST", pattern: "/v1/authorizations/cut", access: "session", handler: ({ request, response, user }) => c.authorizations.authorizeCut(request, response, user) },
+    { method: "POST", pattern: "/v1/authorizations/cut/consume", access: "session", handler: ({ request, response, user }) => c.authorizations.consumeCutAuthorization(request, response, user) },
+    { method: "GET", pattern: "/v1/authorizations/cut/:operation_id", access: "session", handler: ({ response, user, params }) => c.authorizations.lookupCutAuthorization(response, user, params.operation_id) },
     { method: "POST", pattern: "/v1/authorizations/reconnection", access: "session", handler: ({ request, response, user }) => c.authorizations.authorizeReconnection(request, response, user) },
     { method: "POST", pattern: "/v1/authorizations/reconnection/consume", access: "session", handler: ({ request, response, user }) => c.authorizations.consumeReconnectionEnablement(request, response, user) },
     { method: "GET", pattern: "/v1/authorizations/reconnection/:operation_id", access: "session", handler: ({ response, user, params }) => c.authorizations.lookupReconnectionEnablement(response, user, params.operation_id) },

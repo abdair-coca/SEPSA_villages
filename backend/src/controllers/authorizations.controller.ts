@@ -1,12 +1,11 @@
 /**
- * HTTP de las autorizaciones: corte (`POST /v1/authorizations/cut`), habilitación de reconexión (emitir,
- * consumir y consultar). Todas son solo TECHNICIAN. Lee y valida la forma del cuerpo, comprueba el rol y que el
+ * HTTP de las autorizaciones: corte y habilitación de reconexión (emitir, consumir y consultar). Todas son solo TECHNICIAN. Lee y valida la forma del cuerpo, comprueba el rol y que el
  * técnico del cuerpo sea el de la sesión, emite el log de seguridad y delega las reglas (un solo uso, vencimiento,
  * vínculos, auditoría) en `services/authorizations.service.ts`.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { HttpError, parseJsonBody, requiredInteger, requiredString, sendJson } from "../http/responses.js";
-import { createAuthorizationService, type AuthorizationRequest, type ConsumeReconnectionRequest } from "../services/authorizations.service.js";
+import { createAuthorizationService, type AuthorizationRequest, type ConsumeCutRequest, type ConsumeReconnectionRequest } from "../services/authorizations.service.js";
 import type { ApplicationContext } from "../shared/application-context.js";
 import { isUuid, requireRole } from "../shared/request-validation.js";
 import type { SessionUser } from "../types.js";
@@ -16,6 +15,8 @@ export interface AuthorizationHandlers {
   authorizeReconnection(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void>;
   consumeReconnectionEnablement(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void>;
   lookupReconnectionEnablement(response: ServerResponse, user: SessionUser, operationId: string | undefined): Promise<void>;
+  consumeCutAuthorization(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void>;
+  lookupCutAuthorization(response: ServerResponse, user: SessionUser, operationId: string | undefined): Promise<void>;
 }
 
 export function createAuthorizationHandlers(context: ApplicationContext): AuthorizationHandlers {
@@ -55,7 +56,23 @@ export function createAuthorizationHandlers(context: ApplicationContext): Author
     sendJson(response, 200, result);
   }
 
-  return { authorizeCut, authorizeReconnection, consumeReconnectionEnablement, lookupReconnectionEnablement };
+  async function consumeCutAuthorization(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void> {
+    requireRole(user, "TECHNICIAN");
+    const consumeRequest = await readConsumeCutRequest(request, context.config.maxBodyBytes);
+    if (consumeRequest.technicianId !== user.userId) throw new HttpError(403, "TECHNICIAN_SCOPE", "El técnico de la autorización no coincide con la sesión.");
+    if (!isUuid(consumeRequest.orderId) || consumeRequest.version < 1) throw new HttpError(400, "INVALID_REQUEST", "order_id y version no son válidos.");
+    const result = await service.consumeCutAuthorization(user, consumeRequest);
+    context.logEvent("authorization.cut", { requestId: String(response.getHeader("x-request-id")), result: result.status });
+    sendJson(response, 200, result);
+  }
+
+  async function lookupCutAuthorization(response: ServerResponse, user: SessionUser, operationId: string | undefined): Promise<void> {
+    requireRole(user, "TECHNICIAN");
+    if (!operationId) throw new HttpError(400, "INVALID_REQUEST", "operation_id es obligatorio.");
+    sendJson(response, 200, await service.lookupCutAuthorization(user, operationId));
+  }
+
+  return { authorizeCut, authorizeReconnection, consumeReconnectionEnablement, lookupReconnectionEnablement, consumeCutAuthorization, lookupCutAuthorization };
 }
 
 async function readAuthorizationRequest(request: IncomingMessage, maxBodyBytes: number): Promise<AuthorizationRequest> {
@@ -65,6 +82,19 @@ async function readAuthorizationRequest(request: IncomingMessage, maxBodyBytes: 
     orderId: requiredString(body.order_id, "order_id"),
     deviceId: requiredString(body.device_id, "device_id"),
     orderVersion: requiredInteger(body.order_version, "order_version"),
+  };
+}
+
+async function readConsumeCutRequest(request: IncomingMessage, maxBodyBytes: number): Promise<ConsumeCutRequest> {
+  const body = await parseJsonBody(request, maxBodyBytes);
+  return {
+    authorizationId: requiredString(body.authorization_id, "authorization_id"),
+    token: requiredString(body.token, "token"),
+    orderId: requiredString(body.order_id, "order_id"),
+    technicianId: requiredString(body.technician_id, "technician_id"),
+    deviceId: requiredString(body.device_id, "device_id"),
+    operationId: requiredString(body.operation_id, "operation_id"),
+    version: requiredInteger(body.version, "version"),
   };
 }
 
