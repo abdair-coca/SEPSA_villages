@@ -12,6 +12,18 @@ export interface PilotOrderResponseDto {
 export interface PilotBatchOrderResponseDto { batch_id: string; requested_debtor_ids: string[]; created: PilotOrderResponseDto[]; skipped: Array<{ debtor_id: string; reason: BatchOrderSkip["reason"]; message: string }>; }
 export interface PilotAuthorizationResponseDto { authorization_id: string; token: string; order_id: string; technician_id: string; technician_name_snapshot?: string; device_id: string; operation_id: string; version: number; issued_at: string; expires_at: string; source?: "PILOT_PROVISIONAL"; }
 export interface PilotReconnectionEnablementResponseDto { enablement_id: string; token: string; order_id: string; technician_id: string; technician_name_snapshot: string; device_id: string; operation_id: string; version: number; issued_at: string; expires_at: string; source: "PILOT_PROVISIONAL"; }
+export interface PilotCutConsumeResponseDto {
+  status: "consumed" | "not_authorized";
+  operation_id: string;
+  source: "PILOT_PROVISIONAL";
+}
+
+export interface PilotCutAuthorizationLookupDto {
+  status: "reserved" | "consumed" | "expired" | "rejected" | "not_found" | "unknown";
+  operation_id: string;
+  source: "PILOT_PROVISIONAL";
+}
+
 export interface PilotReconnectionConsumeResponseDto { status: "consumed" | "already_consumed" | "not_enabled" | "unknown"; operation_id: string; source: "PILOT_PROVISIONAL"; }
 export interface PilotReconnectionEnablementLookupDto { status: "reserved" | "consumed" | "expired" | "not_found" | "unknown"; operation_id: string; error_code?: string; source: "PILOT_PROVISIONAL"; }
 export interface PilotSyncResponseDto { status: "acknowledged"; operation_id: string; source: "PILOT_PROVISIONAL"; order_id: string; technician_id: string; technician_name_snapshot?: string; device_id: string; order_version?: number; action: "CUT" | "RECONNECTION" | "VISIT"; recorded_at: string; effective_at?: string; demora?: string; evidence_refs: string[]; field_capture?: import("../../domain/types").FieldCapture; }

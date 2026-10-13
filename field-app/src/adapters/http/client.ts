@@ -34,9 +34,9 @@ import type {
   TechnicalOrderAuthorizationInput,
   TechnicalOrderAuthorizationResult,
 } from "../../ports/authority";
-import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, ConsumeEnablementRequest, ConsumeEnablementResponse, EnablementAdapter, EnablementLookupResult, EnablementRequest, EnablementResponse, RemoteResult } from "../../ports/authorization";
+import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, ConsumeEnablementRequest, CutAuthorizationLookupResult, ConsumeEnablementResponse, EnablementAdapter, EnablementLookupResult, EnablementRequest, EnablementResponse, RemoteResult } from "../../ports/authorization";
 import type { EvidenceUploadPort, SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
-import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotReconnectionConsumeResponseDto, PilotReconnectionEnablementLookupDto, PilotReconnectionEnablementResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
+import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotCutAuthorizationLookupDto, PilotCutConsumeResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotReconnectionConsumeResponseDto, PilotReconnectionEnablementLookupDto, PilotReconnectionEnablementResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
 
 /**
  * Rechazos del backend a `POST /v1/authorizations/cut` que ocurren antes de crear cualquier reserva: el corte no
@@ -258,7 +258,7 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
   }
 
   /**
-   * Pide autorización de corte. En el piloto el consumo es `deferred`: el backend la consume al aceptar el sync.
+   * Pide autorización de corte. El consumo es `immediate` (D020): `consumeCut` la consume al confirmar el corte.
    * Un rechazo definitivo (`CUT_AUTHORIZATION_REJECTIONS`) o un 401 vuelve como `not_authorized` con su código, para que
    * el caso de uso lo registre como visita bloqueada. Un 5xx o un replay vuelve como `unknown`. Cualquier otro error se relanza.
    */
@@ -273,12 +273,33 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
       if (error.status >= 500 || AUTHORIZATION_REPLAY_CODES.has(error.code)) return { operationId: input.operationId, status: "unknown", errorCode: error.code };
       throw error;
     }
-    return { operationId: response.operation_id, status: "authorized", grant: { authorizationId: response.authorization_id, token: response.token, orderId: response.order_id, technicianId: response.technician_id, technicianNameSnapshot: response.technician_name_snapshot, deviceId: response.device_id, operationId: response.operation_id, version: response.version, issuedAt: response.issued_at, expiresAt: response.expires_at, consumption: "deferred" } };
+    return { operationId: response.operation_id, status: "authorized", grant: { authorizationId: response.authorization_id, token: response.token, orderId: response.order_id, technicianId: response.technician_id, technicianNameSnapshot: response.technician_name_snapshot, deviceId: response.device_id, operationId: response.operation_id, version: response.version, issuedAt: response.issued_at, expiresAt: response.expires_at, consumption: "immediate" } };
   }
 
-  /** No se consume desde el cliente en el piloto; devolver `unknown` asegura que nunca se tome como consumida. */
+  /** Consume la autorización de corte al confirmar (D020). Mismo tratamiento de errores que `consumeReconnection`. */
   async consumeCut(input: ConsumeRequest): Promise<ConsumeResponse> {
-    return { operationId: input.operationId, status: "unknown", errorCode: "SERVER_SIDE_CONSUMPTION_REQUIRED" };
+    const session = this.requireActiveSession();
+    try {
+      const response = await this.request<PilotCutConsumeResponseDto>("/v1/authorizations/cut/consume", { method: "POST", body: {
+        authorization_id: input.authorizationId,
+        token: input.token,
+        order_id: input.orderId,
+        technician_id: input.technicianId,
+        device_id: input.deviceId,
+        operation_id: input.operationId,
+        version: input.version,
+      }, timeoutMs: CONSUME_TIMEOUT_MS }, session);
+      return { operationId: response.operation_id, status: response.status };
+    } catch (error) {
+      if (error instanceof HttpPilotError && error.status === 409) return { operationId: input.operationId, status: "not_authorized", errorCode: error.code };
+      if (error instanceof HttpPilotError && (error.status >= 500 || error.status === 401)) return { operationId: input.operationId, status: "unknown", errorCode: error.code };
+      throw error;
+    }
+  }
+
+  async lookupCutAuthorization(operationId: string): Promise<CutAuthorizationLookupResult> {
+    const response = await this.request<PilotCutAuthorizationLookupDto>(`/v1/authorizations/cut/${encodeURIComponent(operationId)}`, { method: "GET" }, this.requireActiveSession());
+    return { status: response.status, operationId: response.operation_id };
   }
 
   async requestReconnection(input: EnablementRequest): Promise<EnablementResponse> {

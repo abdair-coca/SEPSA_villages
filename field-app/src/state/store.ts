@@ -238,7 +238,7 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
           await dependencies.repository.recoverInFlight?.(now());
           const workPackage = await loadOrSeed();
           assertPackageScope(workPackage, dependencies);
-          await syncCoordinator.recoverPendingReconnections();
+          await syncCoordinator.recoverPendingOperations();
           await refresh();
          update({ status: "ready", busyAction: undefined, message: undefined });
         } catch (error) {

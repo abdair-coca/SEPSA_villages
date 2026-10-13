@@ -97,6 +97,16 @@ export interface AuthorizationAdapter {
   consumeCut(input: ConsumeRequest): Promise<ConsumeResponse>;
   /** Consulta el estado de una operación de corte por su id. */
   lookup(operationId: string): Promise<RemoteResult>;
+  /**
+   * Estado de la autorización de corte de una operación (D020). Solo lo tiene el backend con consumo inmediato;
+   * permite completar un corte cuyo consumo quedó incierto sin volver a cortar.
+   */
+  lookupCutAuthorization?(operationId: string): Promise<CutAuthorizationLookupResult>;
+}
+
+export interface CutAuthorizationLookupResult {
+  status: "reserved" | "consumed" | "expired" | "rejected" | "not_found" | "unknown";
+  operationId: string;
 }
 
 export type EnablementStatus = "enabled" | "not_enabled" | "unknown";

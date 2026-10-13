@@ -22,7 +22,7 @@ Registrar una visita o un corte físico sobre una orden asignada, con contexto s
 - GPS: coordenadas válidas o `saltar_control_coordenadas` con justificación.
 - Evidencia: JPEG/PNG optimizada o `saltar_control_fotos` con justificación.
 - En el piloto, `POST /v1/evidence/assets` recomputa SHA-256 y guarda asset ligado a orden, operación, técnico y dispositivo. Reintento del mismo identificador/hash/binding es idempotente; cambiar contenido o binding produce conflicto.
-- Un corte con foto no se acepta hasta verificar todas sus referencias dentro de la transacción que consume autorización. La excepción existente sin foto conserva motivo y auditoría.
+- La autorización se consume cuando el técnico confirma el corte ([D020](../DECISIONS.md)). Un corte con foto no se acepta en el servidor hasta verificar todas sus referencias dentro de la transacción de sync. La excepción existente sin foto conserva motivo y auditoría.
 - Sin autorización concluyente y vigente no se corta.
 - Un rechazo explícito del backend a la autorización (`ORDER_NOT_FOUND`, `ORDER_NOT_ASSIGNED`, `VERSION_CONFLICT`, `ORDER_NOT_ELIGIBLE`, `PHYSICAL_STATUS_NOT_ELIGIBLE`) o una sesión no válida (401) no autoriza: queda como visita bloqueada (`NOT_AUTHORIZED`) con ese código.
 - Un error 5xx, un replay de operación (`AUTHORIZATION_OPERATION_REPLAY`) o un conflicto de identificador (`IDEMPOTENCY_CONFLICT`) es resultado incierto: queda como visita `AUTHORIZATION_UNKNOWN` para revisión. Tampoco autoriza.

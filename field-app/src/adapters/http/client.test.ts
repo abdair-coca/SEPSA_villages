@@ -211,7 +211,7 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     await expect(client.findDebtors({ session })).resolves.toEqual([expect.objectContaining({ area: "B", areaName: "BETANZOS", route: "078", routeName: "COA COA" })]);
   });
 
-  it("keeps cut authorization deferred and sends its binding to sync", async () => {
+  it("consumes the cut authorization immediately (D020) and sends its binding to sync", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const client = new HttpPilotClient({
       baseUrl: "http://localhost:8080",
@@ -219,18 +219,24 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
         requests.push({ url: String(input), init });
         if (String(input).endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "tech-1", username: "tech", display_name: "Tech", role: "TECHNICIAN" } });
         if (String(input).endsWith("/authorizations/cut")) return json({ authorization_id: "auth-1", token: "opaque-1", order_id: "order-1", technician_id: "tech-1", device_id: "device-1", operation_id: "cut-1", version: 2, issued_at: "2026-09-12T09:00:00.000Z", expires_at: "2026-09-12T09:05:00.000Z" });
+        if (String(input).endsWith("/authorizations/cut/consume")) return json({ status: "consumed", operation_id: "cut-1", source: "PILOT_PROVISIONAL" });
+        if (String(input).endsWith("/authorizations/cut/cut-1")) return json({ status: "consumed", operation_id: "cut-1", source: "PILOT_PROVISIONAL" });
         return json({ status: "acknowledged", operation_id: "cut-1" });
       },
     });
 
     const session = await client.authenticate({ username: "tech", password: "password" });
     const authorization = await client.requestCut({ orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", operationId: "cut-1", orderVersion: 2 });
+    const consumed = await client.consumeCut({ authorizationId: "auth-1", token: "opaque-1", orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", operationId: "cut-1", version: 2 });
+    await expect(client.lookupCutAuthorization("cut-1")).resolves.toEqual({ status: "consumed", operationId: "cut-1" });
     const result = await client.send({ operationId: "cut-1", action: "CUT", orderId: "order-1", technicianId: "tech-1", deviceId: "device-1", recordedAt: "2026-09-12T09:01:00.000Z", evidenceRefs: ["evidence-1"], orderVersion: 2, authorizationId: authorization.grant?.authorizationId, authorizationToken: authorization.grant?.token, fieldCapture: { reading: { value: 1, unit: "kWh", meterId: "meter-1", recordedAt: "2026-09-12T09:01:00.000Z", status: "CAPTURED" }, location: { latitude: 1, longitude: 1, accuracyMeters: 5, recordedAt: "2026-09-12T09:01:00.000Z", status: "CAPTURED" }, cutType: "RED", nearbyMeters: false } }, session);
 
     expect(session.authenticity).toBe("PILOT_PROVISIONAL");
-    expect(authorization.grant?.consumption).toBe("deferred");
+    expect(authorization.grant?.consumption).toBe("immediate");
+    expect(consumed).toEqual({ status: "consumed", operationId: "cut-1" });
+    expect(JSON.parse(String(requests[2]?.init.body))).toEqual({ authorization_id: "auth-1", token: "opaque-1", order_id: "order-1", technician_id: "tech-1", device_id: "device-1", operation_id: "cut-1", version: 2 });
     expect(result).toEqual({ status: "acknowledged", operationId: "cut-1" });
-    expect(JSON.parse(String(requests[2]?.init.body))).toMatchObject({ authorization_id: "auth-1", authorization_token: "opaque-1", order_version: 2, operation_id: "cut-1" });
+    expect(JSON.parse(String(requests[4]?.init.body))).toMatchObject({ authorization_id: "auth-1", authorization_token: "opaque-1", order_version: 2, operation_id: "cut-1" });
   });
 
   it.each([

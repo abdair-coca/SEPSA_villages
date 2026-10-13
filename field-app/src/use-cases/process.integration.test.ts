@@ -214,6 +214,7 @@ function input(repository: MemoryRepository, authorization: StubAuthorization, o
   return {
     repository,
     authorization,
+    sleep: async () => undefined,
     order,
     operationId,
     technicianId: "tech-1",
@@ -437,7 +438,7 @@ describe("cut process integration boundaries", () => {
     }
     expect(result.operation.physicalStatus).toBe("PHYSICAL_UNKNOWN");
     expect(authorization.lookupCalls).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
-    expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(["operation-00000000-0000-4000-8000-000000000001"]);
+    expect(authorization.consumeCalls.map((call) => call.operationId)).toEqual(Array(3).fill("operation-00000000-0000-4000-8000-000000000001")); // tres intentos con el mismo operationId (D019)
     expect(repository.updates[0].order?.physicalStatus).toBe("PHYSICAL_UNKNOWN");
     expect(repository.updates[0].syncItem).toMatchObject({
       operationId: "operation-00000000-0000-4000-8000-000000000001",
@@ -460,7 +461,8 @@ describe("cut process integration boundaries", () => {
 
     expect(replay.outcome).toBe("physical_unknown");
     expect(authorization.lookupCalls).toEqual(["operation-00000000-0000-4000-8000-000000000001", "operation-00000000-0000-4000-8000-000000000001"]);
-    expect(authorization.consumeCalls).toHaveLength(1);
+    // Solo los tres intentos de la ejecución original: el replay no vuelve a consumir.
+    expect(authorization.consumeCalls).toHaveLength(3);
     expect(await repository.getOrder("order-1")).toMatchObject({
       physicalStatus: "PHYSICAL_UNKNOWN",
       version: 3,

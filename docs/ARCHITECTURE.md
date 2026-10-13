@@ -123,7 +123,7 @@ Regla de dependencias: `controllers → services → repositories → db`. Excep
 3. **Técnico descarga su jornada.** `App.tsx` `TechnicianRuntime` → `loadPackage()` → `use-cases/download.ts` `downloadAssigned` → `GET /v1/technician/orders` → `controllers/orders.controller.ts` `technicianOrders` → `services/orders.service.ts` `buildWorkPackage`; se guarda con `IndexedDbLocalRepository.savePackage`.
 4. **Técnico captura el corte.** `components/OrderDetail.tsx` → `components/CaptureForm.tsx` → `state/store-actions.ts` `executeCut` → `state/evidence.ts` `prepareEvidence`.
 5. **Autorización online y guardado local.** `use-cases/process.ts` `executeCut` → `HttpPilotClient.requestCut` → `POST /v1/authorizations/cut` → `controllers/authorizations.controller.ts` → `services/authorizations.service.ts` `authorizeCut`; luego `IndexedDbLocalRepository.claimCut` guarda operación, orden y cola en una transacción.
-6. **Sincronización.** `state/store-sync.ts` `requestSync` → `use-cases/sync.ts` `SyncEngine.syncOnce` → subida de fotos (`POST /v1/evidence/assets` → `controllers/evidence.controller.ts` → `services/evidence.service.ts` `uploadEvidence`) → `markCutSendStarted` → `POST /v1/sync/operations` → `controllers/sync.controller.ts` → `services/sync.service.ts` → `services/sync-apply.service.ts` `applySync` → `services/sync-physical-operations.service.ts` (consume la autorización y confirma la orden).
+6. **Sincronización.** `state/store-sync.ts` `requestSync` → `use-cases/sync.ts` `SyncEngine.syncOnce` → subida de fotos (`POST /v1/evidence/assets` → `controllers/evidence.controller.ts` → `services/evidence.service.ts` `uploadEvidence`) → `markCutSendStarted` → `POST /v1/sync/operations` → `controllers/sync.controller.ts` → `services/sync.service.ts` → `services/sync-apply.service.ts` `applySync` → `services/sync-physical-operations.service.ts` (acepta la autorización ya consumida al confirmar el corte, o consume una reserva vigente de una app anterior, y confirma la orden).
 7. **Auditoría.** Cada cambio del backend inserta su evento en la misma transacción (`repositories/audit.repository.ts` `insertAudit`); el admin lo consulta con `GET /v1/audit` → `controllers/audit.controller.ts` `listAudit`.
 
 En modo simulado, los pasos remotos los resuelve `adapters/indexeddb/authority-repository.ts` en lugar del backend.
@@ -138,7 +138,7 @@ En el piloto conectado, `users.role` es el rol inicial; `user_role_grants` defin
 
 - El backend provisional no es la API oficial.
 - Excel se importa mediante scripts/migraciones; no es una dependencia de la UI ni la base definitiva.
-- Los blobs se conservan en IndexedDB. En el piloto, `EvidenceUploadPort` carga bytes por `/v1/evidence/assets`; servidor recomputa SHA-256 y guarda binding inmutable. CUT valida assets verificados antes de consumir autorización. API oficial, límites y retención siguen `TODO: VALIDAR CON SEPSA`.
+- Los blobs se conservan en IndexedDB. En el piloto, `EvidenceUploadPort` carga bytes por `/v1/evidence/assets`; servidor recomputa SHA-256 y guarda binding inmutable. CUT valida assets verificados antes de aceptar la operación. API oficial, límites y retención siguen `TODO: VALIDAR CON SEPSA`.
 - La autorización externa de corte es obligatoria online inmediatamente antes de la acción física.
 
 ## PLANNED

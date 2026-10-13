@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { executeCut } from "./process";
+import { executeCut, recoverCut } from "./process";
 import { executeOfflineVisit } from "./visit";
 import { LEGACY_LOCAL_EVIDENCE_CONFLICT_REASON, SyncEngine, toPayload } from "./sync";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
@@ -10,6 +10,7 @@ import { MockConnectivity } from "../adapters/mock/connectivity";
 import { MockSyncTransport } from "../adapters/mock/transport";
 import { ResponseLostError } from "../ports/authorization";
 import type { EvidenceReference, OperationRecord, WorkOrder, WorkPackage } from "../domain/types";
+import type { CutAuthorizationLookupResult } from "../ports/authorization";
 
 const databases: string[] = [];
 const repositories: IndexedDbLocalRepository[] = [];
@@ -39,7 +40,7 @@ async function persistUncertain(repository: IndexedDbLocalRepository, operationI
   authorization.requestResponse = { status: "authorized", grant: authGrant(operationId) };
   authorization.consumeError = new ResponseLostError();
   authorization.lookupResponse = { status: "unknown", operationId };
-   const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", evidence: { evidenceId: `evidence-${operationId}`, orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
+   const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", sleep: async () => undefined, evidence: { evidenceId: `evidence-${operationId}`, orderId: "order-sync", operationId, technicianId: "tech-1", deviceId: "device-1", mimeType: "image/jpeg", width: 100, height: 100, optimized: true }, fieldCapture: validFieldCapture(operationId) });
   expect(result.outcome).toBe("physical_unknown");
   await expect(repository.getEvidence(`evidence-${operationId}`)).resolves.toMatchObject({ operationId, orderId: "order-sync" });
 }
@@ -361,6 +362,69 @@ describe("durable sync engine", () => {
     expect(transport.sent).toHaveLength(0);
     await expect(repository.getRecord(operationId)).resolves.toMatchObject({ status: "PHYSICAL_UNKNOWN", physicalStatus: "PHYSICAL_UNKNOWN", syncStatus: "failed" });
     await expect(repository.getOrder("order-sync")).resolves.toMatchObject({ physicalStatus: "PHYSICAL_UNKNOWN", version: 3 });
+  });
+});
+
+
+describe("verification of an uncertain immediate cut (D020)", () => {
+  type LookupStatus = CutAuthorizationLookupResult["status"];
+
+  async function uncertainCut(name: string, operationId: string, lookupStatus: LookupStatus) {
+    const repository = await setup(name);
+    const authorization = Object.assign(new MockAuthorizationAdapter(), {
+      lookupCutAuthorization: async (id: string): Promise<CutAuthorizationLookupResult> => ({ status: lookupStatus, operationId: id }),
+    });
+    authorization.requestResponse = { status: "authorized", grant: authGrant(operationId) };
+    authorization.consumeError = new ResponseLostError();
+    authorization.lookupResponse = { status: "unknown", operationId };
+    // Sin foto: el motor de prueba no tiene subidor de evidencias; la excepción justificada evita ese paso.
+    const result = await executeCut({ repository, authorization, order: cutOrder, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:01:00.000Z", sleep: async () => undefined, exceptionReason: "saltar_control_fotos: prueba sin foto", fieldCapture: validFieldCapture(operationId) });
+    expect(result.outcome).toBe("physical_unknown");
+    authorization.consumeError = undefined;
+    return { repository, authorization };
+  }
+
+  const recovery = (repository: IndexedDbLocalRepository, authorization: MockAuthorizationAdapter, operationId: string) =>
+    recoverCut({ repository, authorization, operationId, technicianId: "tech-1", deviceId: "device-1", now: "2026-09-12T09:10:00.000Z", sleep: async () => undefined });
+
+  it("completes the cut when the server shows the authorization was consumed and then sends it once", async () => {
+    const operationId = "cut-verify-consumed-00000000-0000-4000-8000-000000000041";
+    const { repository, authorization } = await uncertainCut("cut-verify-consumed", operationId, "consumed");
+    const consumeCallsBefore = authorization.consumeCalls.length;
+
+    await expect(recovery(repository, authorization, operationId)).resolves.toMatchObject({ outcome: "executed", operation: { status: "CONFIRMED", physicalStatus: "CONFIRMED" } });
+    expect(authorization.consumeCalls).toHaveLength(consumeCallsBefore);
+    await expect(repository.getOrder("order-sync")).resolves.toMatchObject({ status: "EJECUTADO", physicalStatus: "CONFIRMED" });
+
+    const transport = new MockSyncTransport();
+    await expect(new SyncEngine(repository, new MockConnectivity("online"), transport).syncOnce()).resolves.toMatchObject({ synced: 1 });
+    expect(transport.sent.map((payload) => payload.operationId)).toEqual([operationId]);
+    expect(transport.lookups).toEqual([]);
+  });
+
+  it("consumes a still reserved authorization with the same operation id", async () => {
+    const operationId = "cut-verify-reserved-00000000-0000-4000-8000-000000000042";
+    const { repository, authorization } = await uncertainCut("cut-verify-reserved", operationId, "reserved");
+
+    await expect(recovery(repository, authorization, operationId)).resolves.toMatchObject({ outcome: "executed" });
+    expect(new Set(authorization.consumeCalls.map((call) => call.operationId))).toEqual(new Set([operationId]));
+  });
+
+  it.each(["expired", "rejected", "not_found", "unknown"] as const)("keeps the cut uncertain and untouched when the authorization is %s", async (status) => {
+    const operationId = `cut-verify-${status.replace("_", "-")}-00000000-0000-4000-8000-000000000043`;
+    const { repository, authorization } = await uncertainCut(`cut-verify-${status}`, operationId, status);
+    const consumeCallsBefore = authorization.consumeCalls.length;
+
+    await expect(recovery(repository, authorization, operationId)).resolves.toMatchObject({ outcome: "physical_unknown", lookupStatus: status });
+    expect(authorization.consumeCalls).toHaveLength(consumeCallsBefore);
+    await expect(repository.getRecord(operationId)).resolves.toMatchObject({ status: "PHYSICAL_UNKNOWN", errorCode: "RESPONSE_LOST" });
+    await expect(repository.getOrder("order-sync")).resolves.toMatchObject({ status: "GENERADO", physicalStatus: "PHYSICAL_UNKNOWN" });
+  });
+
+  it("does nothing without the authorization lookup of the immediate backend", async () => {
+    const operationId = "cut-verify-no-lookup-00000000-0000-4000-8000-000000000044";
+    const { repository } = await uncertainCut("cut-verify-no-lookup", operationId, "consumed");
+    await expect(recovery(repository, new MockAuthorizationAdapter(), operationId)).resolves.toBeUndefined();
   });
 });
 

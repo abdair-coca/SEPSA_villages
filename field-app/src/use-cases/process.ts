@@ -8,8 +8,9 @@
  * 3. Pide autorización online inmediatamente antes de cortar. Timeout, respuesta perdida, `unknown`,
  *    rechazo o autorización vencida/de otra operación → registra una visita bloqueada (no corta).
  * 4. Reclama atómicamente la operación y la orden (`CLAIMED`) con compare-and-set de versión.
- * 5. Consume la autorización (si es `immediate`). Solo `consumed` confirma el corte (`EJECUTADO`/`CONFIRMED`).
- *    Una respuesta incierta deja la orden en `PHYSICAL_UNKNOWN` para revisión humana, sin reintento físico.
+ * 5. Consume la autorización (si es `immediate`), reintentando con el mismo `operationId` si el resultado es
+ *    incierto (D019). Solo `consumed` confirma el corte (`EJECUTADO`/`CONFIRMED`). Si sigue incierto, la orden
+ *    queda en `PHYSICAL_UNKNOWN` sin reintento físico; `recoverCut` la completa si el servidor demuestra el consumo.
  *
  * Todo resultado queda guardado localmente y encolado antes de devolverse a la UI.
  */
@@ -37,6 +38,7 @@ import type {
   StoredRecord,
 } from "../ports/repository";
 import { OrderVersionConflictError } from "../ports/repository";
+import { consumeWithRetries, type Sleep } from "./consume-retry";
 
 export interface CutProcessInput {
   repository: LocalRepository;
@@ -50,6 +52,8 @@ export interface CutProcessInput {
   evidence?: EvidenceReference;
   exceptionReason?: string;
   fieldCapture?: FieldCapture;
+  /** Espera entre reintentos del consumo; en pruebas se inyecta una inmediata. */
+  sleep?: Sleep;
 }
 
 /** Motivo por el que un corte no se ejecutó; queda registrado en la visita resultante. */
@@ -450,29 +454,22 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
   if (authorizationResponse.grant.consumption === "deferred") {
     return { outcome: "pending_sync", operation: intent };
   }
-  let consumeResponse: ConsumeResponse;
-  try {
-    consumeResponse = await input.authorization.consumeCut({
-      authorizationId: authorizationResponse.grant.authorizationId,
-      token: authorizationResponse.grant.token,
-      orderId: input.order.orderId,
-      technicianId: input.technicianId,
-      deviceId: input.deviceId,
-      operationId: input.operationId,
-      version: authorizationResponse.grant.version,
-    });
-  } catch (error) {
-    if (!isUncertainError(error)) throw error;
-    const errorCode = error instanceof Error && "code" in error ? String(error.code) : "RESPONSE_UNKNOWN";
-    return recordPhysicalUnknown(input, intent, claimedOrder, errorCode);
-  }
+  const grant = authorizationResponse.grant;
+  // Reintenta con el mismo operationId y token solo si el resultado es incierto (D019).
+  const attempt = await consumeWithRetries(() => input.authorization.consumeCut({
+    authorizationId: grant.authorizationId,
+    token: grant.token,
+    orderId: input.order.orderId,
+    technicianId: input.technicianId,
+    deviceId: input.deviceId,
+    operationId: input.operationId,
+    version: grant.version,
+  }), input.sleep);
+  if (attempt.kind === "uncertain") return recordPhysicalUnknown(input, intent, claimedOrder, attempt.errorCode);
+  const consumeResponse: ConsumeResponse = attempt.response;
 
   if (consumeResponse.operationId !== input.operationId) {
     return recordPhysicalUnknown(input, intent, claimedOrder, "CONSUME_OPERATION_ID_MISMATCH");
-  }
-
-  if (consumeResponse.status === "unknown") {
-    return recordPhysicalUnknown(input, intent, claimedOrder, consumeResponse.errorCode ?? "RESPONSE_UNKNOWN");
   }
 
   if (consumeResponse.status === "not_authorized") {
@@ -536,6 +533,56 @@ export async function executeCut(input: CutProcessInput): Promise<CutProcessResu
     operationChange(executed, claimOrder(claimedOrder, "EJECUTADO", "CONFIRMED"), input.evidence),
     requireOrderVersion(claimedOrder),
   );
+  return { outcome: "executed", operation: executed };
+}
+
+export interface CutRecoveryInput {
+  repository: LocalRepository;
+  authorization: AuthorizationAdapter;
+  operationId: string;
+  technicianId: string;
+  deviceId: string;
+  now: string;
+  sleep?: Sleep;
+}
+
+/**
+ * Verifica con el servidor un corte de consumo inmediato cuyo consumo quedó incierto (D020). Solo actúa si el `POST`
+ * del CUT nunca empezó (`cutSendPhase: preparing`): tras un envío incierto solo vale la consulta de la cola.
+ * Completa el corte únicamente con consumo demostrado (`consumed`, o una reserva vigente consumida ahora con el
+ * mismo `operationId`); cualquier otro estado lo deja como estaba. Devuelve `undefined` si no hay nada que verificar.
+ */
+export async function recoverCut(input: CutRecoveryInput): Promise<CutProcessResult | undefined> {
+  const lookupAuthorization = input.authorization.lookupCutAuthorization?.bind(input.authorization);
+  if (!lookupAuthorization) return undefined;
+  const record = await input.repository.getRecord(input.operationId);
+  if (!record || isVisit(record) || record.action !== "CUT" || record.authorizationConsumption !== "immediate") return undefined;
+  if (record.technicianId !== input.technicianId || record.deviceId !== input.deviceId) return undefined;
+  if (record.status !== "INTENT_PERSISTED" && record.physicalStatus !== "PHYSICAL_UNKNOWN") return undefined;
+  const item = (await input.repository.listSyncItems()).find((candidate) => candidate.operationId === record.operationId);
+  if (!item || item.cutSendPhase !== "preparing" || item.manualReview) return undefined;
+
+  let lookup;
+  try {
+    lookup = await lookupAuthorization(record.operationId);
+  } catch {
+    return { outcome: "physical_unknown", operation: record, lookupStatus: "unknown" };
+  }
+  if (lookup.operationId !== record.operationId) return { outcome: "physical_unknown", operation: record, lookupStatus: "unknown" };
+  let consumed = lookup.status === "consumed";
+  if (lookup.status === "reserved" && record.authorizationId && record.authorizationToken && record.authorizationVersion !== undefined) {
+    const request = { authorizationId: record.authorizationId, token: record.authorizationToken, orderId: record.orderId, technicianId: record.technicianId, deviceId: record.deviceId, operationId: record.operationId, version: record.authorizationVersion };
+    const attempt = await consumeWithRetries(() => input.authorization.consumeCut(request), input.sleep).catch(() => undefined);
+    consumed = attempt?.kind === "response" && attempt.response.operationId === record.operationId && attempt.response.status === "consumed";
+  }
+  if (!consumed) return { outcome: "physical_unknown", operation: record, lookupStatus: lookup.status };
+
+  const currentOrder = await input.repository.getOrder(record.orderId);
+  if (!currentOrder || currentOrder.version === undefined || currentOrder.status !== "GENERADO" || !["CLAIMED", "PHYSICAL_UNKNOWN"].includes(currentOrder.physicalStatus)) {
+    return { outcome: "physical_unknown", operation: record, lookupStatus: "order_state_conflict" };
+  }
+  const executed: OperationRecord = { ...record, status: "CONFIRMED", physicalStatus: "CONFIRMED", syncStatus: "pending", updatedAt: input.now, errorCode: undefined };
+  await input.repository.updateOperationAndOrder(operationChange(executed, claimOrder(currentOrder, "EJECUTADO", "CONFIRMED")), currentOrder.version);
   return { outcome: "executed", operation: executed };
 }
 

@@ -1,9 +1,10 @@
 /**
  * Sincronización desde el store. Evita dos sincronizaciones simultáneas (`syncInFlight`), no hace nada sin
- * conexión útil (la cola se conserva) y antes de sincronizar intenta recuperar reconexiones que quedaron a
- * medias. Un fallo nunca borra operaciones: solo deja un aviso.
+ * conexión útil (la cola se conserva) y antes de sincronizar intenta recuperar reconexiones y cortes que
+ * quedaron a medias. Un fallo nunca borra operaciones: solo deja un aviso.
  */
 import { recoverReconnection } from "../use-cases/reconnection";
+import { recoverCut } from "../use-cases/process";
 import { SyncEngine } from "../use-cases/sync";
 import type { AppState, AppStoreDependencies } from "./store";
 import { formatSyncMessage } from "./store-results";
@@ -24,7 +25,7 @@ export interface SyncCoordinatorContext {
 export interface SyncCoordinator {
   requestSync(): Promise<void>;
   syncAfterLocalAction(): Promise<void>;
-  recoverPendingReconnections(): Promise<void>;
+  recoverPendingOperations(): Promise<void>;
 }
 
 export function createSyncCoordinator(context: SyncCoordinatorContext): SyncCoordinator {
@@ -48,7 +49,7 @@ export function createSyncCoordinator(context: SyncCoordinatorContext): SyncCoor
       update({ message: { tone: "warning", text: "Sin conexión útil. La cola permanece guardada para después." } });
       return;
     }
-    await recoverPendingReconnections();
+    await recoverPendingOperations();
     await runWithBusy("SYNC", async () => {
       const report = await new SyncEngine(dependencies.repository, dependencies.connectivity, dependencies.transport, { now }, dependencies.evidenceUploader).syncOnce();
       await refresh();
@@ -63,18 +64,19 @@ export function createSyncCoordinator(context: SyncCoordinatorContext): SyncCoor
     await requestSync();
   }
 
-  async function recoverPendingReconnections(): Promise<void> {
+  async function recoverPendingOperations(): Promise<void> {
     if (!dependencies.connectivity.isUsable()) return;
     const items = await dependencies.repository.listSyncItems();
     for (const item of items) {
-      if (item.action !== "RECONNECTION" || item.status === "synced" || item.manualReview) continue;
+      if (item.status === "synced" || item.manualReview) continue;
       try {
-        await recoverReconnection({ repository: dependencies.repository, enablement: dependencies.enablement, operationId: item.operationId, technicianId, deviceId, now: now() });
+        if (item.action === "RECONNECTION") await recoverReconnection({ repository: dependencies.repository, enablement: dependencies.enablement, operationId: item.operationId, technicianId, deviceId, now: now() });
+        if (item.action === "CUT") await recoverCut({ repository: dependencies.repository, authorization: dependencies.authorization, operationId: item.operationId, technicianId, deviceId, now: now() });
       } catch {
         // La operación sigue guardada e incierta; la recuperación nunca inventa un éxito.
       }
     }
   }
 
-  return { requestSync, syncAfterLocalAction, recoverPendingReconnections };
+  return { requestSync, syncAfterLocalAction, recoverPendingOperations };
 }
