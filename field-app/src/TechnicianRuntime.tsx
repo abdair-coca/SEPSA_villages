@@ -2,7 +2,7 @@
  * Jornada del técnico: descarga el paquete asignado, crea el store con la fábrica del modo actual (conectado o
  * simulado) y refresca las órdenes asignadas cada 30 s. Sin red, abre el último paquete guardado.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { IndexedDbLocalRepository } from "./adapters/indexeddb/repository";
 import { createSimulatedPackageEnvelope } from "./adapters/indexeddb/package-validation";
 import { downloadAssigned } from "./use-cases/download";
@@ -13,16 +13,21 @@ import { getStableDeviceId } from "./bootstrap/environment";
 import type { Session, WorkPackageEnvelope } from "./domain/types";
 import type { IdentityPort } from "./ports/identity";
 import type { OperationsAuthorityPort } from "./ports/authority";
+import type { TechnicianRecordPort } from "./ports/technician-record";
 import type { AppStore } from "./state/store";
 
 /** Crea el store del técnico con los adaptadores del modo actual. */
 export type TechnicianStoreFactory = (repository: IndexedDbLocalRepository, envelope: WorkPackageEnvelope, deviceId: string) => AppStore;
 
-export function TechnicianRuntime({ authority, session, onLogout, roleSwitch, createStore }: { authority: IdentityPort & OperationsAuthorityPort; session: Session; onLogout: () => void; roleSwitch?: AppHeaderRoleSwitch; createStore: TechnicianStoreFactory }) {
+export function TechnicianRuntime({ authority, session, onLogout, roleSwitch, createStore, recordPort }: { authority: IdentityPort & OperationsAuthorityPort; session: Session; onLogout: () => void; roleSwitch?: AppHeaderRoleSwitch; createStore: TechnicianStoreFactory; recordPort?: TechnicianRecordPort }) {
   const [store, setStore] = useState<AppStore>();
   const [refreshAssigned, setRefreshAssigned] = useState<(() => Promise<void>)>();
   const [error, setError] = useState<string>();
   const deviceId = getStableDeviceId();
+  const listServerRecord = useMemo(
+    () => recordPort ? (orderId: string) => recordPort.listOrderRecord(session, orderId) : undefined,
+    [recordPort, session],
+  );
 
   useEffect(() => {
     let active = true;
@@ -67,7 +72,7 @@ export function TechnicianRuntime({ authority, session, onLogout, roleSwitch, cr
       ? <AppStateCard as="main" className="state-card" tone="error" title="No pudimos abrir jornada" description={error} action={{ label: "Volver al inicio", onClick: onLogout }} />
       : <AppStateCard as="main" className="state-card" tone="loading" title="Descargando jornada" description="Validando identidad y órdenes asignadas." />}
   </div>;
-  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection onRefreshAssigned={refreshAssigned} onLogout={onLogout} roleSwitch={roleSwitch} />;
+  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection onRefreshAssigned={refreshAssigned} onLogout={onLogout} roleSwitch={roleSwitch} listServerRecord={listServerRecord} />;
 }
 
 /**

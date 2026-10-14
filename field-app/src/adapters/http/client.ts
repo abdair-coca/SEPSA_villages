@@ -24,6 +24,7 @@ import type {
   OperationRecord,
   Session,
   TechnicianRecord,
+  TechnicianRecordEntry,
   VisitRecord,
   WorkOrder,
   WorkPackageEnvelope,
@@ -36,7 +37,8 @@ import type {
 } from "../../ports/authority";
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, ConsumeEnablementRequest, CutAuthorizationLookupResult, ConsumeEnablementResponse, EnablementAdapter, EnablementLookupResult, EnablementRequest, EnablementResponse, RemoteResult } from "../../ports/authorization";
 import type { EvidenceUploadPort, SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
-import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotCutAuthorizationLookupDto, PilotCutConsumeResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotReconnectionConsumeResponseDto, PilotReconnectionEnablementLookupDto, PilotReconnectionEnablementResponseDto, PilotSyncResponseDto, PilotTechnicianResponseDto } from "./contracts";
+import type { TechnicianRecordPort } from "../../ports/technician-record";
+import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotCutAuthorizationLookupDto, PilotCutConsumeResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotReconnectionConsumeResponseDto, PilotReconnectionEnablementLookupDto, PilotReconnectionEnablementResponseDto, PilotSyncResponseDto, PilotTechnicianRecordEntryDto, PilotTechnicianRecordResponseDto, PilotTechnicianResponseDto } from "./contracts";
 
 /**
  * Rechazos del backend a `POST /v1/authorizations/cut` que ocurren antes de crear cualquier reserva: el corte no
@@ -65,7 +67,7 @@ interface HttpClientOptions {
 }
 
 /** Cliente HTTP del piloto; ver descripción al inicio del archivo. */
-export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, AuthorizationAdapter, EnablementAdapter, SyncTransport, EvidenceUploadPort {
+export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, AuthorizationAdapter, EnablementAdapter, SyncTransport, EvidenceUploadPort, TechnicianRecordPort {
   readonly simulation = "PILOT_PROVISIONAL" as const;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -244,6 +246,21 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
       const response = await this.request<{ items: Array<{ kind: "SYNC_CONFLICT" | "CONSUMED_NOT_SYNCED" | "CLOSED_NOT_CONSUMED"; operation_id: string; order_id: string; action: string | null; technician_id: string; technician_name: string | null; account_id: string | null; customer_name: string | null; detail: string | null; since: string }> }>("/v1/admin/reconciliation", { method: "GET" }, authorized);
       return response.items.map((item) => ({ kind: item.kind, operationId: item.operation_id, orderId: item.order_id, action: item.action ?? undefined, technicianId: item.technician_id, technicianName: item.technician_name ?? undefined, accountId: item.account_id ?? undefined, customerName: item.customer_name ?? undefined, detail: item.detail ?? undefined, since: item.since }));
     });
+  }
+
+  /** Registro sincronizado del técnico para una orden, todas las páginas (`GET /v1/technician/record`). Solo lectura. */
+  async listOrderRecord(session: Session, orderId: string): Promise<TechnicianRecordEntry[]> {
+    const authorized = this.requireSession(session);
+    const all: TechnicianRecordEntry[] = [];
+    let cursor: string | undefined;
+    do {
+      const params = new URLSearchParams({ order_id: orderId, limit: "100" });
+      if (cursor !== undefined) params.set("cursor", cursor);
+      const page = await this.request<PilotTechnicianRecordResponseDto>(`/v1/technician/record?${params.toString()}`, { method: "GET" }, authorized);
+      all.push(...page.operations.map(toTechnicianRecordEntry));
+      cursor = page.next_cursor ?? undefined;
+    } while (cursor !== undefined);
+    return all;
   }
 
   async listAudit(query: { orderId?: string; session?: Session } = {}): Promise<AuditEvent[]> {
@@ -577,6 +594,28 @@ async function digestJson(value: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function toTechnicianRecordEntry(entry: PilotTechnicianRecordEntryDto): TechnicianRecordEntry {
+  return {
+    operationId: entry.operation_id,
+    orderId: entry.order_id,
+    action: entry.action,
+    status: entry.status,
+    deviceId: entry.device_id,
+    recordedAt: entry.recorded_at ?? undefined,
+    createdAt: entry.created_at,
+    acknowledgedAt: entry.acknowledged_at ?? undefined,
+    conflictReason: entry.conflict_reason ?? undefined,
+    orderVersion: entry.order_version ?? undefined,
+    effectiveAt: entry.effective_at ?? undefined,
+    demora: entry.demora ?? undefined,
+    technicianNameSnapshot: entry.technician_name_snapshot ?? undefined,
+    reason: entry.reason ?? undefined,
+    exceptionReason: entry.exception_reason ?? undefined,
+    evidenceRefs: entry.evidence_refs,
+    fieldCapture: entry.field_capture ?? undefined,
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

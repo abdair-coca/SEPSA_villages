@@ -16,6 +16,7 @@ import type { DebtorHandlers } from "../controllers/debtors.controller.js";
 import type { EvidenceHandlers } from "../controllers/evidence.controller.js";
 import type { OrderHandlers } from "../controllers/orders.controller.js";
 import type { SyncHandlers } from "../controllers/sync.controller.js";
+import type { TechnicianRecordHandlers } from "../controllers/technician-record.controller.js";
 
 export type RouteParams = Record<string, string | undefined>;
 
@@ -43,6 +44,7 @@ export interface RouteControllers {
   evidence: EvidenceHandlers;
   authorizations: AuthorizationHandlers;
   sync: SyncHandlers;
+  technicianRecord: TechnicianRecordHandlers;
   audit: AuditHandlers;
   health(response: ServerResponse): Promise<void>;
 }
@@ -63,6 +65,7 @@ export function createRoutes(c: RouteControllers): Route[] {
     { method: "POST", pattern: "/v1/orders", access: "session", handler: ({ request, response, user }) => c.orders.createOrder(request, response, user) },
     { method: "POST", pattern: "/v1/orders/:order_id/assignment", access: "session", handler: ({ request, response, user, params }) => c.orders.assignOrder(request, response, user, params.order_id) },
     { method: "GET", pattern: "/v1/technician/orders", access: "session", handler: ({ response, user, url }) => c.orders.technicianOrders(response, user, url) },
+    { method: "GET", pattern: "/v1/technician/record", access: "session", handler: ({ response, user, url }) => c.technicianRecord.listRecord(response, user, url) },
     { method: "POST", pattern: "/v1/authorizations/cut", access: "session", handler: ({ request, response, user }) => c.authorizations.authorizeCut(request, response, user) },
     { method: "POST", pattern: "/v1/authorizations/cut/consume", access: "session", handler: ({ request, response, user }) => c.authorizations.consumeCutAuthorization(request, response, user) },
     { method: "GET", pattern: "/v1/authorizations/cut/:operation_id", access: "session", handler: ({ response, user, params }) => c.authorizations.lookupCutAuthorization(response, user, params.operation_id) },

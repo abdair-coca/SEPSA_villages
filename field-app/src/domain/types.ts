@@ -362,6 +362,30 @@ export interface OperationRecord {
   lastAuthorizationLookup?: { status: "expired" | "rejected" | "not_found"; at: string };
 }
 
+/**
+ * Operación que el servidor tiene registrada del técnico (`GET /v1/technician/record`). Es solo lectura: refleja lo
+ * que llegó al servidor desde cualquier dispositivo, no el estado de la cola local de este dispositivo.
+ */
+export interface TechnicianRecordEntry {
+  operationId: string;
+  orderId: string;
+  action: "CUT" | "VISIT" | "RECONNECTION";
+  status: "pending" | "acknowledged" | "conflict";
+  deviceId: string;
+  recordedAt?: string;
+  createdAt: string;
+  acknowledgedAt?: string;
+  conflictReason?: string;
+  orderVersion?: number;
+  effectiveAt?: string;
+  demora?: string;
+  technicianNameSnapshot?: string;
+  reason?: string;
+  exceptionReason?: string;
+  evidenceRefs: string[];
+  fieldCapture?: FieldCapture;
+}
+
 /** Cambio auditado del estado físico de una orden (antes/después y motivo). */
 export interface PhysicalTransition {
   transitionId: string;

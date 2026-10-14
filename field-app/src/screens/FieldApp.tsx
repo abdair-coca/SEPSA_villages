@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppMessage, AppStore, AppState } from "../state/store";
 import { selectVisibleOrders } from "../state/store";
 import { BrowserConnectivity } from "../adapters/browser/connectivity";
-import type { ConnectivityMode, ActionKind } from "../domain/types";
+import type { ConnectivityMode, ActionKind, TechnicianRecordEntry } from "../domain/types";
 import { AppHeader, type AppHeaderRoleSwitch } from "../components/AppHeader";
 import { IconDevice, IconDownload, IconRefresh, IconUser } from "../components/common/Icons";
 import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "../components/common/Notification";
@@ -34,6 +34,8 @@ export interface FieldAppProps {
   onRefreshAssigned?: () => Promise<void>;
   onLogout?: () => void;
   roleSwitch?: AppHeaderRoleSwitch;
+  /** Registro del servidor de una orden (solo lectura); sin él la ficha no ofrece la consulta. */
+  listServerRecord?: (orderId: string) => Promise<TechnicianRecordEntry[]>;
 }
 
 export function FieldApp({
@@ -45,6 +47,7 @@ export function FieldApp({
   onRefreshAssigned,
   onLogout,
   roleSwitch,
+  listServerRecord,
 }: FieldAppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
   const pending = pendingCount(state.syncItems);
@@ -246,6 +249,7 @@ export function FieldApp({
           enableReconnection={enableReconnection}
           technicianName={technicianName}
           onRefreshAssigned={onRefreshAssigned ? () => void handleRefreshAssigned() : undefined}
+          listServerRecord={listServerRecord}
         />
       ) : null}
     </div>
@@ -258,12 +262,14 @@ function Workbench({
   enableReconnection,
   technicianName,
   onRefreshAssigned,
+  listServerRecord,
 }: {
   state: AppState;
   store: AppStore;
   enableReconnection: boolean;
   technicianName?: string;
   onRefreshAssigned?: () => void;
+  listServerRecord?: (orderId: string) => Promise<TechnicianRecordEntry[]>;
 }) {
   const visibleOrders = selectVisibleOrders(state);
   const selectedOrder = state.orders.find((order) => order.orderId === state.selectedOrderId);
@@ -293,6 +299,7 @@ function Workbench({
         enableReconnection={enableReconnection}
         technicianName={technicianName}
         initialAction={pendingAction?.orderId === selectedOrder.orderId ? pendingAction.kind : null}
+        listServerRecord={listServerRecord}
         onBack={() => { setPendingAction(null); store.selectOrder(null); if (returnToJourney) store.setTab("home"); setReturnToJourney(false); }}
       />
     ) : (

@@ -13,6 +13,7 @@ import { createEvidenceHandlers } from "../controllers/evidence.controller.js";
 import { createAuditHandlers } from "../controllers/audit.controller.js";
 import { createAuthorizationHandlers } from "../controllers/authorizations.controller.js";
 import { createSyncHandlers } from "../controllers/sync.controller.js";
+import { createTechnicianRecordHandlers } from "../controllers/technician-record.controller.js";
 import { PROVISIONAL_SOURCE } from "../shared/application-context.js";
 import { setCorsHeaders, setSecurityHeaders, validateOrigin, validRequestId } from "./http-policy.js";
 import { type Config } from "../config.js";
@@ -28,6 +29,7 @@ export class Application {
   private readonly authorizations: ReturnType<typeof createAuthorizationHandlers>;
   private readonly sync: ReturnType<typeof createSyncHandlers>;
   private readonly audit: ReturnType<typeof createAuditHandlers>;
+  private readonly technicianRecord: ReturnType<typeof createTechnicianRecordHandlers>;
   readonly router: Router;
 
   constructor(
@@ -47,9 +49,10 @@ export class Application {
     this.authorizations = createAuthorizationHandlers(context);
     this.sync = createSyncHandlers(context);
     this.audit = createAuditHandlers(context);
+    this.technicianRecord = createTechnicianRecordHandlers(context);
     const controllers: RouteControllers = {
       auth: this.auth, orders: this.orders, debtors: this.debtors, evidence: this.evidence,
-      authorizations: this.authorizations, sync: this.sync, audit: this.audit,
+      authorizations: this.authorizations, sync: this.sync, audit: this.audit, technicianRecord: this.technicianRecord,
       health: (response) => this.health(response),
     };
     this.router = new Router(createRoutes(controllers));

@@ -140,7 +140,7 @@ function ConnectedApp({ authority, session, onAuthenticated, onLogout }: { autho
     onSelect: () => void switchRole(),
   } : undefined;
   if (session.role === "ADMIN") return <OperationsApp authority={authority} session={session} onLogout={logout} roleSwitch={roleSwitch} />;
-  return <TechnicianRuntime authority={authority} session={session} onLogout={logout} roleSwitch={roleSwitch} createStore={(repository, envelope, deviceId) => createAuthenticatedTechnicianStore(session.userId, deviceId, {
+  return <TechnicianRuntime authority={authority} recordPort={authority} session={session} onLogout={logout} roleSwitch={roleSwitch} createStore={(repository, envelope, deviceId) => createAuthenticatedTechnicianStore(session.userId, deviceId, {
     repository,
     seedPackage: envelope.package,
     transport: authority,

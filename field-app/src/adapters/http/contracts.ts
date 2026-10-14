@@ -35,3 +35,10 @@ export interface PilotLookupResponseDto { status: "confirmed" | "not_found" | "u
 export interface PilotPageDto { limit?: number; offset?: number; total?: number; next_cursor?: string | null; }
 export interface PilotAuditResponseDto extends PilotPageDto { audit: unknown[]; }
 export interface PilotDebtorsResponseDto extends PilotPageDto { debtors: unknown[]; }
+export interface PilotTechnicianRecordEntryDto {
+  operation_id: string; order_id: string; action: "CUT" | "VISIT" | "RECONNECTION"; status: "pending" | "acknowledged" | "conflict"; device_id: string;
+  recorded_at: string | null; created_at: string; acknowledged_at: string | null; conflict_reason: string | null; order_version: number | null;
+  effective_at: string | null; demora: string | null; technician_name_snapshot: string | null; reason: string | null; exception_reason: string | null;
+  evidence_refs: string[]; field_capture: import("../../domain/types").FieldCapture | null;
+}
+export interface PilotTechnicianRecordResponseDto extends PilotPageDto { operations: PilotTechnicianRecordEntryDto[]; }

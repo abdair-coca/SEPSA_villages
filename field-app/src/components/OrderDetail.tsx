@@ -5,7 +5,8 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import type { ActionResult, ActivityEntry, AppState, AppStore } from "../state/store";
-import type { ConnectivityMode, WorkOrder, ActionKind, OperationRecord } from "../domain/types";
+import type { ConnectivityMode, WorkOrder, ActionKind, OperationRecord, TechnicianRecordEntry } from "../domain/types";
+import { TechnicianRecordDialog } from "./TechnicianRecordDialog";
 import { NewAuthorizationAction } from "./NewAuthorizationAction";
 import { FieldMap } from "./FieldMap";
 import { IconAlertTriangle, IconCheckCircle, IconMap, IconPin, IconScissors } from "./common/Icons";
@@ -25,6 +26,7 @@ export function OrderDetail({
   enableReconnection,
   technicianName,
   initialAction,
+  listServerRecord,
   onBack,
 }: {
   order: WorkOrder;
@@ -33,10 +35,13 @@ export function OrderDetail({
   enableReconnection: boolean;
   technicianName?: string;
   initialAction?: ActionKind | null;
+  /** Registro del servidor de esta orden; sin él (modo simulado) la ficha no ofrece la consulta. */
+  listServerRecord?: (orderId: string) => Promise<TechnicianRecordEntry[]>;
   onBack: () => void;
 }) {
   const [draft, setDraft] = useState<ActionKind | null>(initialAction === "VISIT" && !isManualVisitAllowed(order) ? null : initialAction ?? null);
   const [actionCompletion, setActionCompletion] = useState<ActionResult>();
+  const [serverRecordOpen, setServerRecordOpen] = useState(false);
   const [mobileView, setMobileView] = useState<OrderReviewView>("review");
   const [kardexIndex, setKardexIndex] = useState(0);
   // Corte o reconexión de esta orden que quedó incierto y que el técnico puede verificar con el servidor.
@@ -93,6 +98,7 @@ export function OrderDetail({
         onActivityPageIndexChange={setActivityPageIndex}
         hidden={Boolean(draft)}
         uncertainActions={uncertainActions}
+        onOpenServerRecord={listServerRecord ? () => setServerRecordOpen(true) : undefined}
       />
       <div className="order-detail-legacy">
         <div className="detail-navigation-bar">
@@ -154,6 +160,7 @@ export function OrderDetail({
             </button>
           ) : null}
           <div className="order-detail-actions__secondary">
+            {listServerRecord ? <button type="button" className="secondary-action" onClick={() => setServerRecordOpen(true)}>Ver registro del servidor</button> : null}
             {canRegisterVisit ? (
               <button className={canCut ? "secondary-action" : "primary-action"} disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
                 Registrar visita
@@ -203,6 +210,7 @@ export function OrderDetail({
           }}
         />
       ) : null}
+      {serverRecordOpen && listServerRecord ? <TechnicianRecordDialog orderId={order.orderId} listRecord={listServerRecord} onClose={() => setServerRecordOpen(false)} /> : null}
       {actionCompletion ? <ActionCompletionDialog result={actionCompletion} onDismiss={() => setActionCompletion(undefined)} /> : null}
     </section>
   );
@@ -246,7 +254,7 @@ function completionDialogContent(result: ActionResult): { title: string; message
 function MobileOrderReview({
   order, mode, entries, view, onViewChange, onBack, canCut, canRegisterVisit, canReconnect, busy,
   onCut, onVisit, onReconnect, kardexIndex, onKardexIndexChange, detailsPageIndex, onDetailsPageIndexChange,
-  activityPageIndex, onActivityPageIndexChange, hidden, uncertainActions,
+  activityPageIndex, onActivityPageIndexChange, hidden, uncertainActions, onOpenServerRecord,
 }: {
   order: WorkOrder;
   mode: ConnectivityMode;
@@ -269,6 +277,7 @@ function MobileOrderReview({
   onActivityPageIndexChange: (index: number) => void;
   hidden: boolean;
   uncertainActions?: ReactNode;
+  onOpenServerRecord?: () => void;
 }) {
   const context = order.context;
   const kardex = context?.kardex ?? [];
@@ -317,6 +326,7 @@ function MobileOrderReview({
             {canCut ? <button type="button" className="primary-action" disabled={busy} onClick={onCut}><IconScissors />Registrar corte</button> : null}
             {canReconnect ? <button type="button" className="primary-action" disabled={busy} onClick={onReconnect}>Preparar reconexión</button> : null}
             {canRegisterVisit && canCut ? <button type="button" className="order-review-secondary-action" disabled={busy} onClick={onVisit}>Registrar visita</button> : null}
+            {onOpenServerRecord ? <button type="button" className="order-review-secondary-action" onClick={onOpenServerRecord}>Ver registro del servidor</button> : null}
             {!canCut && !canReconnect && !canRegisterVisit ? <p className="order-review-no-action">Sin acciones disponibles para este estado.</p> : null}
           </div>
         </div>
