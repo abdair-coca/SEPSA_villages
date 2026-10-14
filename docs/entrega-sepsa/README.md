@@ -32,5 +32,5 @@ Este conjunto describe el piloto provisional del sistema de cortes y reconexione
 - **Plan gratuito.** El servidor y la base de datos están en planes gratuitos. La primera petición tras un periodo de inactividad puede tardar cerca de un minuto (`03-arquitectura-tecnologias.md`).
 - **Sesión.** Entrar exige conexión. Con la sesión vigente, de 7 días (D025), el técnico trabaja sin conexión.
 - **Conciliación.** El administrador ve las operaciones por conciliar en solo lectura (D024). Resolverlas no se hace desde la interfaz.
-- **Pruebas de navegador pendientes.** Las pruebas de doble toque y de dos dispositivos cubren la deduplicación en la capa de casos de uso y en el servidor, pero no hay prueba automatizada de navegador (`11-resultados-pruebas.md`).
+- **Pruebas de navegador pendientes.** El doble toque se prueba en la capa de estado, sin prueba automatizada de navegador. Dos dispositivos reales no tienen prueba automatizada; el servidor rechaza un consumo con otro dispositivo (`11-resultados-pruebas.md`).
 - **Pendientes de SEPSA.** Infraestructura, retención, responsable de datos, destino del SC08 y el resto de decisiones están en `14-pendientes-sepsa.md`.

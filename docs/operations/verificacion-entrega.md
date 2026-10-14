@@ -8,7 +8,7 @@ Estados: **Cumplido** (evidencia registrada), **Parcial** (falta una parte, indi
 
 | Comprobación | Comando | Resultado |
 |---|---|---|
-| Pruebas de la app de campo | `npm test -- --run` en `field-app` | 45 archivos, 488 pruebas: pasan |
+| Pruebas de la app de campo | `npm test -- --run` en `field-app` | 45 archivos, 490 pruebas: pasan |
 | Tipos | `npx tsc --noEmit` en `field-app` | Sin errores |
 | Build de producción | `npm run build` en `field-app` | Correcto |
 | Bundle de producción sin modo simulado (2.1) | Búsqueda de `seedE2eData`, `SIMULATED_AUTHORITY`, `dirección simulada`, `tech-camila`, `device-rugged-01` en `dist/assets/*.js` | Ninguna coincidencia |
@@ -45,7 +45,7 @@ No ejecutado en esta revisión: `npm test` del backend y `npm run e2e:browser`, 
 | 1.3 Nueva autorización sin recaptura (D022) | Cumplido | `620cb85`; botón **Solicitar nueva autorización/habilitación**. |
 | 1.4 Cola: verificar en vez de reintentar | Cumplido | `7ba1c63`; botón **Verificar con servidor**. |
 | 1.5 Corrección de datos por el técnico (D-c) | Cumplido como limitación | No se implementa; se declara en la entrega (`docs/entrega-sepsa/README.md`). |
-| 1.6 Pruebas E2E de corte y reconexión | Parcial | `48e0af5`; `e2e:browser` con 10 comprobaciones: visita sin conexión, recarga, corte con respuesta perdida reintentada, reconexión, evidencia en PostgreSQL. Sin prueba de navegador para **doble toque** ni para **dos dispositivos**: hay pruebas de integración (`process.integration.test.ts`, `reconnection.test.ts`) que cubren la deduplicación por `operationId` y el rechazo de un consumo con otro dispositivo. |
+| 1.6 Pruebas E2E de corte y reconexión | Parcial | `48e0af5`; `e2e:browser` con 10 comprobaciones: visita sin conexión, recarga, corte con respuesta perdida reintentada, reconexión, evidencia en PostgreSQL. Doble toque: corregido en `7354101`; la prueba está en `store.test.tsx` (capa de estado), sin prueba de navegador. **Dos dispositivos**: sin prueba automatizada; el servidor rechaza un consumo con otro dispositivo (`reconnection.test.ts`). |
 | 1.7 Foto de la visita | Cumplido en código | `55a9ee3`. Falta comprobar en producción que una visita con foto queda en `evidence_assets`. |
 
 ### Fase 2: aplicación completa
