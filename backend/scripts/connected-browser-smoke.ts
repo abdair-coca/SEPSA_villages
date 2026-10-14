@@ -275,6 +275,13 @@ async function waitForExpression(client: CdpClient, expression: string, label: s
 /** Si la página no queda controlada por el Service Worker, el error dice en qué estado quedó el registro. */
 async function waitForServiceWorkerControl(client: CdpClient): Promise<void> {
   try {
+    // Si el Service Worker se activa cuando la página ya cargó y no la toma, recargarla es el paso normal para que
+    // controle la navegación. La comprobación final sigue exigiendo el controlador.
+    await waitForExpression(client, `navigator.serviceWorker.controller !== null`, "PWA service worker control", 10).catch(async () => {
+      await waitForExpression(client, `navigator.serviceWorker.getRegistration().then((registration) => registration?.active?.state === 'activated')`, "service worker activated");
+      await client.send("Page.reload", {});
+      await waitForExpression(client, `document.querySelector('.current-order-card') !== null`, "technician current order card after reload");
+    });
     await waitForExpression(client, `navigator.serviceWorker.controller !== null`, "PWA service worker control");
   } catch (error) {
     const state = await evaluate(client, `(async () => { const registration = await navigator.serviceWorker.getRegistration(); return JSON.stringify({ controller: navigator.serviceWorker.controller?.state ?? null, registration: registration ? { scope: registration.scope, active: registration.active?.state ?? null, installing: registration.installing?.state ?? null, waiting: registration.waiting?.state ?? null } : null, caches: await caches.keys() }); })()`)
