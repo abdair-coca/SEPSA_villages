@@ -48,13 +48,22 @@ function presentar(md) {
 
 // Fuentes: índice (README) y los 14 documentos. Los nombres de archivo .md se
 // sustituyen por el número de sección, porque SEPSA no recibe archivos .md.
+// Cada parte lleva la carpeta de su archivo, para resolver las imágenes relativas.
 function loadSource() {
-  const files = fs.readdirSync(ENTREGA).filter((f) => /^\d\d-.*\.md$/.test(f)).sort();
+  const cuerpo = fs.readdirSync(ENTREGA).filter((f) => /^\d\d-.*\.md$/.test(f)).sort();
+  const anexos = fs.readdirSync(path.join(ENTREGA, 'anexos')).filter((f) => /^A\d\d-.*\.md$/.test(f)).sort();
   const readme = fs.readFileSync(path.join(ENTREGA, 'README.md'), 'utf8')
     .replace(/^# .*$/m, '# Índice de la entrega');
-  const parts = [{ md: readme }];
-  for (const f of files) parts.push({ md: fs.readFileSync(path.join(ENTREGA, f), 'utf8') });
-  return parts.map((p) => presentar(p.md).replace(/`(\d\d)-[a-z0-9-]+\.md`/g, 'sección $1'));
+  const parts = [{ md: readme, dir: ENTREGA }];
+  for (const f of cuerpo) parts.push({ md: fs.readFileSync(path.join(ENTREGA, f), 'utf8'), dir: ENTREGA });
+  for (const f of anexos) {
+    const dir = path.join(ENTREGA, 'anexos');
+    parts.push({ md: fs.readFileSync(path.join(dir, f), 'utf8'), dir });
+  }
+  return parts.map((p) => ({
+    dir: p.dir,
+    md: presentar(p.md).replace(/`(\d\d)-[a-z0-9-]+\.md`/g, 'sección $1'),
+  }));
 }
 
 // Tamaño natural de un PNG leído de su cabecera IHDR.
@@ -169,8 +178,8 @@ const spacer = (after = 100) => new Paragraph({ spacing: { before: 0, after } })
 // ---------- imágenes ----------
 // Imágenes de escritorio (ancho >= 1000 px) a 12 cm; de móvil, a 4,4 cm.
 // Varias imágenes en un mismo párrafo forman una fila sin bordes, con su pie bajo cada una.
-function imageCell(token, cellW) {
-  const file = path.join(ENTREGA, token.href);
+function imageCell(token, cellW, dir) {
+  const file = path.join(dir, token.href);
   const img = pngSize(file);
   const esDiagrama = (token.text || '').startsWith('Diagrama');
   const targetCm = esDiagrama ? 24 : img.width >= 1000 ? 12 : 4.4;
@@ -195,7 +204,7 @@ function imageCell(token, cellW) {
   ];
 }
 
-function imageRow(tokens) {
+function imageRow(tokens, dir) {
   const imgs = tokens.filter((t) => t.type === 'image');
   const n = imgs.length;
   const widths = Array.from({ length: n }, (_, i) => Math.floor(W / n) + (i === n - 1 ? W % n : 0));
@@ -209,7 +218,7 @@ function imageRow(tokens) {
       children: imgs.map((t, i) => new TableCell({
         width: { size: widths[i], type: WidthType.DXA },
         margins: { top: 0, bottom: 0, left: 60, right: 60 },
-        children: imageCell(t, widths[i]),
+        children: imageCell(t, widths[i], dir),
       })),
     })],
   });
@@ -273,7 +282,7 @@ function blocks(tokens, ctx) {
         out.push(new Paragraph({
           heading: lvl,
           children: runs(tok.tokens),
-          pageBreakBefore: tok.depth === 1 && PAGE_BREAK_PER_DOC,
+          pageBreakBefore: tok.depth === 1 && (PAGE_BREAK_PER_DOC || tok.text.startsWith('Anexo A01')),
         }));
         break;
       }
@@ -282,7 +291,7 @@ function blocks(tokens, ctx) {
         if (tok.tokens.some((t) => t.type === 'image') && tok.tokens.every((t) => t.type === 'image' || (t.type === 'text' && !t.text.trim()))) {
           const esDiagrama = tok.tokens.some((t) => t.type === 'image' && (t.text || '').startsWith('Diagrama'));
           if (esDiagrama) W = LAND_W;
-          out.push(imageRow(tok.tokens));
+          out.push(imageRow(tok.tokens, ctx.dir));
           out.push(spacer(80));
           if (esDiagrama) { W = TEXT_W; out.push({ seccion: 'vertical' }); }
           break;
@@ -420,7 +429,7 @@ function buildDocument() {
     children: [new TextRun({ text: 'Contenido', bold: true, size: 30, color: NAVY })],
   }));
   body.push(new TableOfContents('Contenido', { hyperlink: true, headingStyleRange: '1-1' }));
-  for (const md of loadSource()) body.push(...blocks(marked.lexer(md), {}));
+  for (const parte of loadSource()) body.push(...blocks(marked.lexer(parte.md), { dir: parte.dir }));
 
   return new Document({
     creator: 'Equipo del piloto',

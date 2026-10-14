@@ -32,11 +32,11 @@ mmdc -p puppeteer.json -i img/modelo-er.mmd -o img/modelo-er.png -b white -s 2
 
 ## Qué hace el generador
 
-- Portada, contenido (campo TOC de Word, nivel 1), y los 14 documentos uno tras otro.
+- Portada, contenido (campo TOC de Word, nivel 1), el cuerpo (índice y documentos 01 a 14, uno tras otro) y, después, los anexos A01 a A14 de `anexos/`, cada uno en su hoja a partir del primero (D033).
 - No muestra las líneas `Fuente:`, `Fecha:` ni `Estado:` de cada documento, ni fechas de la copia (D032).
 - Muestra el marcador de pendiente como «Pendiente de SEPSA».
 - Sustituye los nombres de archivo `.md` del índice por «sección NN».
-- Imágenes: las de escritorio a 12 cm; las de móvil, de tres en fila con pie; el diagrama en una hoja apaisada.
+- Imágenes (relativas al archivo que las contiene): las de escritorio a 12 cm; las de móvil, de tres en fila con pie; el diagrama en una hoja apaisada.
 - Pie «Página X de Y»; la portada no lleva cabecera ni pie.
 
 Estas transformaciones son solo de presentación: las fuentes no cambian.
