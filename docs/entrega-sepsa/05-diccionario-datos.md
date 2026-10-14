@@ -2,7 +2,7 @@
 
 Fuente: migraciones `backend/sql/001` a `008`, leídas en modo de solo lectura.
 Fecha: 2026-10-13
-Estado: entrega, copia fechada. La base desplegada puede diferir del esquema del repo (ver la última sección).
+Estado: entrega, copia fechada. La base desplegada puede diferir del esquema de las migraciones (ver la última sección).
 
 13 tablas y 147 columnas. Cada columna va con su nombre en español y, entre paréntesis, su nombre técnico. **Los nombres técnicos no se cambian**: son los que se buscan en la base y en el código. Las etiquetas entre corchetes marcan columnas sin uso operativo: `[Provisional]` y `[Histórica]` vienen de cargas de datos; `[Legado de pagos]` no tiene comportamiento en el piloto; `[Legado de reconexión]` no sustituye el registro por operación. Cuando la descripción solo repite el nombre, se omite.
 

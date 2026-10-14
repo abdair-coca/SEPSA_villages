@@ -1,6 +1,6 @@
 # 09. Manual de usuario
 
-Fuente: pantallas y etiquetas de `field-app/src/` (estado de `main` al 2026-10-12) y la guía de campo del piloto.
+Fuente: pantallas y etiquetas de `field-app/src/` (estado al 2026-10-12) y la guía de campo del piloto.
 Fecha: 2026-10-13
 Estado: entrega, copia fechada. Describe la interfaz tal como está hoy.
 

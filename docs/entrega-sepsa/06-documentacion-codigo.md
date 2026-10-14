@@ -2,9 +2,9 @@
 
 Fuente: estructura de `backend/` y `field-app/`, tabla de rutas `backend/src/http/router.ts`, contrato OpenAPI y pruebas de arquitectura.
 Fecha: 2026-10-13
-Estado: entrega, copia fechada. Describe el código de `main` al 2026-10-12.
+Estado: entrega, copia fechada. Describe el código al 2026-10-12.
 
-## 1. Estructura del repositorio
+## 1. Estructura de carpetas
 
 | Carpeta | Contenido |
 |---|---|

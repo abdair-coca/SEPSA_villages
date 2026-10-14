@@ -1,10 +1,8 @@
 # 11. Resultados de pruebas
 
-Fuente: ejecución de los comandos del plan de pruebas sobre el repo.
+Fuente: ejecución de los comandos del plan de pruebas sobre el código del piloto.
 Fecha: 2026-10-13
-Estado: entrega, copia fechada. La primera ejecución fue sin base de datos; la segunda añade las suites con PostgreSQL local. Las salidas completas no se versionan.
-
-Sin cambios sin commitear en las carpetas probadas.
+Estado: entrega, copia fechada. La primera ejecución fue sin base de datos; la segunda añade las suites con PostgreSQL local. Las salidas completas no se incluyen en la entrega.
 
 ## 1. Resumen
 
@@ -41,7 +39,7 @@ Windows 11. Node.js v22.23.3 (`npx node@22`, sin cambiar el Node del sistema; la
 - **S7, `npm run e2e:browser`:** requiere la base migrada y un navegador headless.
 - **Base de desarrollo:** el servicio de `localhost:15432` no responde.
 
-No se usó el servidor en `localhost:5432` porque no hay credenciales de prueba en el repo. Ningún resultado se ha inferido de otra ejecución.
+No se usó el servidor en `localhost:5432` porque no hay credenciales de prueba configuradas. Ningún resultado se ha inferido de otra ejecución.
 
 ## 5. Observaciones
 
@@ -52,7 +50,7 @@ Para cerrar la fase, hay que ejecutar en este orden, con una base de prueba: `np
 
 ## 6. Segunda ejecución, con PostgreSQL local (2026-10-13)
 
-Sin cambios sin commitear en `backend/`, `field-app/` ni `docs/`. PostgreSQL 18.3 en `127.0.0.1:55432`, base aislada creada para la prueba y distinta de la de desarrollo. Servidor con Node.js v22.23.3 (`npx node@22`); el recorrido en navegador se ejecutó con el Node del sistema (v24.14.1) y Chrome instalado, y no se repitió con Node 22.
+PostgreSQL 18.3 en `127.0.0.1:55432`, base aislada creada para la prueba y distinta de la de desarrollo. Servidor con Node.js v22.23.3 (`npx node@22`); el recorrido en navegador se ejecutó con el Node del sistema (v24.14.1) y Chrome instalado, y no se repitió con Node 22.
 
 | Suite | Comando | Código | Resultado |
 |---|---|---|---|
@@ -66,7 +64,7 @@ La carga del Excel ya no forma parte del arranque (D026), por lo que no se prob�
 
 ## 7. Revisión final (2026-10-13)
 
-Los cambios sin commitear de otra tarea (`AppHeader`, `OperationsApp` y estilos) aparecieron después de estas ejecuciones y no forman parte de ellas.
+Los cambios de otra tarea (`AppHeader`, `OperationsApp` y estilos) aparecieron después de estas ejecuciones y no forman parte de ellas.
 
 | Suite | Comando | Código | Resultado |
 |---|---|---|---|
@@ -78,11 +76,11 @@ Los cambios sin commitear de otra tarea (`AppHeader`, `OperationsApp` y estilos)
 | S1 | `npm run test:unit` (servidor), y `npm run build` del servidor | 0 | 55 de 55 pruebas |
 | — | Lectura JSON de `openapi/pilot-provisional.openapi.json` | 0 | Válido |
 
-**No ejecutado:** `npm test` del servidor (S2, S3) y `npm run e2e:browser` (S7). La base de prueba en `127.0.0.1:55432` no respondía y esta revisión no tiene sus credenciales. Quedan pendientes; CI los ejecuta al subir los cambios.
+**No ejecutado:** `npm test` del servidor (S2, S3) y `npm run e2e:browser` (S7). La base de prueba en `127.0.0.1:55432` no respondía y esta revisión no tiene sus credenciales. Quedan pendientes; la integración continua los ejecuta.
 
 ## 8. Registro del técnico desde otro dispositivo (2026-10-14)
 
-Pruebas de RF-36 (D029). Se ejecutaron con el código de `1115fb3` y con PostgreSQL local del contenedor de desarrollo (`localhost:15432`), en la base aislada `pilot_phase_registry` migrada con `npm run db:migrate:test`. La base de desarrollo no se usó.
+Pruebas de RF-36 (D029). Se ejecutaron con PostgreSQL local del contenedor de desarrollo (`localhost:15432`), en la base aislada `pilot_phase_registry` migrada con `npm run db:migrate:test`. La base de desarrollo no se usó.
 
 | Suite | Comando | Código | Resultado |
 |---|---|---|---|
@@ -90,7 +88,7 @@ Pruebas de RF-36 (D029). Se ejecutaron con el código de `1115fb3` y con Postgre
 | — | `npm run test:integration` (servidor, con PostgreSQL) | 0 | 3 pruebas, todas pasan: `db.integration`, `technician-record.integration` y `evidence-read.integration` |
 | — | `npx tsc --noEmit` (servidor y app) | 0 | Sin errores |
 | S8 | `npx vitest run` (app) | 0 | 47 archivos, 511 pruebas, todas pasan |
-| S9 | `npm run build` (app, producción, conectada al servidor) | 0 | Correcto, con el código de `1115fb3` |
+| S9 | `npm run build` (app, producción, conectada al servidor) | 0 | Correcto |
 | S11 | `npm run smoke:ui` | 0 | 17 de 17 verificaciones pasan. Se ejecutó tras la fase 1; no se repitió tras la fase 2 |
 | S7 | `npm run e2e:browser` (con PostgreSQL local aislado) | 0 | `passed`: 10 comprobaciones del flujo previo al registro (acceso, asignación, visita sin conexión, recarga, sincronización y auditoría, corte con foto y GPS, reconexión, evidencia en PostgreSQL). No cubre el registro del técnico ni sus fotos |
 

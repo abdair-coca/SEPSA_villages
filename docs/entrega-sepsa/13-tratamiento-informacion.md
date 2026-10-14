@@ -32,7 +32,7 @@ Un técnico que usa dos dispositivos tiene dos bases locales. Los datos sincroni
 ## 3. Envíos a terceros
 
 - **Teselas del mapa.** La app pide las teselas a `server.arcgisonline.com`. Cada petición revela el número de tesela, es decir, la zona visible del mapa. No incluye datos de la sesión. Este uso queda declarado en esta entrega; el aviso al técnico lo da el equipo.
-- **Proveedores de base y de hosting.** El repo no los define; SEPSA los define.
+- **Proveedores de base y de hosting.** El piloto no los define; SEPSA los define.
 
 ## 4. Retención, eliminación y cierre de sesión
 
@@ -47,4 +47,4 @@ Esto es lo que el código hace hoy. La retención oficial la define SEPSA.
 ## 5. Pendientes
 
 - Responsable del tratamiento, custodia y retención de datos personales: decisión de SEPSA.
-- Filas de personas en los seeds `005` y `006` y en el historial de git: acción acordada, eliminarlas del repo. Requiere cambio de código, porque el seed `005` lo usa el bootstrap. Reescribir el historial es una decisión aparte.
+- Filas de personas en los seeds `005` y `006`: retiradas del código (D031). Si SEPSA exige purgar además cualquier copia anterior de esos datos, es una decisión aparte.

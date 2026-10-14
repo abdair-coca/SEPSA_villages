@@ -28,15 +28,15 @@ El proyecto entrega la información. SEPSA define estas decisiones.
 
 | Tema | Estado actual en el piloto |
 |---|---|
-| Proveedor de nube, topología, TLS y rotación de secretos | No definido en el repo |
+| Proveedor de nube, topología, TLS y rotación de secretos | No definido en el piloto |
 | Límite de intentos de acceso compartido entre réplicas | En la memoria de un proceso |
 | Límite de intentos tras un proxy y caducidad de la sesión por inactividad | Cuenta por la dirección del socket; la sesión dura 7 días sin caducidad por inactividad |
 | Sesiones por dispositivo, identidad del dispositivo y revocación | La sesión no se liga a un dispositivo |
 | Proveedor de métricas, alertas y umbrales | No definido |
-| Copias de seguridad cifradas, RPO, RTO y prueba de restauración | No implementadas; el repo solo describe el procedimiento |
-| Registro de cambios operativos | No definido en el repo |
+| Copias de seguridad cifradas, RPO, RTO y prueba de restauración | No implementadas; el piloto solo describe el procedimiento |
+| Registro de cambios operativos | No definido en el piloto |
 | Responsable, custodia y retención de datos personales (clientes, técnicos, sesiones y auditoría) | Sin definir. El sistema no borra datos |
-| Datos de personas en el historial de git | Los seeds `005` y `006` se retiraron del árbol de trabajo (D031); el historial los conserva y no se reescribe. Decidir si SEPSA exige purgarlo |
+| Copias anteriores de los datos de personas de los seeds `005` y `006` | Los seeds se retiraron del código (D031). Decidir si SEPSA exige purgar las copias anteriores |
 | API oficial y su integración | Hay un adaptador provisional |
 | Destino del SC08: archivo o API | El sistema no genera hoy un archivo SC08. `TODO: VALIDAR CON SEPSA` |
 | Relación cliente, cuenta y suministro | Supuesto del piloto: una cuenta y un suministro por fila. `TODO: VALIDAR CON SEPSA` |
@@ -48,7 +48,7 @@ Estado al 2026-10-13, comprobado contra el código.
 | Tema | Estado y qué falta |
 |---|---|
 | Datos del técnico desde otro dispositivo (RF-36, D029) | Cerrado el 2026-10-14. El técnico consulta su registro y sus fotos desde el servidor (`backend/test/technician-record.integration.test.ts`, `backend/test/evidence-read.integration.test.ts`). En navegador, con un dispositivo nuevo, se comprobaron el registro y la foto. Un consumo con otro dispositivo se rechaza (`backend/test/reconnection.test.ts`). Verificado a mano en dos dispositivos físicos y en vista móvil (`11-resultados-pruebas.md`, apartado 8). |
-| Filas de personas en los seeds `005` y `006` (D031) | Hecho en el árbol de trabajo. El historial de git no se reescribe; decidir si SEPSA exige purgarlo (sección B). |
+| Filas de personas en los seeds `005` y `006` (D031) | Hecho: los seeds se retiraron del código. Decidir si SEPSA exige purgar las copias anteriores (sección B). |
 | NRO_CORREL y NIV_CALIDAD (D027) | Sin cambio. No están en el modelo; se añaden cuando SEPSA defina cómo los envía. |
 | FECHA_CORTE y HORA_CORTE | Verificado: el momento llega al servidor como `recorded_at` dentro del payload de la operación (`sync_operations.payload`). No hay exportación SC08 que lo use (`TODO: VALIDAR CON SEPSA`). |
 | Revisión humana desde la pantalla (RF-23, D024) | Parcial. La vista de conciliación es de solo lectura. La revisión sigue solo en la API `POST /v1/sync/operations/:id/review`. |

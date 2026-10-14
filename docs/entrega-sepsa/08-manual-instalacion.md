@@ -38,7 +38,7 @@ Estado: entrega, copia fechada. Describe la instalación para desarrollo y prueb
 3. **Aplicación:** en `field-app/`, ejecutar `npm ci`. Para desarrollo sin servidor: `npm run dev`. Para desarrollo conectado, definir `VITE_PILOT_BACKEND_URL`. Para producción: `npm run build`.
 4. **Pruebas sin base de datos:** en `backend/`, `npm run test:unit`.
 
-## 4. Diferencias entre la documentación y el repositorio
+## 4. Diferencias entre la documentación y el código
 
 - `backend/README.md` dice que `pilot:bootstrap` aplica `002`, `007` y `008`. El script aplica además `001`, `003_reference_fields`, los seeds `002` y `005`, la semilla `004` (vacía) y `007_role_grants`.
 - `.env.example` no incluye `COOKIE_SECURE` ni las variables `LOGIN_RATE_LIMIT_*`.
@@ -47,7 +47,7 @@ Estado: entrega, copia fechada. Describe la instalación para desarrollo y prueb
 
 ## 5. Verificación
 
-Ejecutada el 2026-10-12 en una copia limpia de `main`, con Node v24.14.1 (no con Node 22.12.0, que es la referencia del CI).
+Ejecutada el 2026-10-12 en una copia limpia del código, con Node v24.14.1 (no con Node 22.12.0, que es la referencia del CI).
 
 | Paso | Resultado |
 |---|---|

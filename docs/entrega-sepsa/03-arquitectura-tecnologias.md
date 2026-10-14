@@ -45,7 +45,7 @@ El servidor responde a 24 rutas; su matriz de permisos está en la apartado 5.1.
 ## 5. Despliegue del piloto
 
 - **Servidor:** imagen Docker en Render, con control de salud en `/healthz`.
-- **Base de datos:** PostgreSQL 16 en Docker Compose para desarrollo. La base de producción no está definida en el repo.
+- **Base de datos:** PostgreSQL 16 en Docker Compose para desarrollo. La base de producción no está definida en el piloto.
 - **Aplicación de campo:** Vercel, que reenvía `/v1/*` al servidor en el mismo origen.
 
 ## 6. Límites

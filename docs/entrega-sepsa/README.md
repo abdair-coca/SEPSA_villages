@@ -1,6 +1,6 @@
 # Entrega documental para SEPSA
 
-Fuente: código de `backend/` y `field-app/`, migraciones `backend/sql/` y tabla SC08 recibida de SEPSA (imagen del 2026-10-03). Estado del repo al 2026-10-14.
+Fuente: código de `backend/` y `field-app/`, migraciones `backend/sql/` y tabla SC08 recibida de SEPSA (imagen del 2026-10-03). Estado del código al 2026-10-14.
 Fecha: 2026-10-14
 Estado: entrega, copia fechada.
 
@@ -30,7 +30,7 @@ La entrega sigue la estructura de la carta de SEPSA: cinco puntos y un apartado 
 
 - **Sin integración oficial con SEPSA.** El contrato del servidor es provisional y el adaptador no sustituye a la API que defina SEPSA (apartados 2.1 y 5.1).
 - **Corrección de datos por el técnico.** No está en la aplicación. Se resuelve con un procedimiento manual de soporte (no se implementa).
-- **Datos de prueba.** Los deudores y órdenes son ficticios y se cargan a mano (D026). El árbol de trabajo no contiene datos de personas (D031); el historial de git sí los conserva, y su purga es una decisión de SEPSA (`14-pendientes-sepsa.md`).
+- **Datos de prueba.** Los deudores y órdenes son ficticios y se cargan a mano (D026). El código no contiene datos de personas (D031); la purga de copias anteriores es una decisión de SEPSA (`14-pendientes-sepsa.md`).
 - **Plan gratuito.** El servidor y la base de datos están en planes gratuitos. La primera petición tras un periodo de inactividad puede tardar cerca de un minuto (`03-arquitectura-tecnologias.md`).
 - **Sesión.** Entrar exige conexión. Con la sesión vigente, de 7 días (D025), el técnico trabaja sin conexión.
 - **Conciliación.** El administrador ve las operaciones por conciliar en solo lectura (D024). Resolverlas no se hace desde la interfaz.
