@@ -12,7 +12,7 @@ La fuente oficial de SEPSA todavía no está integrada. El backend actual es un 
 - La aplicación desplegada usa el modo conectado al backend provisional; el modo simulado local existe solo para desarrollo y pruebas.
 - La creación masiva existe en el piloto, pero la validación funcional prioritaria sigue siendo una orden individual de extremo a extremo.
 - Reconexión se guarda localmente y sincroniza con el backend piloto mediante habilitación provisional ligada a orden/técnico/dispositivo/operación/versión; la fuente oficial y sus reglas siguen pendientes de SEPSA.
-- El técnico consulta desde cualquier dispositivo su registro sincronizado y las fotos de sus visitas (D029). Falta la prueba con dos dispositivos físicos.
+- El técnico consulta desde cualquier dispositivo su registro sincronizado y las fotos de sus visitas (D029). Verificado a mano en dos dispositivos físicos y en vista móvil el 2026-10-14.
 - La integración oficial, políticas definitivas de datos y validación en campo todavía están pendientes.
 
 ## Stack actual

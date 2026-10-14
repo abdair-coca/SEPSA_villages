@@ -45,7 +45,7 @@ El CI de referencia usa Ubuntu 24.04, Node 22.12.0 y PostgreSQL 16.4.
 | RF-30 a RF-33 | Cubierto | Cola, reinicio, foto verificada y respuesta perdida |
 | RF-34 | Parcial | Hay atomicidad; falta la prueba de solo escritura adicional |
 | RF-35 | Cubierto | Mensajes de error |
-| RF-36 | Parcial | Pruebas de integración del registro y de la foto (`technician-record.integration.test.ts`, `evidence-read.integration.test.ts`); prueba en navegador con un dispositivo nuevo. Falta: dos dispositivos físicos |
+| RF-36 | Cubierto | Pruebas de integración del registro y de la foto (`technician-record.integration.test.ts`, `evidence-read.integration.test.ts`); prueba en navegador con un dispositivo nuevo; verificación manual en dos dispositivos físicos y en vista móvil (2026-10-14) |
 
 Las pruebas por archivo están en `backend/test/` y `field-app/src/`.
 

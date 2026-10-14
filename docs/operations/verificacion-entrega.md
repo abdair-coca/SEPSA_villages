@@ -58,7 +58,7 @@ No ejecutado en esta revisión: `npm test` del backend y `npm run e2e:browser`, 
 | 2.4 Catálogo de errores y duración de sesión | Cumplido | `215c09e`, `978b4bd`. La sesión dura 7 días (D025), que sustituye a las 14 horas del plan. |
 | 2.5 Vista de conciliación del administrador (D024) | Cumplido | `d9fe995`; solo lectura. |
 | 2.6 E2E del flujo completo | Cumplido | `48e0af5`: administrador, técnico, sincronización y auditoría. |
-| 2.7 Registro del técnico desde otro dispositivo (D029, RF-36) | Parcial | `51009ce`, `1115fb3`. Pruebas de integración del registro y de la foto; en navegador, con un dispositivo nuevo, el registro muestra la visita confirmada y la foto se lee del servidor. Falta: prueba con dos dispositivos físicos. |
+| 2.7 Registro del técnico desde otro dispositivo (D029, RF-36) | Cumplido | `51009ce`, `1115fb3`. Pruebas de integración del registro y de la foto; en navegador, con un dispositivo nuevo, el registro muestra la visita confirmada y la foto se lee del servidor. Verificado a mano por el responsable el 2026-10-14 en dos dispositivos físicos y en vista móvil. |
 
 ### Fase 3: calidad
 
@@ -86,4 +86,4 @@ No ejecutado en esta revisión: `npm test` del backend y `npm run e2e:browser`, 
 3. Sincronizar en producción una foto real de móvil (0.8) y una visita con foto (1.7).
 4. Pedir a una persona no técnica la revisión de textos (3.4).
 5. Decidir si `e2e:browser` y `npm test` del backend se ejecutan contra una base de prueba antes de la entrega.
-6. Probar el registro del técnico (2.7) con dos dispositivos físicos, con la guía de evaluación, sección 6.
+6. Registro del técnico (2.7): verificado a mano el 2026-10-14. No queda pendiente.

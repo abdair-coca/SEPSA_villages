@@ -92,6 +92,7 @@ Pruebas de RF-36 (D029). Se ejecutaron con el código de `1115fb3` y con Postgre
 | S8 | `npx vitest run` (app) | 0 | 47 archivos, 511 pruebas, todas pasan |
 | S9 | `npm run build` (app, producción, conectada al servidor) | 0 | Correcto, con el código de `1115fb3` |
 | S11 | `npm run smoke:ui` | 0 | 17 de 17 verificaciones pasan. Se ejecutó tras la fase 1; no se repitió tras la fase 2 |
+| S7 | `npm run e2e:browser` (con PostgreSQL local aislado) | 0 | `passed`: 10 comprobaciones del flujo previo al registro (acceso, asignación, visita sin conexión, recarga, sincronización y auditoría, corte con foto y GPS, reconexión, evidencia en PostgreSQL). No cubre el registro del técnico ni sus fotos |
 
 **Prueba en navegador (manual, no automatizada).** Se usó el build de producción y el backend aislado:
 
@@ -104,8 +105,6 @@ Pruebas de RF-36 (D029). Se ejecutaron con el código de `1115fb3` y con Postgre
 | Una apertura del registro en el build de producción | Una fila de auditoría `TECHNICIAN_RECORD_READ`. En desarrollo aparecen dos, por `StrictMode` |
 | Consola del navegador | Sin errores |
 
-**No ejecutado:**
+**Verificación manual del responsable del proyecto (2026-10-14):** la prueba con dos dispositivos físicos y la vista móvil con ancho de teléfono real. El agente de desarrollo no las ejecutó; el resultado es el informado por el responsable.
 
-- La prueba con dos dispositivos físicos. El dispositivo nuevo se simuló con almacenamiento limpio, dentro de un mismo navegador.
-- La vista móvil con un ancho de teléfono real. El botón «Ver registro del servidor» está en la vista móvil y se comprobó en el DOM, pero no se pulsó con ese ancho.
-- `npm run e2e:browser` no se volvió a ejecutar tras esta fase.
+**Automatizado:** `npm run e2e:browser` se volvió a ejecutar y pasó sus 10 comprobaciones. No cubre el registro del técnico ni sus fotos; esas se cubren con las pruebas de integración y la prueba en navegador de esta sección.

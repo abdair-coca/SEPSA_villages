@@ -47,7 +47,7 @@ Estado al 2026-10-13, comprobado contra el código.
 
 | Tema | Estado y qué falta |
 |---|---|
-| Datos del técnico desde otro dispositivo (RF-36, D029) | Parcial. El técnico consulta su registro y sus fotos desde el servidor (`backend/test/technician-record.integration.test.ts`, `backend/test/evidence-read.integration.test.ts`). En navegador, con un dispositivo nuevo, se comprobaron el registro y la foto. Un consumo con otro dispositivo se rechaza (`backend/test/reconnection.test.ts`). Falta probar con dos dispositivos reales. |
+| Datos del técnico desde otro dispositivo (RF-36, D029) | Cerrado el 2026-10-14. El técnico consulta su registro y sus fotos desde el servidor (`backend/test/technician-record.integration.test.ts`, `backend/test/evidence-read.integration.test.ts`). En navegador, con un dispositivo nuevo, se comprobaron el registro y la foto. Un consumo con otro dispositivo se rechaza (`backend/test/reconnection.test.ts`). Verificado a mano en dos dispositivos físicos y en vista móvil (`11-resultados-pruebas.md`, apartado 8). |
 | Filas de personas en los seeds `005` y `006` (D031) | Hecho en el árbol de trabajo. El historial de git no se reescribe; decidir si SEPSA exige purgarlo (sección B). |
 | NRO_CORREL y NIV_CALIDAD (D027) | Sin cambio. No están en el modelo; se añaden cuando SEPSA defina cómo los envía. |
 | FECHA_CORTE y HORA_CORTE | Verificado: el momento llega al servidor como `recorded_at` dentro del payload de la operación (`sync_operations.payload`). No hay exportación SC08 que lo use (`TODO: VALIDAR CON SEPSA`). |
