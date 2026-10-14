@@ -6,16 +6,18 @@ Estado: entrega, copia fechada.
 
 Este conjunto describe el piloto provisional del sistema de cortes y reconexiones. No es la API oficial de SEPSA. Lo que corresponde a SEPSA definir está en la lista de pendientes.
 
+La entrega tiene un cuerpo de resumen (documentos 01 a 14) y un conjunto de anexos (A01 a A14) con el detalle completo: tablas, matrices, criterios y evidencias. Cada resumen indica su anexo. El contenido del anexo no se repite en el resumen.
+
 ## Índice por punto de la carta
 
-| Punto de la carta | Documento |
-|---|---|
-| 1. Requerimientos funcionales y técnicos; procesos de corte y reconexión | `01-requisitos-funcionales-tecnicos.md`, `02-procesos-corte-reconexion.md` |
-| 2. Arquitectura, tecnologías, modelo de datos, diccionario y código fuente | `03-arquitectura-tecnologias.md`, `04-modelo-datos.md`, `05-diccionario-datos.md`, `06-documentacion-codigo.md` |
-| 3. Manuales técnico, de instalación y de usuario | `07-manual-tecnico.md`, `08-manual-instalacion.md`, `09-manual-usuario.md` |
-| 4. Plan de pruebas, criterios de aceptación y resultados | `10-plan-pruebas.md`, `11-resultados-pruebas.md` |
-| 5. Seguridad, perfiles de acceso y tratamiento de la información | `12-seguridad-perfiles-acceso.md`, `13-tratamiento-informacion.md` |
-| Transversal | `14-pendientes-sepsa.md` |
+| Punto de la carta | Resumen | Anexo de detalle |
+|---|---|---|
+| 1. Requerimientos funcionales y técnicos; procesos de corte y reconexión | `01-requisitos-funcionales-tecnicos.md`, `02-procesos-corte-reconexion.md` | A01, A02 |
+| 2. Arquitectura, tecnologías, modelo de datos, diccionario y código fuente | `03-arquitectura-tecnologias.md`, `04-modelo-datos.md`, `05-diccionario-datos.md`, `06-documentacion-codigo.md` | A03, A05, A06 (el 04 va completo) |
+| 3. Manuales técnico, de instalación y de usuario | `07-manual-tecnico.md`, `08-manual-instalacion.md`, `09-manual-usuario.md` | A07, A08, A09 |
+| 4. Plan de pruebas, criterios de aceptación y resultados | `10-plan-pruebas.md`, `11-resultados-pruebas.md` | A10, A11 |
+| 5. Seguridad, perfiles de acceso y tratamiento de la información | `12-seguridad-perfiles-acceso.md`, `13-tratamiento-informacion.md` | A12, A13 |
+| Transversal | `14-pendientes-sepsa.md` | A14 |
 
 ## Cómo leer
 
