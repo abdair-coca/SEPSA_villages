@@ -247,7 +247,7 @@ Clave: Técnico (`technician_id`) + Dispositivo (`device_id`).
 
 ## Diferencias entre migraciones
 
-- `003_reference_fields.sql` redefine columnas de `debtors` que `001_init.sql` ya crea (con `ADD COLUMN IF NOT EXISTS`). En una base creada con `001` no cambia nada. En una base anterior, sí. Las columnas afectadas son `circuit`, `tariff` y `supply_status` (con defecto `'TODO: VALIDAR CON SEPSA'` en `003`), y además `cadastral_latitude` y `cadastral_longitude` (`numeric(9,6)`), `meter_multiplier` (`numeric(12,4)`), `claims`, `payment_plan`, `suspension_date`, `reconnection_manual`, `reconnection_date`, `reconnection_technician`, `route_order` y varias más.
+- `003_reference_fields.sql` redefine columnas de `debtors` que `001_init.sql` ya crea (con `ADD COLUMN IF NOT EXISTS`). En una base creada con `001` no cambia nada. En una base anterior, sí. Las columnas afectadas son `circuit`, `tariff` y `supply_status` (con un valor provisional pendiente de SEPSA en `003`), y además `cadastral_latitude` y `cadastral_longitude` (`numeric(9,6)`), `meter_multiplier` (`numeric(12,4)`), `claims`, `payment_plan`, `suspension_date`, `reconnection_manual`, `reconnection_date`, `reconnection_technician`, `route_order` y varias más.
 - `orders.cuc` tiene tres definiciones de unicidad (la restricción de creación y dos índices). Son redundantes; no cambian el comportamiento.
 - `008_reconnection_schema.sql` amplía tres restricciones: `orders.status` agrega `RECONEXIÓN`; `sync_operations.action` agrega `RECONNECTION`; `cut_authorizations.action` es una columna nueva con `CUT` y `RECONNECTION`.
 - `003_reference_fields.sql` no está en el arranque del servidor. Qué migraciones aplicar a la base desplegada lo decide el equipo.
