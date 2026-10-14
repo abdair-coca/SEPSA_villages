@@ -1,14 +1,12 @@
-/** Resumen del administrador: conteo de órdenes por estado y de trazas de auditoría y sincronización. */
-import type { AuditEvent, WorkOrder } from "../domain/types";
+/** Resumen del administrador: conteo de órdenes por estado y total de trazas de auditoría. */
+import type { WorkOrder } from "../domain/types";
 
-export function AdminOverview({ orders, audit }: { orders: WorkOrder[]; audit: AuditEvent[] }) {
+export function AdminOverview({ orders, traceCount }: { orders: WorkOrder[]; traceCount: number }) {
   const generated = orders.filter((order) => order.status === "GENERADO").length;
   const executed = orders.filter((order) => order.status === "EJECUTADO").length;
   const cancelled = orders.filter((order) => order.status === "ANULADO").length;
   const unassigned = orders.filter((order) => !order.assignedTechnicianId).length;
   const assigned = orders.filter((order) => Boolean(order.assignedTechnicianId)).length;
-  const auditTraceCount = audit.filter((event) => event.action !== "SYNC_OPERATION").length;
-  const syncTraceCount = audit.filter((event) => event.action === "SYNC_OPERATION").length;
 
   return (
         <section className="admin-summary" aria-label="Resumen de órdenes">
@@ -18,7 +16,7 @@ export function AdminOverview({ orders, audit }: { orders: WorkOrder[]; audit: A
             <Stat label="Asignadas" value={assigned} tone="active" />
             <Stat label="Ejecutadas" value={executed} tone="done" />
             <Stat label="Anuladas" value={cancelled} tone="muted" />
-            <Stat label="Trazas" value={audit.length} tone="traces" detail={`${auditTraceCount} auditoría · ${syncTraceCount} sincronización`} />
+            <Stat label="Trazas" value={traceCount} tone="traces" />
           </div>
         </section>
   );

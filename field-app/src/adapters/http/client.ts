@@ -265,6 +265,14 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     });
   }
 
+  async countAudit(session: Session): Promise<number> {
+    const authorized = this.requireSession(session);
+    return this.trackAdminRead(authorized, async () => {
+      const response = await this.request<PilotAuditResponseDto>("/v1/audit?limit=1", { method: "GET" }, authorized);
+      return requiredNumber(response.total, "total");
+    });
+  }
+
   /**
    * Pide autorización de corte. El consumo es `immediate` (D020): `consumeCut` la consume al confirmar el corte.
    * Un rechazo definitivo (`CUT_AUTHORIZATION_REJECTIONS`) o un 401 vuelve como `not_authorized` con su código, para que
@@ -589,6 +597,10 @@ function requiredPositiveInteger(value: unknown, field: string): number {
 }
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) throw new Error(`REMOTE_ORDER_INVALID:${field}`);
+  return value;
+}
+function requiredNumber(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) throw new Error(`REMOTE_AUDIT_INVALID:${field}`);
   return value;
 }
 function isValidFutureDate(value?: string): boolean { const timestamp = value ? Date.parse(value) : Number.NaN; return Number.isFinite(timestamp) && timestamp > Date.now(); }

@@ -7,7 +7,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   generateOperationId,
-  type AuditEvent,
   type DebtorRecord,
   type Session,
   type TechnicianRecord,
@@ -43,7 +42,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   const [filterRecords, setFilterRecords] = useState<DebtorRecord[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianRecord[]>([]);
   const [orders, setOrders] = useState<WorkOrder[]>([]);
-  const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
   const [reconciliation, setReconciliation] = useState<ReconciliationItem[]>();
   const [filters, setFilters] = useState<SearchFilters>({ ...DEFAULT_SEARCH_FILTERS });
   const [selectedDebtor, setSelectedDebtor] = useState("");
@@ -71,8 +70,9 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   filtersRef.current = filters;
   scopeRef.current = { authority, session };
 
+  // Se compara el `sessionId`, no el objeto: revalidar la misma sesión produce un objeto nuevo y no debe descartar la carga en curso.
   function isActiveSession(): boolean {
-    return mounted.current && scopeRef.current.authority === authority && scopeRef.current.session === session;
+    return mounted.current && scopeRef.current.authority === authority && scopeRef.current.session.sessionId === session.sessionId;
   }
 
   function isCurrentRequest(sequence: number): boolean {
@@ -88,11 +88,11 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
       if (mode === "search") setMessage("");
     }
     try {
-      const [nextDebtors, nextFilterRecords, nextOrders, nextAudit, nextTechnicians] = await Promise.all([
+      const [nextDebtors, nextFilterRecords, nextOrders, nextAuditTotal, nextTechnicians] = await Promise.all([
         authority.findDebtors({ query: nextFilters.query, area: nextFilters.area, locality: nextFilters.locality, route: nextFilters.route, minMonthsPending: parseMinMonths(nextFilters.minMonthsPending), supplyStatus: nextFilters.supplyStatus, session }),
         authority.findDebtors({ session }),
         authority.listOrders(session),
-        authority.listAudit({ session, includeRejected: true }),
+        authority.countAudit(session),
         authority.listTechnicians(session),
       ]);
       // Lista de solo lectura: si falla (por ejemplo, un backend anterior), no bloquea el resto de la vista.
@@ -104,7 +104,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
       setTechnicians(nextTechnicians);
       setSelectedTechnician((current) => nextTechnicians.some((technician) => technician.userId === current) ? current : nextTechnicians[0]?.userId ?? "");
       setOrders(nextOrders);
-      setAudit(nextAudit);
+      setAuditTotal(nextAuditTotal);
       setOrdersPage(1);
       setSuppliesPage(1);
       setSelectedDebtor((current) => nextDebtors.some((debtor) => debtor.debtorId === current) ? current : "");
@@ -155,7 +155,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
       refreshSequence.current++;
       cancelLiveSearch();
     };
-  }, [authority, session]);
+  }, [authority, session.sessionId]);
 
   useEffect(() => {
     if (lastLiveQuery.current === filters.query) return;
@@ -172,7 +172,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     return () => {
       cancelLiveSearch();
     };
-  }, [filters.query, authority, session]);
+  }, [filters.query, authority, session.sessionId]);
 
   useEffect(() => {
     if (!selectedOrder || !orderDetailRef.current) return;
@@ -377,7 +377,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
       {message ? <Notification tone={messageTone} text={message} onDismiss={() => setMessage("")} /> : null}
 
       <main className="operations-main">
-        <AdminOverview orders={orders} audit={audit} />
+        <AdminOverview orders={orders} traceCount={auditTotal} />
         {reconciliation ? <AdminReconciliation items={reconciliation} /> : null}
 
         <div className="operations-grid admin-workspace">

@@ -584,6 +584,10 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     return events.filter((event) => (!query.orderId || event.orderId === query.orderId) && (query.includeRejected !== false || event.result === "accepted")).map((event) => structuredClone(event));
   }
 
+  async countAudit(session: Session): Promise<number> {
+    return (await this.listAudit({ session, includeRejected: true })).length;
+  }
+
   private async recordRejectedAudit(session: Session, operation: OperationRecord | VisitRecord, error: DomainError): Promise<void> {
     const db = await this.dbPromise;
     const transaction = db.transaction("audit", "readwrite");

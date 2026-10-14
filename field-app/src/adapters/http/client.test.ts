@@ -199,9 +199,11 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
 
     await expect(client.findDebtors({ session })).resolves.toHaveLength(2);
     await expect(client.listAudit({ session })).resolves.toHaveLength(2);
+    await expect(client.countAudit(session)).resolves.toBe(101);
     await expect(client.findDebtorsPage({ session }, "100")).resolves.toMatchObject({ nextCursor: undefined, total: 101, debtors: [{ debtorId: "debtor-1" }] });
     expect(urls.filter((url) => url.includes("/v1/debtors")).every((url) => new URL(url).searchParams.get("limit") === "100")).toBe(true);
     expect(urls).toContain("http://localhost:8080/v1/audit?limit=100&cursor=100");
+    expect(urls).toContain("http://localhost:8080/v1/audit?limit=1");
   });
 
   it("maps authoritative area and route names for filter labels", async () => {

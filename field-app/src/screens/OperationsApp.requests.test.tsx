@@ -56,7 +56,7 @@ function setup() {
   const a = deferred<DebtorRecord[]>(), b = deferred<DebtorRecord[]>();
   const requests = [a, b];
   const findDebtors = vi.fn((query) => "minMonthsPending" in query ? requests.shift()!.promise : Promise.resolve([]));
-  const authority = { findDebtors, listOrders: vi.fn().mockResolvedValue([]), listAudit: vi.fn().mockResolvedValue([]), listTechnicians: vi.fn().mockResolvedValue([technician]) } as unknown as OperationsAuthorityPort;
+  const authority = { findDebtors, listOrders: vi.fn().mockResolvedValue([]), countAudit: vi.fn().mockResolvedValue(0), listTechnicians: vi.fn().mockResolvedValue([technician]) } as unknown as OperationsAuthorityPort;
   let activeSession = session;
   const render = () => {
     hooks.cursor = 0;
@@ -69,7 +69,11 @@ function setup() {
     for (const slot of hooks.slots) (slot as { cleanup?: () => void } | undefined)?.cleanup?.();
   };
   render();
-  return { a, b, render, search, unmount, findDebtors, authority, changeSession: () => { activeSession = { ...session, sessionId: "new-session" }; render(); } };
+  return {
+    a, b, render, search, unmount, findDebtors, authority,
+    changeSession: () => { activeSession = { ...session, sessionId: "new-session" }; render(); },
+    revalidateSession: () => { activeSession = { ...session }; render(); },
+  };
 }
 const hasMessage = (nodes: ReturnType<typeof elements>, text: string) => nodes.some((node) => node.props.message === text || node.props.text === text || node.props.children === text);
 const isSearching = (nodes: ReturnType<typeof elements>) => nodes.some((node) => Array.isArray(node.props.children) && node.props.children.includes("Consultando…"));
@@ -85,6 +89,25 @@ function confirmCreation(render: () => ReactElement<Record<string, unknown>>[]) 
 afterEach(() => { hooks.slots = []; hooks.pending = []; hooks.writes = 0; vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("administrative request ownership", () => {
+  it("does not reload when the same session is revalidated as a new object", async () => {
+    const { a, authority, findDebtors, revalidateSession } = setup();
+    a.resolve([debtor]);
+    await settle();
+    revalidateSession();
+    await settle();
+    expect(findDebtors).toHaveBeenCalledTimes(2);
+    expect(authority.listOrders).toHaveBeenCalledTimes(1);
+    expect(authority.countAudit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an in-flight load when the same session is revalidated as a new object", async () => {
+    const { a, render, revalidateSession } = setup();
+    revalidateSession();
+    a.resolve([debtor]);
+    await settle();
+    expect(render().some((node) => node.props.debtor === debtor)).toBe(true);
+  });
+
   it("shows a current load failure and recovers through retry", async () => {
     const { a, b, render } = setup();
     a.reject(new Error("Current load failed"));
@@ -389,7 +412,7 @@ describe("administrative request ownership", () => {
     expect(authority.assignOrder).toHaveBeenCalledOnce();
     expect(authority.listOrders).toHaveBeenCalledTimes(2);
     expect(authority.findDebtors).toHaveBeenCalledTimes(4);
-    expect(authority.listAudit).toHaveBeenCalledTimes(2);
+    expect(authority.countAudit).toHaveBeenCalledTimes(2);
     expect(authority.listTechnicians).toHaveBeenCalledTimes(2);
     expect(hasMessage(render(), "Se crearon 1 órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.")).toBe(true);
   });
