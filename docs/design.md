@@ -78,6 +78,7 @@ Antes de considerar lista una feature visual, debe cumplir todos estos puntos:
 
 - El shell compartido conserva marca, contexto, conectividad y cuenta; las acciones y el título pertenecen al contexto de la pantalla.
 - A partir del breakpoint de `1000px`, los diseños de contenido y panel lateral pasan a una sola columna.
+- Las tablas de datos de solo lectura (por ejemplo, operaciones por conciliar) se convierten en tarjetas por debajo de `760px`: cada celda lleva `data-label` con el nombre de su columna, y el encabezado de la tabla se oculta.
 - En móvil se usa la navegación inferior existente, se respetan áreas seguras y las listas/detalles se adaptan al flujo de una sola tarea.
 - Captura de campo y mapas pueden usar superficies de pantalla completa cuando el flujo existente lo requiera; deben mantener acción primaria visible, manejo de teclado/foco y salida clara.
 - Antes de crear navegación o un layout móvil nuevo, comprobar si el patrón equivalente ya está implementado en `FieldApp.tsx` y `styles.css`.
