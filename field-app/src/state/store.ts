@@ -135,10 +135,23 @@ interface SeedableRepository extends LocalRepository {
   savePackage(workPackage: WorkPackage): Promise<void>;
 }
 
+/**
+ * Un segundo toque sobre la misma orden y acción mientras la primera sigue en curso recibe el mismo resultado:
+ * no crea otra operación ni pide otra autorización, porque un corte físico no se repite (D020).
+ */
+function sharedWhileInFlight(inFlight: Map<string, Promise<ActionResult>>, key: string, run: () => Promise<ActionResult>): Promise<ActionResult> {
+  const current = inFlight.get(key);
+  if (current) return current;
+  const pending = run().finally(() => inFlight.delete(key));
+  inFlight.set(key, pending);
+  return pending;
+}
+
 /** Crea el store del técnico; `init()` carga el paquete local antes de permitir acciones. */
 export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   const now = dependencies.now ?? (() => new Date().toISOString());
   const { technicianId, deviceId } = dependencies;
+  const inFlightActions = new Map<string, Promise<ActionResult>>();
   const technicianName = dependencies.technicianName ?? technicianId;
   const listeners = new Set<() => void>();
   let snapshot: AppState = {
@@ -294,8 +307,8 @@ export function createAppStore(dependencies: AppStoreDependencies): AppStore {
       await dependencies.repository.saveCaptureDraft({ ...draftKey(orderId, action), updatedAt: now(), content });
     },
     registerVisit: actionCoordinator.registerVisit,
-    executeCut: actionCoordinator.executeCut,
-    executeReconnection: actionCoordinator.executeReconnection,
+    executeCut: (orderId, input) => sharedWhileInFlight(inFlightActions, `CUT:${orderId}`, () => actionCoordinator.executeCut(orderId, input)),
+    executeReconnection: (orderId, input) => sharedWhileInFlight(inFlightActions, `RECONNECTION:${orderId}`, () => actionCoordinator.executeReconnection(orderId, input)),
     verifyReconnection: actionCoordinator.verifyReconnection,
     retryWithNewAuthorization: actionCoordinator.retryWithNewAuthorization,
     sync: syncCoordinator.requestSync,

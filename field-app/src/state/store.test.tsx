@@ -133,6 +133,37 @@ describe("field app store", () => {
     expect(store.getSnapshot().orders.find((order) => order.orderId === "ORD-24017")?.status).toBe("GENERADO");
   });
 
+  it("records one reconnection when its confirmation is pressed twice before the first finishes", async () => {
+    const { store, repository } = setup("store-double-confirm-reconnection", true);
+    await store.init();
+    const input = { exceptionReason: "saltar_control_fotos: doble toque", demora: "Sin demora" };
+
+    const outcomes = await Promise.all([store.executeReconnection("ORD-24019", input), store.executeReconnection("ORD-24019", input)]);
+
+    expect(outcomes[1]).toBe(outcomes[0]);
+    const reconnectionItems = store.getSnapshot().syncItems.filter((item) => item.action === "RECONNECTION");
+    expect(reconnectionItems).toHaveLength(1);
+    expect(await repository.getRecord(reconnectionItems[0]!.operationId)).toMatchObject({ status: "CONFIRMED" });
+  });
+
+  it("records one cut operation when the confirmation is pressed twice before the first finishes", async () => {
+    const { store, repository, authorization } = setup("store-double-confirm-cut", true);
+    const requestCut = vi.spyOn(authorization, "requestCut");
+    await store.init();
+    await store.saveCaptureDraft("ORD-24017", "CUT", { reading: { value: 123.45 } });
+    const input = { exceptionReason: "saltar_control_fotos: doble toque", fieldCapture: validFieldCapture() };
+
+    const outcomes = await Promise.all([store.executeCut("ORD-24017", input), store.executeCut("ORD-24017", input)]);
+
+    expect(outcomes.map((outcome) => outcome.outcome)).toEqual(["confirmed", "confirmed"]);
+    expect(requestCut).toHaveBeenCalledTimes(1);
+
+    const cutItems = store.getSnapshot().syncItems.filter((item) => item.action === "CUT");
+    expect(cutItems).toHaveLength(1);
+    expect(requestCut).toHaveBeenCalledTimes(1);
+    expect(await repository.getRecord(cutItems[0]!.operationId)).toMatchObject({ status: "CONFIRMED" });
+  });
+
   it("accepts a durably saved cut intent while server consumption is deferred", async () => {
     const { store, repository, authorization } = setup("store-cut-deferred-consumption", true);
     const requestCut = authorization.requestCut.bind(authorization);
