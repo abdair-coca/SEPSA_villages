@@ -1,0 +1,13 @@
+{
+  "name": "entrega-sepsa-generador",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Genera la copia Word de la entrega SEPSA desde los Markdown de docs/entrega-sepsa/",
+  "scripts": {
+    "build": "node build-docx.js"
+  },
+  "dependencies": {
+    "docx": "9.11.0",
+    "marked": "18.1.1"
+  }
+}

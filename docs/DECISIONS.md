@@ -179,7 +179,7 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 ## D030 — Formato de la entrega SEPSA
 
 **Estado:** vigente
-**Decisión:** La entrega (`docs/entrega-sepsa/`) se mantiene en unas 36 páginas medidas en A4 con letra de 10 pt, sin anexos separados. Dentro de la entrega no se enlazan archivos `.md` internos; solo se citan rutas de código o de documentos cuando hacen falta para verificar una fuente. La copia en Word (`.docx`) se genera fuera del repo a partir de la entrega y no se commitea salvo petición.
+**Decisión:** La entrega (`docs/entrega-sepsa/`) se mantiene en unas 36 páginas medidas en A4 con letra de 10 pt, sin anexos separados. Dentro de la entrega no se enlazan archivos `.md` internos; solo se citan rutas de código o de documentos cuando hacen falta para verificar una fuente. La copia en Word (`.docx`) se genera con `docs/entrega-sepsa/generador/` (D032) y no se commitea salvo petición.
 **Consecuencia:** Si la entrega cambia, la copia Word se regenera. Reducir más la entrega exige quitar contenido de algún punto de la carta, decisión que no se ha tomado.
 
 ## D031 — Se retiran los seeds con datos de personas
@@ -187,3 +187,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** `backend/sql/seeds/005_definitive_seed.sql` (28 filas) y `006_replace-betanzos-20260923-jhonny.sql` (948 filas) se eliminan del repo, de `scripts/bootstrap-pilot.mjs` y de `docker-compose.yml`. Bootstrap y Compose crean el esquema y los usuarios de `002_seed.sql`, sin deudores. Los datos de prueba se cargan fuera del repo (D026).
 **Consecuencia:** El historial de git conserva ambos archivos y no se reescribe. Mientras eso sea así, la entrega no afirma que el repositorio completo carezca de datos de personas; afirma que el árbol de trabajo actual no los contiene.
+
+## D032 — Generador y presentación de la copia Word
+
+**Estado:** vigente
+**Decisión:** El generador de la copia Word vive en `docs/entrega-sepsa/generador/` (`build-docx.js`, con dependencias fijadas en `package.json`) y escribe `docs/entrega-sepsa/entrega-sepsa-SEPSA.docx`, que no se commitea (D030). La copia no muestra las líneas `Fuente`, `Fecha` ni `Estado` de cada documento, ni fechas de la copia; muestra el marcador de pendiente como «Pendiente de SEPSA». Las fuentes conservan ambos. Los documentos siguen uno tras otro, con contenido de nivel 1; las capturas del manual y el diagrama entidad-relación van como imágenes, y el diagrama en hoja apaisada.
+**Consecuencia:** Cualquier cambio en `docs/entrega-sepsa/` exige regenerar la copia. La última medición con LibreOffice dio 29 páginas, por debajo de las 36 de D030. La copia Word no es fuente: ante una diferencia, manda el Markdown.
