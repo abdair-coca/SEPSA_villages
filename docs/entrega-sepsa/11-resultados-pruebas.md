@@ -62,3 +62,19 @@ Commit `358d00c`, sin cambios sin commitear en `backend/`, `field-app/` ni `docs
 | — | Arranque idempotente: `apply-startup-schema-migrations.mjs` y `20261002-role-grants.mjs`, dos veces | 0 | `orders`, `users`, `debtors`, `audit_events`, `cut_authorizations` y `sessions` sin cambios (conteo y huella) |
 
 La carga del Excel ya no forma parte del arranque (D026), por lo que no se probó en esa ejecución. Con los datos sintéticos de la prueba no se comprobó nada sobre producción.
+
+## 7. Revisión final (2026-10-13)
+
+Commit `7354101` (código) y `b89bfa5` (documentos). Los cambios sin commitear de otra tarea (`AppHeader`, `OperationsApp` y estilos) aparecieron después de estas ejecuciones y no forman parte de ellas.
+
+| Suite | Comando | Código | Resultado |
+|---|---|---|---|
+| S8 | `npm test -- --run` (app) | 0 | 45 archivos, 490 pruebas, todas pasan (incluye las dos pruebas de doble toque de `store.test.tsx`) |
+| — | `npx tsc --noEmit` (app) | 0 | Sin errores |
+| S9 | `npm run build` (app, producción) | 0 | Sin `tech-camila`, `device-rugged-01`, `seedE2eData`, `SIMULATED_AUTHORITY` ni `dirección simulada` en `dist/assets/*.js` |
+| — | `npm run test:smoke-guard` | 0 | 1 de 1 |
+| S11–S12 | `npm run smoke:ui` y `npm run smoke:pwa`, con build simulado (`VITE_PILOT_BACKEND_URL` vacío y `VITE_ENABLE_SIMULATION=true`) | 0 | Ambos pasan |
+| S1 | `npm run test:unit` (servidor), y `npm run build` del servidor | 0 | 55 de 55 pruebas |
+| — | Lectura JSON de `openapi/pilot-provisional.openapi.json` | 0 | Válido |
+
+**No ejecutado:** `npm test` del servidor (S2, S3) y `npm run e2e:browser` (S7). La base de prueba en `127.0.0.1:55432` no respondía y esta revisión no tiene sus credenciales. Quedan pendientes; CI los ejecuta al subir los cambios.
