@@ -24,7 +24,7 @@ Las capturas de este manual son del modo simulado, con datos de demostración, n
 
 ![Creación masiva: selección del técnico y confirmación de las órdenes](img/admin-crear-asignar-1280.png)
 
-**Operaciones por conciliar.** Lista de solo lectura: conflictos, autorizaciones usadas cuya operación no llegó y operaciones cerradas porque la autorización no se usó. El técnico las verifica desde su dispositivo.
+**Operaciones por conciliar.** Desde el menú de cuenta (avatar) se abre un diálogo de solo lectura con tres contadores y la lista de casos: conflictos, autorizaciones usadas cuya operación no llegó y operaciones cerradas porque la autorización no se usó. El técnico las verifica desde su dispositivo.
 
 **Lo que el piloto no permite:** anular órdenes, y resolver desde la interfaz una operación incierta.
 

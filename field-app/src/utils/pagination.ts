@@ -1,5 +1,5 @@
 /**
- * Paginación de listas en pantalla (órdenes y suministros del administrador, cola y ficha del técnico).
+ * Paginación de listas en pantalla (órdenes, suministros y operaciones por conciliar del administrador, cola y ficha del técnico).
  * Las páginas pedidas fuera de rango se ajustan al rango válido.
  */
 import type { SyncItem } from "../ports/sync";
@@ -8,6 +8,8 @@ import { splitReviewText } from "./format";
 export const ADMIN_ORDERS_PAGE_SIZE = 4;
 
 export const ADMIN_SUPPLIES_PAGE_SIZE = 7;
+
+export const ADMIN_RECONCILIATION_PAGE_SIZE = 8;
 
 export function getAdminOrderPage<T>(items: readonly T[], requestedPage: number, pageSize = ADMIN_ORDERS_PAGE_SIZE): { items: T[]; page: number; totalPages: number } {
   const safePageSize = Number.isSafeInteger(pageSize) && pageSize > 0 ? pageSize : ADMIN_ORDERS_PAGE_SIZE;

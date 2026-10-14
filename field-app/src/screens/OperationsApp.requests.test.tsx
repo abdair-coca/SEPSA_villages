@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import type { DebtorRecord, Session, TechnicianRecord } from "../domain/types";
+import type { DebtorRecord, ReconciliationItem, Session, TechnicianRecord } from "../domain/types";
 import type { OperationsAuthorityPort } from "../ports/authority";
 import { OperationsApp } from "./OperationsApp";
 import { DebtorSearchPanel } from "../components/DebtorSearchPanel";
+import { AdminReconciliation } from "../components/AdminReconciliation";
 import { createDemoPackage } from "../bootstrap/simulated-runtime";
 
 // Minimal hook scheduler: callbacks run from the actual component, effects retain
@@ -64,6 +65,7 @@ function setup() {
   const authority = {
     findDebtors, findDebtorPage, listDebtorFilterRecords: vi.fn().mockResolvedValue([]),
     listOrders: vi.fn().mockResolvedValue([]), countAudit: vi.fn().mockResolvedValue(0), listTechnicians: vi.fn().mockResolvedValue([technician]),
+    listReconciliation: vi.fn().mockResolvedValue([]),
   } as unknown as OperationsAuthorityPort;
   let activeSession = session;
   const render = () => {
@@ -211,6 +213,34 @@ describe("administrative request ownership", () => {
     expect(recent.props.totalPages).toBe(2);
     (recent.props.onPageChange as Function)(2);
     expect(render().find((node) => "totalOrders" in node.props)!.props.orders).toEqual(orders.slice(4));
+  });
+
+  it("opens the reconciliation dialog from the account menu with the current cases", async () => {
+    const { a, authority, render, changeSession } = setup();
+    const item: ReconciliationItem = { kind: "CONSUMED_NOT_SYNCED", operationId: "cut-1", orderId: "order-1", action: "CUT", technicianId: "tech-1", since: "2026-10-12T10:00:00.000Z" };
+    a.resolve([]);
+    await settle();
+    vi.mocked(authority.listReconciliation!).mockResolvedValue([item]);
+    changeSession();
+    await settle();
+
+    const menuAction = render().find((node) => node.props.accountAction)!.props.accountAction as { detail: string; onSelect: () => void };
+    expect(menuAction.detail).toBe("1 caso");
+    expect(render().some((node) => node.type === AdminReconciliation)).toBe(false);
+    menuAction.onSelect();
+    const dialog = render().find((node) => node.type === AdminReconciliation)!;
+    expect(dialog.props.items).toEqual([item]);
+  });
+
+  it("does not offer the reconciliation dialog when the backend has no reconciliation list", async () => {
+    const { a, authority, render, changeSession } = setup();
+    a.resolve([]);
+    await settle();
+    vi.mocked(authority.listReconciliation!).mockRejectedValue(new Error("Older backend"));
+    changeSession();
+    await settle();
+
+    expect(render().some((node) => node.props.accountAction)).toBe(false);
   });
 
   it("a search loads only the supply page; orders, technicians and filter options are not reloaded", async () => {

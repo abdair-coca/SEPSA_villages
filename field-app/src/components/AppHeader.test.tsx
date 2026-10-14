@@ -106,6 +106,17 @@ describe("shared app header", () => {
     }
   });
 
+  it("offers the admin account action as a menu item with its detail, and only when supplied", () => {
+    const props = { role: "admin" as const, title: "Órdenes", description: "Gestión", user: { displayName: "Ana Pérez", roleLabel: "Admin" }, onLogout: () => undefined };
+    expect(renderToStaticMarkup(<AppHeader {...props} />)).not.toContain('aria-label="Seguimiento"');
+
+    const markup = renderToStaticMarkup(<AppHeader {...props} accountAction={{ label: "Operaciones por conciliar", detail: "2 casos", icon: <span>!</span>, onSelect() {} }} />);
+    expect(markup).toContain('class="app-header__menu-actions" role="group" aria-label="Seguimiento"');
+    expect(markup).toContain('<span class="app-header__menu-action-detail">2 casos</span>');
+    expect(markup).toContain("Operaciones por conciliar");
+    expect(markup.indexOf("Operaciones por conciliar")).toBeLessThan(markup.indexOf("Cerrar sesión"));
+  });
+
   it("renders the minimal field shell with synchronization actions inside the account menu", () => {
     const markup = renderToStaticMarkup(
       <AppHeader

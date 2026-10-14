@@ -16,7 +16,8 @@ import type { DebtorFilterRecord, OperationsAuthorityPort } from "../ports/autho
 import { AppHeader, type AppHeaderRoleSwitch } from "../components/AppHeader";
 import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "../components/common/Notification";
 import { AdminOverview } from "../components/AdminOverview";
-import { AdminReconciliation } from "../components/AdminReconciliation";
+import { AdminReconciliation, reconciliationCaseLabel } from "../components/AdminReconciliation";
+import { IconAlertTriangle } from "../components/common/Icons";
 import type { ReconciliationItem } from "../domain/types";
 import { DebtorSearchPanel, type SearchFilters } from "../components/DebtorSearchPanel";
 import { SelectedSupplyPanel, EmptySupplyPanel, RecentOrdersPreview } from "../components/AdminSupplyPanel";
@@ -50,6 +51,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [reconciliation, setReconciliation] = useState<ReconciliationItem[]>();
+  const [reconciliationOpen, setReconciliationOpen] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({ ...DEFAULT_SEARCH_FILTERS });
   const [selectedDebtor, setSelectedDebtor] = useState("");
   const [selectedDebtorIds, setSelectedDebtorIds] = useState<string[]>([]);
@@ -189,6 +191,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     setBusy(false);
     setOrderCreationDialog(undefined);
     setOrderAssignmentDialog(undefined);
+    setReconciliationOpen(false);
     void loadAdminData();
     return () => {
       mounted.current = false;
@@ -425,6 +428,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
         title="Centro de control de órdenes de corte"
         description="Busca suministros con mora, genera órdenes y asigna técnicos."
         user={{ displayName: session.displayName ?? session.username, roleLabel: "Admin" }}
+        accountAction={reconciliation ? { label: "Operaciones por conciliar", detail: reconciliationCaseLabel(reconciliation.length), icon: <IconAlertTriangle />, onSelect: () => setReconciliationOpen(true) } : undefined}
         onLogout={onLogout}
         roleSwitch={roleSwitch ? { ...roleSwitch, disabled: roleSwitch.disabled || busy } : undefined}
       />
@@ -433,7 +437,6 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
 
       <main className="operations-main">
         <AdminOverview orders={orders} traceCount={auditTotal} />
-        {reconciliation ? <AdminReconciliation items={reconciliation} /> : null}
 
         <div className="operations-grid admin-workspace">
           <DebtorSearchPanel
@@ -470,6 +473,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
        </main>
         {orderCreationDialog ? <OrderCreationModal dialog={orderCreationDialog} debtors={debtorRecordsFor(orderCreationDialog.debtorIds)} technicians={technicians} selectedTechnician={selectedTechnician} busy={busy} onTechnicianChange={setSelectedTechnician} onCancel={() => setOrderCreationDialog(undefined)} onConfirm={() => void confirmOrderCreation()} /> : null}
         {orderAssignmentDialog ? <OrderAssignmentModal order={orderAssignmentDialog} technicians={technicians} selectedTechnician={selectedTechnician} busy={busy} onTechnicianChange={setSelectedTechnician} onCancel={() => setOrderAssignmentDialog(undefined)} onConfirm={() => void confirmOrderAssignment()} /> : null}
+        {reconciliationOpen && reconciliation ? <AdminReconciliation items={reconciliation} onClose={() => setReconciliationOpen(false)} /> : null}
       </div>
   );
 }

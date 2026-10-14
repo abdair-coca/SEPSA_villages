@@ -19,7 +19,7 @@ Esta guía no incluye credenciales. Las cuentas de evaluación se entregan por s
 |---|---|
 | Entrar con la cuenta de administrador y pulsar **Buscar morosos**. | Aparece la lista de suministros. |
 | Seleccionar suministros y pulsar **Crear y asignar orden de corte**; elegir técnico con **Asignar a técnico**. | La orden aparece asignada a ese técnico. |
-| Abrir **Operaciones por conciliar**. | Lista de solo lectura (D024). No hay botones para cambiar órdenes desde ahí. |
+| Abrir el menú de cuenta (avatar) y elegir **Operaciones por conciliar**. | Diálogo de solo lectura con contadores y lista paginada (D024). No hay botones para cambiar órdenes desde ahí. |
 
 ### 2. Técnico con conexión
 

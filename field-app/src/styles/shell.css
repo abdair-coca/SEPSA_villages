@@ -266,6 +266,15 @@
   height: 18px;
 }
 
+.app-header__menu-action-detail {
+  margin-left: auto;
+  color: var(--header-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .app-header__logout {
   min-height: var(--control-height);
   padding: 0 10px;

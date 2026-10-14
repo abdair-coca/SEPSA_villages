@@ -30,6 +30,14 @@ export interface AppHeaderStatus {
   tone: AppHeaderStatusTone;
 }
 
+/** Acción del menú de cuenta que abre un diálogo (por ejemplo, el seguimiento del administrador). */
+export interface AppHeaderAccountAction {
+  label: string;
+  detail: string;
+  icon: ReactNode;
+  onSelect: () => void;
+}
+
 export interface AppHeaderProps {
   role: "admin" | "field";
   title: string;
@@ -37,6 +45,7 @@ export interface AppHeaderProps {
   user: AppHeaderUser;
   variant?: AppHeaderVariant;
   menuActions?: readonly AppHeaderMenuAction[];
+  accountAction?: AppHeaderAccountAction;
   viewKey?: string;
   context?: ReactNode;
   status?: AppHeaderStatus;
@@ -97,6 +106,13 @@ export function AppHeader(props: AppHeaderProps) {
   function logout(): void {
     setIsAccountMenuOpen(false);
     props.onLogout?.();
+  }
+
+  /** El foco vuelve al avatar antes de abrir el diálogo, para que el diálogo lo devuelva al cerrarse (no al menú oculto). */
+  function openAccountAction(): void {
+    setIsAccountMenuOpen(false);
+    accountButtonRef.current?.focus();
+    props.accountAction?.onSelect();
   }
 
   return (
@@ -165,6 +181,16 @@ export function AppHeader(props: AppHeaderProps) {
                         <span>{action.busy ? action.busyLabel : action.label}</span>
                       </button>
                     ))}
+                  </div>
+                ) : null}
+                {props.accountAction ? (
+                  <div className="app-header__menu-actions" role="group" aria-label="Seguimiento">
+                    <span className="app-header__menu-section-title">Seguimiento</span>
+                    <button className="app-header__menu-action" type="button" role="menuitem" onClick={openAccountAction}>
+                      <span className="app-header__menu-action-icon" aria-hidden="true">{props.accountAction.icon}</span>
+                      <span>{props.accountAction.label}</span>
+                      <span className="app-header__menu-action-detail">{props.accountAction.detail}</span>
+                    </button>
                   </div>
                 ) : null}
                 {props.onLogout ? (
