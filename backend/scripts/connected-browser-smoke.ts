@@ -93,7 +93,7 @@ try {
   await evaluate(cdp, `[...document.querySelectorAll('button')].find((button) => button.textContent.includes('Cerrar sesión'))?.click()`);
   await login(cdp, technicianUsername, password);
   await waitForExpression(cdp, `document.querySelector('.current-order-card') !== null`, "technician current order card");
-  await waitForExpression(cdp, `navigator.serviceWorker.controller !== null`, "PWA service worker control");
+  await waitForServiceWorkerControl(cdp);
   await cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   await waitForExpression(cdp, `navigator.onLine === false`, "offline browser state");
 
@@ -270,6 +270,17 @@ async function waitForExpression(client: CdpClient, expression: string, label: s
   }
   const pageText = await evaluate(client, "document.body?.innerText?.slice(0, 500) ?? ''");
   throw new Error(`Timed out waiting for ${label ?? expression}; page text: ${pageText}`);
+}
+
+/** Si la página no queda controlada por el Service Worker, el error dice en qué estado quedó el registro. */
+async function waitForServiceWorkerControl(client: CdpClient): Promise<void> {
+  try {
+    await waitForExpression(client, `navigator.serviceWorker.controller !== null`, "PWA service worker control");
+  } catch (error) {
+    const state = await evaluate(client, `(async () => { const registration = await navigator.serviceWorker.getRegistration(); return JSON.stringify({ controller: navigator.serviceWorker.controller?.state ?? null, registration: registration ? { scope: registration.scope, active: registration.active?.state ?? null, installing: registration.installing?.state ?? null, waiting: registration.waiting?.state ?? null } : null, caches: await caches.keys() }); })()`)
+      .catch((diagnosticError: unknown) => `unavailable: ${diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError)}`);
+    throw new Error(`${error instanceof Error ? error.message : String(error)}; service worker state: ${state}`);
+  }
 }
 
 async function waitForHttp(url: string): Promise<void> {
