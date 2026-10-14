@@ -37,7 +37,7 @@ The user authorizes committing every finished task on `main`. Commit at the end 
 - Before committing: run the validation that fits the task, reset `.dev/TASK.md` to "No active task.", and review `git status`.
 - One commit per task. Unrelated changes inside one task go in separate commits. If a file mixes two topics, the message names both.
 - Stage only the task's files. Changes the user left uncommitted (for example `.claude/skills/redesign-existing-projects/SKILL.md`) stay out of the commit and are mentioned in the final answer.
-- Message format: `type(scope): summary`, written in Spanish like the repository history. The body says what changed and why, and cites the affected decisions (`D0XX`). End with the attribution lines the session environment provides.
+- Message format: `type(scope): summary`, written in Spanish like the repository history. The body says what changed and why, and cites the affected decisions (`D0XX`). Do not add attribution or `Co-Authored-By` lines.
 - New decisions go to `docs/DECISIONS.md` in the same commit.
 
 ## Context routing
