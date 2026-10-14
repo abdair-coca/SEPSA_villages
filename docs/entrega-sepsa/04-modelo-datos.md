@@ -25,6 +25,8 @@ El modelo tiene 13 tablas, 147 columnas y 21 relaciones.
 
 Cada línea une dos tipos de información. La frase sobre la línea dice qué hace uno con el otro, leyendo de izquierda a derecha: «Usuarios crean Órdenes de corte».
 
+Cada usuario es administrador, técnico o ambos, y el rol decide lo que puede hacer. El administrador crea y asigna órdenes y consulta la auditoría. El técnico solo atiende las órdenes que tiene asignadas. Los roles se guardan en `user_role_grants`.
+
 Fuente del diagrama: `img/modelo-er.mmd` (Mermaid).
 
 ## Restricciones relevantes
