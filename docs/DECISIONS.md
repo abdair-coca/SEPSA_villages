@@ -174,7 +174,8 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 
 **Estado:** vigente
 **Decisión:** Las fotos de evidencia se guardan en PostgreSQL de forma permanente, sin excepciones de retención. Los datos sincronizados del técnico deben poder consultarse desde otro dispositivo, y el servidor es la fuente para ese acceso.
-**Consecuencia:** La entrega marca el requisito de acceso desde otro dispositivo como parcial hasta verificarlo con un segundo dispositivo. Ninguna función del código borra evidencias; cambiar esta regla exige una decisión nueva.
+**Implementación:** El técnico consulta su registro (`GET /v1/technician/record`) y sus fotos (`GET /v1/evidence/assets/{evidence_id}`) solo con su propia sesión; en el piloto el administrador no las consulta. Cada consulta queda auditada. La foto se pide al pulsarla y el cliente comprueba su SHA-256 antes de mostrarla. Verificado en navegador con un dispositivo nuevo (almacenamiento local limpio, identificador de dispositivo distinto) y con el build de producción; no con dos dispositivos físicos.
+**Consecuencia:** La entrega marca el requisito de acceso desde otro dispositivo como parcial hasta verificarlo con dos dispositivos físicos. Lo que nunca se sincronizó no aparece en otro dispositivo. Ninguna función del código borra evidencias; cambiar esta regla exige una decisión nueva.
 
 ## D030 — Formato de la entrega SEPSA
 

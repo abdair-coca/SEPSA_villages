@@ -83,6 +83,7 @@ Pulsa **Registrar visita**. Una visita registra tu presencia en el domicilio. No
 ## 8. Tus datos y tu sesión
 
 - La sesión dura 7 días. Entrar necesita conexión; con la sesión vigente puedes trabajar sin conexión.
+- Desde cualquier celular puedes ver lo que ya se sincronizó de tus órdenes: en la ficha de la orden, pulsa **Ver registro del servidor**. Lo que todavía solo está en este celular aparece en **Pendientes**, no ahí.
 - Cerrar sesión no borra las órdenes ni las operaciones pendientes del celular. Por precaución, envía las pendientes antes de cerrar sesión.
 - No borres los datos del navegador de SEPSA Campo: ahí están tus órdenes y tus operaciones pendientes.
 

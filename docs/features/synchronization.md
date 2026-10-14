@@ -41,6 +41,10 @@ El `orderId` identifica un ciclo con un CUT confirmado y, cuando ocurre, su RECO
 
 Un fallo de sync puede reintentarse con el mismo `operationId` sin tocar los datos físicos. Si el dato físico confirmado es incorrecto, no corregirlo sobrescribiendo el registro original; el mecanismo de corrección auditable se debe acordar antes de implementarlo.
 
+## Registro en el servidor (solo lectura)
+
+La ficha de la orden puede mostrar lo que el servidor tiene del técnico, desde cualquier dispositivo: operaciones sincronizadas, su captura y sus fotos. Esa consulta no pasa por la cola local, no cambia estados de sincronización y no reemplaza lo pendiente de este dispositivo; lo que nunca llegó al servidor no aparece. Rutas y campos: [Contrato del piloto](../api/pilot-contract.md). Decisión: [D029](../DECISIONS.md).
+
 ## Reglas
 
 - La cola sobrevive a recarga, cierre, reinicio y pérdida de red.

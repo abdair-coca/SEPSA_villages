@@ -46,7 +46,7 @@ No ejecutado en esta revisión: `npm test` del backend y `npm run e2e:browser`, 
 | 1.4 Cola: verificar en vez de reintentar | Cumplido | `7ba1c63`; botón **Verificar con servidor**. |
 | 1.5 Corrección de datos por el técnico (D-c) | Cumplido como limitación | No se implementa; se declara en la entrega (`docs/entrega-sepsa/README.md`). |
 | 1.6 Pruebas E2E de corte y reconexión | Parcial | `48e0af5`; `e2e:browser` con 10 comprobaciones: visita sin conexión, recarga, corte con respuesta perdida reintentada, reconexión, evidencia en PostgreSQL. Doble toque: corregido en `7354101`; la prueba está en `store.test.tsx` (capa de estado), sin prueba de navegador. **Dos dispositivos**: sin prueba automatizada; el servidor rechaza un consumo con otro dispositivo (`reconnection.test.ts`). |
-| 1.7 Foto de la visita | Cumplido en código | `55a9ee3`. Falta comprobar en producción que una visita con foto queda en `evidence_assets`. |
+| 1.7 Foto de la visita | Cumplido en local | `55a9ee3`. Comprobado en navegador contra el backend local: la visita con foto queda en `evidence_assets` con el SHA-256 del archivo original, y la foto se lee desde otro dispositivo (`1115fb3`). Falta comprobarlo en producción. |
 
 ### Fase 2: aplicación completa
 
@@ -58,6 +58,7 @@ No ejecutado en esta revisión: `npm test` del backend y `npm run e2e:browser`, 
 | 2.4 Catálogo de errores y duración de sesión | Cumplido | `215c09e`, `978b4bd`. La sesión dura 7 días (D025), que sustituye a las 14 horas del plan. |
 | 2.5 Vista de conciliación del administrador (D024) | Cumplido | `d9fe995`; solo lectura. |
 | 2.6 E2E del flujo completo | Cumplido | `48e0af5`: administrador, técnico, sincronización y auditoría. |
+| 2.7 Registro del técnico desde otro dispositivo (D029, RF-36) | Parcial | `51009ce`, `1115fb3`. Pruebas de integración del registro y de la foto; en navegador, con un dispositivo nuevo, el registro muestra la visita confirmada y la foto se lee del servidor. Falta: prueba con dos dispositivos físicos. |
 
 ### Fase 3: calidad
 
@@ -85,3 +86,4 @@ No ejecutado en esta revisión: `npm test` del backend y `npm run e2e:browser`, 
 3. Sincronizar en producción una foto real de móvil (0.8) y una visita con foto (1.7).
 4. Pedir a una persona no técnica la revisión de textos (3.4).
 5. Decidir si `e2e:browser` y `npm test` del backend se ejecutan contra una base de prueba antes de la entrega.
+6. Probar el registro del técnico (2.7) con dos dispositivos físicos, con la guía de evaluación, sección 6.

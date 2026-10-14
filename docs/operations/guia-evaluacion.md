@@ -54,6 +54,17 @@ Esta guía no incluye credenciales. Las cuentas de evaluación se entregan por s
 - Un técnico no ve ni actúa sobre órdenes asignadas a otro técnico.
 - Un administrador no puede consumir autorizaciones de cortes ni reconexiones.
 
+### 6. Registro del técnico desde otro dispositivo
+
+| Caso | Cómo probarlo | Resultado esperado |
+|---|---|---|
+| Ver el registro | Con el técnico, abre una orden que tenga visitas sincronizadas y pulsa **Ver registro del servidor**. | Aparece cada visita, corte o reconexión sincronizada, con su estado, su captura y la fecha de confirmación. |
+| Ver una foto | En una visita con evidencia, pulsa **Ver foto 1**. | La foto aparece. Si los bytes no coinciden con el hash guardado, no se muestra y la app ofrece **Reintentar**. |
+| Otro dispositivo | Entra con el mismo técnico desde otro celular o navegador sin datos locales y abre la misma orden. | El mismo registro y las mismas fotos aparecen. Lo que nunca se sincronizó desde el primer dispositivo no aparece. |
+| Otro técnico | Entra con otro técnico y abre la misma orden. | No ve las operaciones ni las fotos del primero. |
+
+**Regla para evaluar:** el registro es solo lectura. Consultarlo no envía ni cambia nada, y cada consulta queda en la auditoría del servidor.
+
 ## Qué no está incluido
 
 - La integración oficial con SEPSA. El contrato es provisional.
