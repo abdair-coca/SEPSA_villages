@@ -124,7 +124,8 @@ try {
   await viewport(390, 844);
   if (!baseline) {
     await click('.order-pagination__controls button:last-child');
-    await waitFor(`document.querySelector('.order-pagination__controls span').textContent === 'Página 2 de 8'`);
+    // El lote cubre la página visible de suministros (7, «Seleccionar página»; 91b26e9), así que hay 7 órdenes.
+    await waitFor(`document.querySelector('.order-pagination__controls span').textContent === 'Página 2 de 7'`);
     await click('.order-pagination__controls button:first-child');
     await setInput('#order-search', 'no-such-smoke-order');
     await waitFor(`document.querySelector('.order-list-empty') !== null`);
