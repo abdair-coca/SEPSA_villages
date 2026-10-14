@@ -21,11 +21,11 @@ El modelo tiene 13 tablas, 147 columnas y 21 relaciones.
 
 ## Diagrama
 
-![Diagrama entidad-relación de las 13 tablas y sus 21 relaciones](img/modelo-er.png)
+![Diagrama entidad-relación de las 13 tablas, con quién usa cada una: administrador y técnico](img/modelo-er.png)
 
-Cada línea une dos tipos de información. La frase sobre la línea dice qué hace uno con el otro, leyendo de izquierda a derecha: «Usuarios crean Órdenes de corte».
+Cada línea une dos tipos de información. La frase sobre la línea dice qué hace uno con el otro, leyendo de izquierda a derecha: «Administrador crea y asigna Órdenes de corte».
 
-Cada usuario es administrador, técnico o ambos, y el rol decide lo que puede hacer. El administrador crea y asigna órdenes y consulta la auditoría. El técnico solo atiende las órdenes que tiene asignadas. Los roles se guardan en `user_role_grants`.
+Administrador y técnico son dos roles de la misma tabla de usuarios. Se dibujan por separado porque no pueden hacer lo mismo: el administrador crea y asigna órdenes, busca morosos, ejecuta comandos y revisa operaciones inciertas; el técnico atiende solo las órdenes que tiene asignadas, pide autorizaciones, envía operaciones y toma fotos. Las líneas muestran quién usa cada tabla. Las claves foráneas completas están en el diccionario de datos.
 
 Fuente del diagrama: `img/modelo-er.mmd` (Mermaid).
 
