@@ -19,6 +19,8 @@ if (!chromePath) throw new Error("Chrome not found; set CHROME_PATH.");
 mkdirSync(outputDirectory, { recursive: true });
 let preview;
 let browser;
+let browserExit;
+let browserStderr = "";
 let cdp;
 const observations = [];
 
@@ -27,8 +29,11 @@ try {
   preview = spawn(process.execPath, [join(projectDirectory, "node_modules/vite/bin/vite.js"), "preview", "--host", "127.0.0.1", "--port", "4185", "--strictPort"], { cwd: projectDirectory, stdio: "ignore" });
   await waitForHttp(appUrl);
   await assertPreviewMatchesBuild(appUrl, build);
-  browser = spawn(chromePath, ["--headless=new", "--disable-gpu", "--disable-background-mode", "--no-first-run", "--remote-debugging-port=9225", `--user-data-dir=${profileDirectory}`, "about:blank"], { stdio: "ignore" });
-  await waitForHttp(`${debuggingUrl}/json/version`);
+  browser = spawn(chromePath, ["--headless=new", "--disable-gpu", "--disable-background-mode", "--no-first-run", "--remote-debugging-port=9225", `--user-data-dir=${profileDirectory}`, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+  browser.stderr.on("data", (chunk) => { browserStderr = `${browserStderr}${chunk}`.slice(-2000); });
+  browser.once("exit", (code, signal) => { browserExit = `code ${code ?? "none"}, signal ${signal ?? "none"}`; });
+  // Chrome en frío (primer arranque del runner) puede tardar más que las esperas de la app; si se cae, falla al instante.
+  await waitForHttp(`${debuggingUrl}/json/version`, { attempts: 200, failure: () => browserExit && `Chrome exited (${browserExit}) before exposing the debugging port. stderr: ${browserStderr.trim() || "(empty)"}` });
   const page = await fetch(`${debuggingUrl}/json/new?${encodeURIComponent(appUrl)}`, { method: "PUT" }).then((response) => response.json());
   cdp = await connectCdp(page.webSocketDebuggerUrl);
   await cdp.send("Page.enable");
@@ -304,8 +309,10 @@ async function waitFor(expression) {
   }
   throw new Error(`Timed out waiting for ${expression}`);
 }
-async function waitForHttp(url) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+async function waitForHttp(url, { attempts = 80, failure } = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const failed = failure?.();
+    if (failed) throw new Error(failed);
     try { if ((await fetch(url)).ok) return; } catch { /* Starting process. */ }
     await delay(150);
   }
