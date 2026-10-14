@@ -21,23 +21,9 @@ El modelo tiene 13 tablas, 147 columnas y 21 relaciones.
 
 ## Diagrama
 
-```mermaid
-erDiagram
-  "Usuarios" ||--o{ "Sesiones" : "Usuario"
-  "Morosos y suministros" ||--o{ "Órdenes de corte" : "Moroso"
-  "Usuarios" ||--o{ "Órdenes de corte" : "Creada por / Técnico asignado"
-  "Órdenes de corte" ||--o{ "Asignaciones de órdenes" : "Orden"
-  "Órdenes de corte" ||--o{ "Autorizaciones de corte" : "Orden"
-  "Órdenes de corte" ||--o{ "Operaciones de sincronización" : "Orden"
-  "Órdenes de corte" ||--o{ "Evidencias fotográficas" : "Orden"
-  "Órdenes de corte" ||--o{ "Eventos de auditoría" : "Orden"
-  "Usuarios" ||--o{ "Autorizaciones de corte" : "Técnico"
-  "Usuarios" ||--o{ "Operaciones de sincronización" : "Técnico"
-  "Usuarios" ||--o{ "Evidencias fotográficas" : "Técnico"
-  "Usuarios" ||--o{ "Eventos de auditoría" : "Usuario"
-  "Usuarios" ||--o{ "Roles concedidos" : "Usuario"
-  "Usuarios" ||--o{ "Versiones del paquete de trabajo" : "Técnico"
-```
+![Diagrama entidad-relación de las 13 tablas y sus 21 relaciones](img/modelo-er.png)
+
+Fuente del diagrama: `img/modelo-er.mmd` (Mermaid).
 
 ## Restricciones relevantes
 
