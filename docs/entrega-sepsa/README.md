@@ -6,18 +6,18 @@ Estado: entrega, copia fechada.
 
 Este conjunto describe el piloto provisional del sistema de cortes y reconexiones. No es la API oficial de SEPSA. Lo que corresponde a SEPSA definir está en la lista de pendientes.
 
-La entrega tiene un cuerpo de resumen (documentos 01 a 14) y un conjunto de anexos (A01 a A14) con el detalle completo: tablas, matrices, criterios y evidencias. Cada resumen indica su anexo. El contenido del anexo no se repite en el resumen.
+La entrega sigue la estructura de la carta de SEPSA: cinco puntos y un apartado transversal. Cada apartado describe el estado del piloto con su detalle completo.
 
 ## Índice por punto de la carta
 
-| Punto de la carta | Resumen | Anexo de detalle |
+| Punto de la carta | Apartado | Documento |
 |---|---|---|
-| 1. Requerimientos funcionales y técnicos; procesos de corte y reconexión | `01-requisitos-funcionales-tecnicos.md`, `02-procesos-corte-reconexion.md` | A01, A02 |
-| 2. Arquitectura, tecnologías, modelo de datos, diccionario y código fuente | `03-arquitectura-tecnologias.md`, `04-modelo-datos.md`, `05-diccionario-datos.md`, `06-documentacion-codigo.md` | A03, A05, A06 (el 04 va completo) |
-| 3. Manuales técnico, de instalación y de usuario | `07-manual-tecnico.md`, `08-manual-instalacion.md`, `09-manual-usuario.md` | A07, A08, A09 |
-| 4. Plan de pruebas, criterios de aceptación y resultados | `10-plan-pruebas.md`, `11-resultados-pruebas.md` | A10, A11 |
-| 5. Seguridad, perfiles de acceso y tratamiento de la información | `12-seguridad-perfiles-acceso.md`, `13-tratamiento-informacion.md` | A12, A13 |
-| Transversal | `14-pendientes-sepsa.md` | A14 |
+| 1. Requerimientos funcionales y técnicos; procesos de corte y reconexión | 1.1 Requisitos funcionales y técnicos; 1.2 Procesos de corte y reconexión | `01-requisitos-funcionales-tecnicos.md`, `02-procesos-corte-reconexion.md` |
+| 2. Arquitectura, tecnologías, modelo de base de datos, diccionario de datos y documentación del código | 2.1 Arquitectura y tecnologías; 2.2 Modelo de datos; 2.3 Diccionario de datos; 2.4 Documentación del código fuente | `03-arquitectura-tecnologias.md`, `04-modelo-datos.md`, `05-diccionario-datos.md`, `06-documentacion-codigo.md` |
+| 3. Manuales técnico, de instalación y de usuario | 3.1 Manual técnico; 3.2 Manual de instalación; 3.3 Manual de usuario | `07-manual-tecnico.md`, `08-manual-instalacion.md`, `09-manual-usuario.md` |
+| 4. Plan de pruebas, criterios de aceptación y resultados | 4.1 Plan de pruebas; 4.2 Resultados de pruebas | `10-plan-pruebas.md`, `11-resultados-pruebas.md` |
+| 5. Seguridad, perfiles de acceso y tratamiento de la información | 5.1 Seguridad y perfiles de acceso; 5.2 Tratamiento de la información | `12-seguridad-perfiles-acceso.md`, `13-tratamiento-informacion.md` |
+| Transversal | 6.1 Pendientes y decisiones | `14-pendientes-sepsa.md` |
 
 ## Cómo leer
 
@@ -28,8 +28,8 @@ La entrega tiene un cuerpo de resumen (documentos 01 a 14) y un conjunto de anex
 
 ## Limitaciones de la entrega
 
-- **Sin integración oficial con SEPSA.** El contrato del servidor es provisional y el adaptador no sustituye a la API que defina SEPSA (`03-arquitectura-tecnologias.md`, `12-seguridad-perfiles-acceso.md`).
-- **Corrección de datos por el técnico.** No está en la aplicación. Se resuelve con un procedimiento manual de soporte (D-c en el plan de consolidación; no se implementa).
+- **Sin integración oficial con SEPSA.** El contrato del servidor es provisional y el adaptador no sustituye a la API que defina SEPSA (apartados 2.1 y 5.1).
+- **Corrección de datos por el técnico.** No está en la aplicación. Se resuelve con un procedimiento manual de soporte (no se implementa).
 - **Datos de prueba.** Los deudores y órdenes son ficticios y se cargan a mano (D026). El árbol de trabajo no contiene datos de personas (D031); el historial de git sí los conserva, y su purga es una decisión de SEPSA (`14-pendientes-sepsa.md`).
 - **Plan gratuito.** El servidor y la base de datos están en planes gratuitos. La primera petición tras un periodo de inactividad puede tardar cerca de un minuto (`03-arquitectura-tecnologias.md`).
 - **Sesión.** Entrar exige conexión. Con la sesión vigente, de 7 días (D025), el técnico trabaja sin conexión.
