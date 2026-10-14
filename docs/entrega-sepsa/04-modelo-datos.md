@@ -1,7 +1,7 @@
 # 04. Modelo de datos
 
 Fuente: migraciones `backend/sql/001` a `008`.
-Fecha: 2026-10-13
+Fecha: 2026-10-14
 Estado: entrega, copia fechada. Es el modelo del piloto provisional, no el modelo oficial de SEPSA. Las columnas están en el diccionario de datos.
 
 El modelo tiene 13 tablas, 147 columnas y 21 relaciones.
@@ -22,6 +22,8 @@ El modelo tiene 13 tablas, 147 columnas y 21 relaciones.
 ## Diagrama
 
 ![Diagrama entidad-relación de las 13 tablas y sus 21 relaciones](img/modelo-er.png)
+
+Cada línea une dos tipos de información. La frase sobre la línea dice qué hace uno con el otro, leyendo de izquierda a derecha: «Usuarios crean Órdenes de corte».
 
 Fuente del diagrama: `img/modelo-er.mmd` (Mermaid).
 
