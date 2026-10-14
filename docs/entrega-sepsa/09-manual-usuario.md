@@ -57,6 +57,8 @@ La cola se conserva aunque se cierre la aplicación o se pierda la red.
 
 **Consulta incierta.** **Verificar con servidor** vuelve a consultar la autorización. Mientras no sea concluyente, la acción no se repite. Si el servidor confirma que la autorización no se usó, aparece **Solicitar nueva autorización**; la operación anterior se cierra fuera de la cola, con el mensaje «Cerrada: la autorización no se usó».
 
+**Ver lo sincronizado desde otro celular.** En la ficha de la orden, **Ver registro del servidor** muestra las visitas, cortes y reconexiones que el servidor tiene de ti, con su estado y su captura. **Ver foto** descarga una foto cuando la pides. Lo que todavía solo está en este celular aparece en **Pendientes**, no en ese registro.
+
 **Si algo falla.** Si no se ven órdenes, hace falta internet una vez para descargarlas. Si un resultado dice **Revisión humana · no reenviar**, no se repite la acción física: se avisa al administrador.
 
 ## 3. Preguntas frecuentes

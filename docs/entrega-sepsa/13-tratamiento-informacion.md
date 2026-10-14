@@ -15,7 +15,7 @@ Estado: entrega, copia fechada. Describe dónde están los datos, cuáles son pe
 | Cache Storage del mapa | Teselas de la zona de las órdenes | Revela la zona visible | No se borra al cerrar sesión |
 | Registros del servidor | Eventos e identificadores de petición | No, por diseño | Según el proveedor de hosting |
 
-Un técnico que usa dos dispositivos tiene dos bases locales. Los datos sincronizados se consultan desde el servidor (RF-36).
+Un técnico que usa dos dispositivos tiene dos bases locales. Los datos sincronizados se consultan desde el servidor (RF-36). Cada consulta del registro y de una foto queda en la auditoría del servidor.
 
 ## 2. Datos personales en la base del servidor
 

@@ -79,3 +79,33 @@ Los cambios sin commitear de otra tarea (`AppHeader`, `OperationsApp` y estilos)
 | — | Lectura JSON de `openapi/pilot-provisional.openapi.json` | 0 | Válido |
 
 **No ejecutado:** `npm test` del servidor (S2, S3) y `npm run e2e:browser` (S7). La base de prueba en `127.0.0.1:55432` no respondía y esta revisión no tiene sus credenciales. Quedan pendientes; CI los ejecuta al subir los cambios.
+
+## 8. Registro del técnico desde otro dispositivo (2026-10-14)
+
+Pruebas de RF-36 (D029). Se ejecutaron con el código de `1115fb3` y con PostgreSQL local del contenedor de desarrollo (`localhost:15432`), en la base aislada `pilot_phase_registry` migrada con `npm run db:migrate:test`. La base de desarrollo no se usó.
+
+| Suite | Comando | Código | Resultado |
+|---|---|---|---|
+| S1 | `npm run test:unit` (servidor) | 0 | 59 pruebas, todas pasan; incluye el mapeo del registro, que no expone el token de autorización |
+| — | `npm run test:integration` (servidor, con PostgreSQL) | 0 | 3 pruebas, todas pasan: `db.integration`, `technician-record.integration` y `evidence-read.integration` |
+| — | `npx tsc --noEmit` (servidor y app) | 0 | Sin errores |
+| S8 | `npx vitest run` (app) | 0 | 47 archivos, 511 pruebas, todas pasan |
+| S9 | `npm run build` (app, producción, conectada al servidor) | 0 | Correcto, con el código de `1115fb3` |
+| S11 | `npm run smoke:ui` | 0 | 17 de 17 verificaciones pasan. Se ejecutó tras la fase 1; no se repitió tras la fase 2 |
+
+**Prueba en navegador (manual, no automatizada).** Se usó el build de producción y el backend aislado:
+
+| Paso | Resultado |
+|---|---|
+| Visita con una foto JPEG de 640 × 420 px (19 283 bytes) | Confirmada por el servidor. La foto queda en `evidence_assets` con el SHA-256 del archivo original |
+| Registro de la orden antes de registrar la visita | «Sin registros en el servidor» |
+| Dispositivo nuevo: almacenamiento local borrado, otro identificador de dispositivo | El registro muestra la visita, su excepción y su fecha de confirmación. «Estado local» vacío |
+| Ver la foto desde el dispositivo nuevo | La foto se muestra y la comprobación de SHA-256 pasa |
+| Una apertura del registro en el build de producción | Una fila de auditoría `TECHNICIAN_RECORD_READ`. En desarrollo aparecen dos, por `StrictMode` |
+| Consola del navegador | Sin errores |
+
+**No ejecutado:**
+
+- La prueba con dos dispositivos físicos. El dispositivo nuevo se simuló con almacenamiento limpio, dentro de un mismo navegador.
+- La vista móvil con un ancho de teléfono real. El botón «Ver registro del servidor» está en la vista móvil y se comprobó en el DOM, pero no se pulsó con ese ancho.
+- `npm run e2e:browser` no se volvió a ejecutar tras esta fase.

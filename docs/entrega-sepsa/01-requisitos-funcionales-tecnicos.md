@@ -45,7 +45,7 @@ Estado: entrega, copia fechada.
 | RF-33 | Si la respuesta se pierde, la operación queda `PHYSICAL_UNKNOWN`; se consulta con el mismo identificador y nunca se reenvía el envío original. | Implementado |
 | RF-34 | Las transiciones físicas se guardan en la misma transacción que la operación; no se borran ni sobrescriben. | Implementado |
 | RF-35 | Los errores dicen qué quedó guardado y cuál es el siguiente paso. | Implementado |
-| RF-36 | Los datos sincronizados del técnico deben poder consultarse desde otro dispositivo. | Parcial: el registro (cortes, visitas y fotos) se consulta desde el servidor y se probó en navegador con un dispositivo nuevo; falta la prueba con dos dispositivos físicos. `TODO: VALIDAR CON SEPSA` |
+| RF-36 | Los datos sincronizados del técnico deben poder consultarse desde otro dispositivo. | Parcial: el técnico consulta desde el servidor su registro (operaciones, captura y fotos), sin depender del almacenamiento del dispositivo. Probado con pruebas de integración y en navegador con un dispositivo nuevo; falta la prueba con dos dispositivos físicos. `TODO: VALIDAR CON SEPSA` |
 
 ## Requisitos técnicos y no funcionales
 

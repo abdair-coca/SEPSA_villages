@@ -48,11 +48,13 @@ Sin sesión válida la respuesta es `401`. Con sesión y rol distinto, `403`. Al
 | 22 | `GET /v1/sync/operations/{operation_id}` | Sesión | TECHNICIAN (solo las suyas) o ADMIN |
 | 23 | `GET /v1/audit` | Sesión | ADMIN |
 | 24 | `GET /v1/admin/reconciliation` | Sesión | ADMIN, solo lectura |
+| 25 | `GET /v1/technician/record` | Sesión | TECHNICIAN, solo sus operaciones; cada consulta se audita |
+| 26 | `GET /v1/evidence/assets/{evidence_id}` | Sesión | TECHNICIAN, solo sus fotos; una ajena o inexistente responde 404; cada lectura se audita |
 
 ## 3. Perfiles
 
-- **ADMIN:** gestiona órdenes, consulta técnicos, auditoría y conciliación en solo lectura, y revisa operaciones inciertas. No consume autorizaciones ni ejecuta acciones de campo.
-- **TECHNICIAN:** descarga su paquete, pide y consume autorizaciones, sube fotos, envía operaciones y consulta solo sus operaciones. Una operación o autorización ajena responde `not_found`.
+- **ADMIN:** gestiona órdenes, consulta técnicos, auditoría (incluidas las consultas del registro de los técnicos) y conciliación en solo lectura, y revisa operaciones inciertas. No consume autorizaciones ni ejecuta acciones de campo.
+- **TECHNICIAN:** descarga su paquete, pide y consume autorizaciones, sube fotos, envía operaciones y consulta solo lo suyo: sus operaciones, su registro sincronizado y sus fotos. Una operación, autorización o foto ajena responde `not_found` (o 404 en las fotos).
 - **Roles concedidos:** una cuenta solo cambia de rol si tiene concedidos ambos. Cada petición verifica que el rol activo sigue concedido, y el cambio se audita.
 
 ## 4. Pendientes y limitaciones
