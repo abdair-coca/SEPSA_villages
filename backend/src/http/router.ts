@@ -60,6 +60,7 @@ export function createRoutes(c: RouteControllers): Route[] {
     { method: "POST", pattern: "/v1/auth/role", access: "session", handler: ({ request, response, user }) => c.auth.switchRole(request, response, user) },
     { method: "GET", pattern: "/v1/technicians", access: "session", handler: ({ response, user }) => c.orders.listTechnicians(response, user) },
     { method: "GET", pattern: "/v1/debtors", access: "session", handler: ({ response, user, url }) => c.debtors.listDebtors(response, user, url) },
+    { method: "GET", pattern: "/v1/debtors/filter-options", access: "session", handler: ({ response, user }) => c.debtors.listDebtorFilterOptions(response, user) },
     { method: "GET", pattern: "/v1/orders", access: "session", handler: ({ response, user }) => c.orders.listOrders(response, user) },
     { method: "POST", pattern: "/v1/orders/batch", access: "session", handler: ({ request, response, user }) => c.orders.createOrdersBatch(request, response, user) },
     { method: "POST", pattern: "/v1/orders", access: "session", handler: ({ request, response, user }) => c.orders.createOrder(request, response, user) },

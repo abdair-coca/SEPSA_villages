@@ -60,6 +60,13 @@ test("PostgreSQL HTTP pages stay bounded and stable; package versions survive re
       assert.equal((await getJson(admin.url, "/v1/debtors?offset=-1", adminToken, 400)).code, "INVALID_REQUEST");
       assert.equal((await getJson(admin.url, "/v1/debtors?offset=1&cursor=2", adminToken, 400)).code, "INVALID_REQUEST");
 
+      const filterOptions = await getJson(admin.url, "/v1/debtors/filter-options", adminToken);
+      assert.equal(filterOptions.source, "PILOT_PROVISIONAL");
+      assert.ok(Array.isArray(filterOptions.options) && filterOptions.options.length > 0);
+      for (const option of filterOptions.options) {
+        assert.deepEqual(Object.keys(option).sort(), ["area", "area_name", "locality", "route", "route_name", "supply_status"]);
+      }
+
       const auditFirst = await getJson(admin.url, `/v1/audit?order_id=${auditOrderId}&limit=3&offset=0`, adminToken);
       const auditSecond = await getJson(admin.url, `/v1/audit?order_id=${auditOrderId}&limit=3&cursor=${auditFirst.next_cursor}`, adminToken);
       const auditLast = await getJson(admin.url, `/v1/audit?order_id=${auditOrderId}&limit=3&offset=6`, adminToken);

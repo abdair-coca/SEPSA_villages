@@ -6,7 +6,7 @@
 import type { ServerResponse } from "node:http";
 import { HttpError, sendJson } from "../http/responses.js";
 import { toDebtor } from "../mappers/debtor.mapper.js";
-import { buildDebtorSearchCriteria, countDebtors, searchDebtors, type DebtorSearchFilters } from "../repositories/debtors.repository.js";
+import { buildDebtorSearchCriteria, countDebtors, listDebtorFilterRows, searchDebtors, type DebtorSearchFilters } from "../repositories/debtors.repository.js";
 import { PROVISIONAL_SOURCE, type ApplicationContext } from "../shared/application-context.js";
 import { pageRequest, pageResponse } from "../shared/pagination.js";
 import { requireRole } from "../shared/request-validation.js";
@@ -14,6 +14,7 @@ import type { SessionUser } from "../types.js";
 
 export interface DebtorHandlers {
   listDebtors(response: ServerResponse, user: SessionUser, url: URL): Promise<void>;
+  listDebtorFilterOptions(response: ServerResponse, user: SessionUser): Promise<void>;
 }
 
 export function createDebtorHandlers(context: ApplicationContext): DebtorHandlers {
@@ -31,7 +32,12 @@ export function createDebtorHandlers(context: ApplicationContext): DebtorHandler
     });
   }
 
-  return { listDebtors };
+  async function listDebtorFilterOptions(response: ServerResponse, user: SessionUser): Promise<void> {
+    requireRole(user, "ADMIN");
+    sendJson(response, 200, { source: PROVISIONAL_SOURCE, options: await listDebtorFilterRows(context.pool) });
+  }
+
+  return { listDebtors, listDebtorFilterOptions };
 }
 
 export function parseDebtorSearchFilters(url: URL): DebtorSearchFilters {

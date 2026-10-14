@@ -118,7 +118,7 @@ Regla de dependencias: `controllers → services → repositories → db`. Excep
 
 ### Recorrido de una orden de punta a punta
 
-1. **Admin busca morosos.** `screens/OperationsApp.tsx` → `refresh()` → `HttpPilotClient.findDebtors` → `GET /v1/debtors` → `controllers/debtors.controller.ts` `listDebtors` → `repositories/debtors.repository.ts` `searchDebtors`.
+1. **Admin busca morosos.** `screens/OperationsApp.tsx` → `loadSupplyPage` → `HttpPilotClient.findDebtorPage` → `GET /v1/debtors?limit&offset` (solo la página visible y su total) → `controllers/debtors.controller.ts` `listDebtors` → `repositories/debtors.repository.ts` `searchDebtors` y `countDebtors`. Las opciones de filtros salen de `GET /v1/debtors/filter-options` (`listDebtorFilterRecords`, una sola consulta, al entrar).
 2. **Admin crea y asigna.** `screens/OperationsApp.tsx` `confirmOrderCreation()` (diálogos en `components/AdminOrderModals.tsx`) → `createOrder` / `createOrdersBatch` + `assignOrder` → `POST /v1/orders` y `POST /v1/orders/{id}/assignment` → `controllers/orders.controller.ts` → `services/orders.service.ts` `createOrder` / `createOrdersBatch` / `assignOrder` (idempotencia en `services/command-idempotency.service.ts`, SQL en `repositories/orders.repository.ts`).
 3. **Técnico descarga su jornada.** `TechnicianRuntime.tsx` → `loadPackage()` → `use-cases/download.ts` `downloadAssigned` → `GET /v1/technician/orders` → `controllers/orders.controller.ts` `technicianOrders` → `services/orders.service.ts` `buildWorkPackage`; se guarda con `IndexedDbLocalRepository.savePackage`.
 4. **Técnico captura el corte.** `components/OrderDetail.tsx` → `components/CaptureForm.tsx` → `state/store-actions.ts` `executeCut` → `state/evidence.ts` `prepareEvidence`.

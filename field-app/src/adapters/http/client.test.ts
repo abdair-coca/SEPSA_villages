@@ -218,6 +218,29 @@ describe("PILOT_PROVISIONAL HTTP client", () => {
     await expect(client.findDebtors({ session })).resolves.toEqual([expect.objectContaining({ area: "B", areaName: "BETANZOS", route: "078", routeName: "COA COA" })]);
   });
 
+  it("requests one debtor page by offset and limit, and reads filter options in one call", async () => {
+    const urls: string[] = [];
+    const client = new HttpPilotClient({
+      baseUrl: "http://localhost:8080",
+      fetchImpl: async (input) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.endsWith("/auth/login")) return json({ session_id: "session-1", expires_at: "2099-09-12T17:00:00.000Z", user: { user_id: "admin-1", username: "admin", display_name: "Admin", role: "ADMIN" } });
+        if (url.includes("/v1/debtors/filter-options")) return json({ source: "PILOT_PROVISIONAL", options: [{ area: "B", area_name: "BETANZOS", locality: "078 - COA COA", route: "078", route_name: "COA COA", supply_status: "A" }] });
+        return json({ debtors: [debtorDto(7)], total: 8, next_cursor: null });
+      },
+    });
+    const session = await client.authenticate({ username: "admin", password: "password" });
+
+    await expect(client.findDebtorPage({ session, query: "CTA", minMonthsPending: 2, supplyStatus: "A", offset: 7, limit: 7 })).resolves.toEqual({ debtors: [expect.objectContaining({ debtorId: "debtor-7" })], total: 8 });
+    await expect(client.listDebtorFilterRecords(session)).resolves.toEqual([{ area: "B", areaName: "BETANZOS", locality: "078 - COA COA", route: "078", routeName: "COA COA", supplyStatus: "A" }]);
+    const pageUrl = new URL(urls.find((url) => url.includes("/v1/debtors?")) ?? "");
+    expect(pageUrl.searchParams.get("offset")).toBe("7");
+    expect(pageUrl.searchParams.get("limit")).toBe("7");
+    expect(pageUrl.searchParams.has("cursor")).toBe(false);
+    expect(urls.filter((url) => url.includes("/v1/debtors"))).toHaveLength(2);
+  });
+
   it("consumes the cut authorization immediately (D020) and sends its binding to sync", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const client = new HttpPilotClient({

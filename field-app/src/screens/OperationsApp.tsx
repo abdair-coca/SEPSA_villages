@@ -12,7 +12,7 @@ import {
   type TechnicianRecord,
   type WorkOrder,
 } from "../domain/types";
-import type { OperationsAuthorityPort } from "../ports/authority";
+import type { DebtorFilterRecord, OperationsAuthorityPort } from "../ports/authority";
 import { AppHeader, type AppHeaderRoleSwitch } from "../components/AppHeader";
 import { NOTIFICATION_AUTO_DISMISS_MS, Notification, shouldAutoDismissNotification } from "../components/common/Notification";
 import { AdminOverview } from "../components/AdminOverview";
@@ -35,11 +35,17 @@ interface OperationsAppProps {
 
 type MessageTone = "info" | "success" | "error";
 
+/** `load`: primera carga; `search`: búsqueda o filtros; `page`: otra página; `refresh`: tras una acción. */
+type SupplyLoadMode = "load" | "search" | "page" | "refresh";
+
 const DEFAULT_SEARCH_FILTERS: SearchFilters = { query: "", area: "", locality: "", route: "", minMonthsPending: "2", supplyStatus: "A" };
 
 export function OperationsApp({ authority, session, onLogout, roleSwitch }: OperationsAppProps) {
   const [debtors, setDebtors] = useState<DebtorRecord[]>([]);
-  const [filterRecords, setFilterRecords] = useState<DebtorRecord[]>([]);
+  const [debtorTotal, setDebtorTotal] = useState(0);
+  // Suministros vistos en alguna página: la selección sigue disponible aunque cambie la página o la búsqueda.
+  const [knownDebtors, setKnownDebtors] = useState<Record<string, DebtorRecord>>({});
+  const [filterRecords, setFilterRecords] = useState<DebtorFilterRecord[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianRecord[]>([]);
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -60,6 +66,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
   const refreshSequence = useRef(0);
+  const supplySequence = useRef(0);
   const mounted = useRef(false);
   const scopeRef = useRef({ authority, session });
   const filtersRef = useRef(filters);
@@ -79,51 +86,77 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     return isActiveSession() && sequence === refreshSequence.current;
   }
 
-  async function refresh(nextFilters = filters, mode: "load" | "search" | "refresh" = "refresh"): Promise<WorkOrder[]> {
-    const sequence = isActiveSession() ? ++refreshSequence.current : -1;
-    if (isCurrentRequest(sequence)) {
+  function isCurrentSupplyRequest(sequence: number): boolean {
+    return isActiveSession() && sequence === supplySequence.current;
+  }
+
+  /** Carga una sola página de suministros con su total. Una respuesta vieja nunca reemplaza a una más nueva. */
+  async function loadSupplyPage(nextFilters: SearchFilters, page: number, mode: SupplyLoadMode): Promise<void> {
+    const sequence = isActiveSession() ? ++supplySequence.current : -1;
+    if (isCurrentSupplyRequest(sequence)) {
       setLoading(mode === "load");
-      setSearching(mode === "search");
+      setSearching(mode === "search" || mode === "page");
       setLoadError("");
       if (mode === "search") setMessage("");
     }
     try {
-      const [nextDebtors, nextFilterRecords, nextOrders, nextAuditTotal, nextTechnicians] = await Promise.all([
-        authority.findDebtors({ query: nextFilters.query, area: nextFilters.area, locality: nextFilters.locality, route: nextFilters.route, minMonthsPending: parseMinMonths(nextFilters.minMonthsPending), supplyStatus: nextFilters.supplyStatus, session }),
-        authority.findDebtors({ session }),
-        authority.listOrders(session),
-        authority.countAudit(session),
-        authority.listTechnicians(session),
-      ]);
-      // Lista de solo lectura: si falla (por ejemplo, un backend anterior), no bloquea el resto de la vista.
-      const nextReconciliation = authority.listReconciliation ? await authority.listReconciliation(session).catch(() => undefined) : undefined;
-      if (!isCurrentRequest(sequence)) return nextOrders;
-      setReconciliation(nextReconciliation);
-      setDebtors(nextDebtors);
-      setFilterRecords(nextFilterRecords);
-      setTechnicians(nextTechnicians);
-      setSelectedTechnician((current) => nextTechnicians.some((technician) => technician.userId === current) ? current : nextTechnicians[0]?.userId ?? "");
-      setOrders(nextOrders);
-      setAuditTotal(nextAuditTotal);
-      setOrdersPage(1);
-      setSuppliesPage(1);
-      setSelectedDebtor((current) => nextDebtors.some((debtor) => debtor.debtorId === current) ? current : "");
-      setSelectedDebtorIds((current) => current.filter((debtorId) => nextDebtors.some((debtor) => debtor.debtorId === debtorId)));
-      setSelectedOrder((current) => nextOrders.some((order) => order.orderId === current) ? current : "");
-      return nextOrders;
+      const requestedPage = Math.max(1, Math.trunc(page));
+      const result = await authority.findDebtorPage({
+        query: nextFilters.query, area: nextFilters.area, locality: nextFilters.locality, route: nextFilters.route,
+        minMonthsPending: parseMinMonths(nextFilters.minMonthsPending), supplyStatus: nextFilters.supplyStatus,
+        offset: (requestedPage - 1) * ADMIN_SUPPLIES_PAGE_SIZE, limit: ADMIN_SUPPLIES_PAGE_SIZE, session,
+      });
+      if (!isCurrentSupplyRequest(sequence)) return;
+      // Si la página pedida ya no existe (por ejemplo, tras una acción), se muestra la última.
+      const lastPage = Math.max(1, Math.ceil(result.total / ADMIN_SUPPLIES_PAGE_SIZE));
+      if (requestedPage > lastPage) return await loadSupplyPage(nextFilters, lastPage, mode);
+      setDebtors(result.debtors);
+      setDebtorTotal(result.total);
+      setKnownDebtors((current) => ({ ...current, ...Object.fromEntries(result.debtors.map((debtor) => [debtor.debtorId, debtor])) }));
+      setSuppliesPage(requestedPage);
     } catch (error) {
-      if (isCurrentRequest(sequence) && mode !== "refresh") {
+      if (isCurrentSupplyRequest(sequence) && mode !== "refresh") {
         const text = readableError(error);
         setLoadError(text);
         if (mode === "search") notify(text, "error");
       }
       throw error;
     } finally {
-      if (isCurrentRequest(sequence)) {
+      if (isCurrentSupplyRequest(sequence)) {
         setLoading(false);
         setSearching(false);
       }
     }
+  }
+
+  /** Órdenes, auditoría y operaciones por conciliar. Una respuesta vieja no reemplaza a una más nueva. */
+  async function loadSummary(): Promise<WorkOrder[]> {
+    const sequence = isActiveSession() ? ++refreshSequence.current : -1;
+    const [nextOrders, nextAuditTotal] = await Promise.all([authority.listOrders(session), authority.countAudit(session)]);
+    // Lista de solo lectura: si falla (por ejemplo, un backend anterior), no bloquea el resto de la vista.
+    const nextReconciliation = authority.listReconciliation ? await authority.listReconciliation(session).catch(() => undefined) : undefined;
+    if (!isCurrentRequest(sequence)) return nextOrders;
+    setReconciliation(nextReconciliation);
+    setOrders(nextOrders);
+    setAuditTotal(nextAuditTotal);
+    setOrdersPage(1);
+    setSelectedOrder((current) => nextOrders.some((order) => order.orderId === current) ? current : "");
+    return nextOrders;
+  }
+
+  /** Opciones de filtros y técnicos: se cargan una vez al entrar, no en cada búsqueda. */
+  async function loadReferenceData(): Promise<void> {
+    const [nextFilterRecords, nextTechnicians] = await Promise.all([authority.listDebtorFilterRecords(session), authority.listTechnicians(session)]);
+    if (!isActiveSession()) return;
+    setFilterRecords(nextFilterRecords);
+    setTechnicians(nextTechnicians);
+    setSelectedTechnician((current) => nextTechnicians.some((technician) => technician.userId === current) ? current : nextTechnicians[0]?.userId ?? "");
+  }
+
+  /** Tras una acción: vuelve a cargar órdenes, auditoría, conciliación y la página de suministros que se ve. */
+  async function refresh(): Promise<WorkOrder[]> {
+    const [nextOrders] = await Promise.all([loadSummary(), loadSupplyPage(filters, suppliesPage, "refresh")]);
+    return nextOrders;
   }
 
   function notify(text: string, tone: MessageTone = "info"): void {
@@ -140,8 +173,15 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     return () => window.clearTimeout(timeout);
   }, [message, messageTone]);
 
-  async function loadAdminData(nextFilters = filters): Promise<void> {
-    try { await refresh(nextFilters, "load"); } catch { /* Current request owns error presentation. */ }
+  async function loadAdminData(): Promise<void> {
+    // La página de suministros presenta sus propios errores (con control de versión); aquí solo se cargan las demás secciones.
+    const supplies = loadSupplyPage(filtersRef.current, 1, "load").catch(() => undefined);
+    try {
+      await Promise.all([loadReferenceData(), loadSummary()]);
+    } catch (error) {
+      if (isActiveSession()) setLoadError(readableError(error));
+    }
+    await supplies;
   }
 
   useEffect(() => {
@@ -149,10 +189,11 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     setBusy(false);
     setOrderCreationDialog(undefined);
     setOrderAssignmentDialog(undefined);
-    void loadAdminData(filtersRef.current);
+    void loadAdminData();
     return () => {
       mounted.current = false;
       refreshSequence.current++;
+      supplySequence.current++;
       cancelLiveSearch();
     };
   }, [authority, session.sessionId]);
@@ -167,7 +208,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     cancelLiveSearch();
     liveSearchTimer.current = window.setTimeout(() => {
       liveSearchTimer.current = undefined;
-      void refresh(filtersRef.current, "search").catch(() => { /* Current request owns error presentation. */ });
+      void loadSupplyPage(filtersRef.current, 1, "search").catch(() => { /* Current request owns error presentation. */ });
     }, 280);
     return () => {
       cancelLiveSearch();
@@ -182,7 +223,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   async function search(event: FormEvent) {
     event.preventDefault();
     cancelLiveSearch();
-    try { await refresh(filters, "search"); } catch { /* Current request owns error presentation. */ }
+    try { await loadSupplyPage(filters, 1, "search"); } catch { /* Current request owns error presentation. */ }
   }
 
   async function clearFilters(): Promise<void> {
@@ -191,13 +232,22 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     setFilters({ ...DEFAULT_SEARCH_FILTERS });
     setSelectedDebtor("");
     setSelectedDebtorIds([]);
-    try { await refresh(DEFAULT_SEARCH_FILTERS, "search"); } catch { /* Current request owns error presentation. */ }
+    try { await loadSupplyPage(DEFAULT_SEARCH_FILTERS, 1, "search"); } catch { /* Current request owns error presentation. */ }
+  }
+
+  function changeSuppliesPage(page: number): void {
+    void loadSupplyPage(filtersRef.current, page, "page").catch(() => { /* Current request owns error presentation. */ });
   }
 
   function cancelLiveSearch(): void {
     if (liveSearchTimer.current === undefined) return;
     window.clearTimeout(liveSearchTimer.current);
     liveSearchTimer.current = undefined;
+  }
+
+  /** Registros de los suministros indicados, en el orden dado; los que aún no se conocen se omiten. */
+  function debtorRecordsFor(debtorIds: readonly string[]): DebtorRecord[] {
+    return debtorIds.flatMap((debtorId) => knownDebtors[debtorId] ? [knownDebtors[debtorId]] : []);
   }
 
   function openSingleOrderDialog(event: FormEvent): void {
@@ -226,9 +276,9 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
   async function confirmOrderCreation(): Promise<void> {
     if (!orderCreationDialog || busy || !isActiveSession()) return;
     const creationDialog = orderCreationDialog;
-    const missingDebtorIds = getMissingOrderCreationDebtorIds(creationDialog.debtorIds, debtors);
+    const missingDebtorIds = getMissingOrderCreationDebtorIds(creationDialog.debtorIds, Object.values(knownDebtors));
     if (missingDebtorIds.length) {
-      notify(`No se pueden crear órdenes: faltan suministros en los resultados actuales (${missingDebtorIds.join(", ")}).`, "error");
+      notify(`No se pueden crear órdenes: faltan datos de los suministros seleccionados (${missingDebtorIds.join(", ")}).`, "error");
       return;
     }
     if (!selectedTechnician) {
@@ -304,7 +354,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
         const refreshedOrders = await refresh();
         if (!isActiveSession()) return;
         const firstDebtorId = dialog.debtorIds[0];
-        const debtor = debtors.find((candidate) => candidate.debtorId === firstDebtorId);
+        const debtor = knownDebtors[firstDebtorId];
         const activeOrder = findActiveOrderForSupply(refreshedOrders, firstDebtorId, debtor?.accountId);
         if (activeOrder) {
           setSelectedOrder(activeOrder.orderId);
@@ -348,20 +398,25 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
     setSelectedDebtorIds((current) => current.includes(debtorId) ? current.filter((id) => id !== debtorId) : [...current, debtorId]);
   }
 
+  /** Selecciona o quita los suministros de la página visible; la selección de otras páginas se conserva. */
   function toggleAllDebtors(): void {
-    setSelectedDebtorIds((current) => current.length === debtors.length ? [] : debtors.map((debtor) => debtor.debtorId));
+    const pageIds = debtors.map((debtor) => debtor.debtorId);
+    const pageSelected = pageIds.length > 0 && pageIds.every((debtorId) => selectedDebtorIds.includes(debtorId));
+    setSelectedDebtorIds((current) => pageSelected
+      ? current.filter((debtorId) => !pageIds.includes(debtorId))
+      : [...current, ...pageIds.filter((debtorId) => !current.includes(debtorId))]);
   }
 
   function prepareBatch(): void {
     openBatchOrderDialog();
   }
 
-  const selectedDebtorRecord = debtors.find((debtor) => debtor.debtorId === selectedDebtor);
+  const selectedDebtorRecord = selectedDebtor ? knownDebtors[selectedDebtor] : undefined;
   const selectedOrderRecord = orders.find((order) => order.orderId === selectedOrder);
   const activeOrderForSupply = selectedDebtorRecord ? findActiveOrderForSupply(orders, selectedDebtorRecord.debtorId, selectedDebtorRecord.accountId) : undefined;
   const availableFilterOptions = getAdminFilterOptions(filterRecords, filters.area, filters.locality, filters.route, filters.supplyStatus);
   const recentOrdersPage = getAdminOrderPage(orders, ordersPage);
-  const suppliesPageData = getAdminOrderPage(debtors, suppliesPage, ADMIN_SUPPLIES_PAGE_SIZE);
+  const suppliesPageData = { items: debtors, page: suppliesPage, totalPages: Math.max(1, Math.ceil(debtorTotal / ADMIN_SUPPLIES_PAGE_SIZE)) };
 
   return (
     <div className="operations-app">
@@ -385,6 +440,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
             filters={filters}
             availableFilterOptions={availableFilterOptions}
             debtors={debtors}
+            totalDebtors={debtorTotal}
             suppliesPageData={suppliesPageData}
             selectedDebtor={selectedDebtor}
             selectedDebtorIds={selectedDebtorIds}
@@ -401,7 +457,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
             onSelectDebtor={selectDebtor}
             onToggleDebtor={toggleDebtor}
             onRetry={loadAdminData}
-            onSuppliesPageChange={setSuppliesPage}
+            onSuppliesPageChange={changeSuppliesPage}
           />
 
           <section className="panel operations-orders selected-supply-panel" aria-labelledby="selected-supply-title">
@@ -412,7 +468,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
 
          <div ref={orderDetailRef}><AdminOrderDetail order={selectedOrderRecord} onAssign={() => { if (selectedOrderRecord) setOrderAssignmentDialog(selectedOrderRecord); }} /></div>
        </main>
-        {orderCreationDialog ? <OrderCreationModal dialog={orderCreationDialog} debtors={debtors} technicians={technicians} selectedTechnician={selectedTechnician} busy={busy} onTechnicianChange={setSelectedTechnician} onCancel={() => setOrderCreationDialog(undefined)} onConfirm={() => void confirmOrderCreation()} /> : null}
+        {orderCreationDialog ? <OrderCreationModal dialog={orderCreationDialog} debtors={debtorRecordsFor(orderCreationDialog.debtorIds)} technicians={technicians} selectedTechnician={selectedTechnician} busy={busy} onTechnicianChange={setSelectedTechnician} onCancel={() => setOrderCreationDialog(undefined)} onConfirm={() => void confirmOrderCreation()} /> : null}
         {orderAssignmentDialog ? <OrderAssignmentModal order={orderAssignmentDialog} technicians={technicians} selectedTechnician={selectedTechnician} busy={busy} onTechnicianChange={setSelectedTechnician} onCancel={() => setOrderAssignmentDialog(undefined)} onConfirm={() => void confirmOrderAssignment()} /> : null}
       </div>
   );

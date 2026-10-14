@@ -55,8 +55,16 @@ function setup() {
   vi.stubGlobal("window", { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout });
   const a = deferred<DebtorRecord[]>(), b = deferred<DebtorRecord[]>();
   const requests = [a, b];
+  // `findDebtors` es la lista completa que simula la autoridad; `findDebtorPage` la corta por página como el servidor.
   const findDebtors = vi.fn((query) => "minMonthsPending" in query ? requests.shift()!.promise : Promise.resolve([]));
-  const authority = { findDebtors, listOrders: vi.fn().mockResolvedValue([]), countAudit: vi.fn().mockResolvedValue(0), listTechnicians: vi.fn().mockResolvedValue([technician]) } as unknown as OperationsAuthorityPort;
+  const findDebtorPage = vi.fn(async (query: { offset: number; limit: number }) => {
+    const debtors = await findDebtors(query);
+    return { debtors: debtors.slice(query.offset, query.offset + query.limit), total: debtors.length };
+  });
+  const authority = {
+    findDebtors, findDebtorPage, listDebtorFilterRecords: vi.fn().mockResolvedValue([]),
+    listOrders: vi.fn().mockResolvedValue([]), countAudit: vi.fn().mockResolvedValue(0), listTechnicians: vi.fn().mockResolvedValue([technician]),
+  } as unknown as OperationsAuthorityPort;
   let activeSession = session;
   const render = () => {
     hooks.cursor = 0;
@@ -70,7 +78,7 @@ function setup() {
   };
   render();
   return {
-    a, b, render, search, unmount, findDebtors, authority,
+    a, b, render, search, unmount, findDebtors, findDebtorPage, authority,
     changeSession: () => { activeSession = { ...session, sessionId: "new-session" }; render(); },
     revalidateSession: () => { activeSession = { ...session }; render(); },
   };
@@ -95,7 +103,7 @@ describe("administrative request ownership", () => {
     await settle();
     revalidateSession();
     await settle();
-    expect(findDebtors).toHaveBeenCalledTimes(2);
+    expect(findDebtors).toHaveBeenCalledTimes(1);
     expect(authority.listOrders).toHaveBeenCalledTimes(1);
     expect(authority.countAudit).toHaveBeenCalledTimes(1);
   });
@@ -144,8 +152,8 @@ describe("administrative request ownership", () => {
     const pending = (render().find((node) => node.props.className === "filter-reset")!.props.onClick as Function)();
     render();
     await vi.advanceTimersByTimeAsync(300);
-    expect(findDebtors).toHaveBeenCalledTimes(4);
-    expect(findDebtors.mock.calls[2][0]).toMatchObject({ query: "", minMonthsPending: 2, supplyStatus: "A" });
+    expect(findDebtors).toHaveBeenCalledTimes(2);
+    expect(findDebtors.mock.calls[1][0]).toMatchObject({ query: "", minMonthsPending: 2, supplyStatus: "A" });
     b.resolve([debtor]);
     await pending;
     await settle();
@@ -171,34 +179,60 @@ describe("administrative request ownership", () => {
   });
 
   it("keeps seven supplies/four orders per page and selections across paging", async () => {
-    const { a, b, authority, render, search } = setup();
+    const { a, b, authority, render, changeSession, findDebtors, findDebtorPage } = setup();
     const orders = Array.from({ length: 5 }, (_, index) => ({ ...createDemoPackage("2026-09-29").orders[0], orderId: `order-${index}` }));
     vi.mocked(authority.listOrders).mockResolvedValue(orders);
-    // Reload using the search callback so the changed order stub belongs to this request.
     a.resolve([]);
     await settle();
+    // Entrar de nuevo carga órdenes, auditoría y la primera página; una búsqueda sola no recarga las órdenes.
     const supplies = Array.from({ length: 8 }, (_, index) => ({ ...debtor, debtorId: `supply-${index}` }));
-    const pending = search();
+    changeSession();
     b.resolve(supplies);
-    await pending;
+    await settle();
     const rows = render().filter((node) => "debtor" in node.props && "onToggle" in node.props);
     expect(rows).toHaveLength(7);
     (rows[0].props.onToggle as Function)();
-    const pager = render().find((node) => node.props.label === "Paginación de suministros")!;
-    (pager.props.onNext as Function)();
+    // Cada página se pide al servidor con su offset; la selección sobrevive al cambio de página.
+    findDebtors.mockResolvedValue(supplies);
+    (render().find((node) => node.props.label === "Paginación de suministros")!.props.onNext as Function)();
+    await settle();
+    expect(findDebtorPage).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 7, limit: 7 }));
     const secondPage = render().filter((node) => "debtor" in node.props && "onToggle" in node.props);
     expect(secondPage).toHaveLength(1);
     expect(secondPage[0].props.position).toBe(8);
     const summary = render().find((node) => "visibleSelectedCount" in node.props)!;
     expect(summary.props.selectedCount).toBe(1);
     expect(summary.props.visibleSelectedCount).toBe(0);
-    (pager.props.onPrevious as Function)();
+    (render().find((node) => node.props.label === "Paginación de suministros")!.props.onPrevious as Function)();
+    await settle();
     expect(render().find((node) => node.props.debtor === supplies[0])!.props.checked).toBe(true);
     const recent = render().find((node) => "totalOrders" in node.props)!;
     expect(recent.props.orders).toEqual(orders.slice(0, 4));
     expect(recent.props.totalPages).toBe(2);
     (recent.props.onPageChange as Function)(2);
     expect(render().find((node) => "totalOrders" in node.props)!.props.orders).toEqual(orders.slice(4));
+  });
+
+  it("a search loads only the supply page; orders, technicians and filter options are not reloaded", async () => {
+    const { a, b, authority, search } = setup();
+    a.resolve([debtor]);
+    await settle();
+    const pending = search();
+    b.resolve([debtor]);
+    await pending;
+    expect(authority.findDebtorPage).toHaveBeenCalledTimes(2);
+    expect(authority.listOrders).toHaveBeenCalledTimes(1);
+    expect(authority.listTechnicians).toHaveBeenCalledTimes(1);
+    expect(authority.listDebtorFilterRecords).toHaveBeenCalledTimes(1);
+  });
+
+  it("selects only the visible page with the select-all action", async () => {
+    const { a, render } = setup();
+    const supplies = Array.from({ length: 8 }, (_, index) => ({ ...debtor, debtorId: `supply-${index}` }));
+    a.resolve(supplies);
+    await settle();
+    (render().find((node) => typeof node.props.className === "string" && node.props.className.includes("filter-select-all"))!.props.onClick as Function)();
+    expect(render().find((node) => "visibleSelectedCount" in node.props)!.props.selectedCount).toBe(7);
   });
 
   it("ignores an older load rejection while search B is still pending", async () => {
@@ -232,7 +266,7 @@ describe("administrative request ownership", () => {
     a.resolve([debtor]);
     await settle();
     const live = deferred<DebtorRecord[]>();
-    findDebtors.mockImplementationOnce(() => live.promise).mockImplementationOnce(() => Promise.resolve([]));
+    findDebtors.mockImplementationOnce(() => live.promise).mockImplementationOnce(() => b.promise);
     const field = render().find((node) => node.props.id === "admin-search")!;
     if (field.type === "input") (field.props.onChange as Function)({ target: { value: "current" } });
     else (field.props.onChange as Function)("current");
@@ -411,9 +445,10 @@ describe("administrative request ownership", () => {
     expect(authority.createOrder).toHaveBeenCalledOnce();
     expect(authority.assignOrder).toHaveBeenCalledOnce();
     expect(authority.listOrders).toHaveBeenCalledTimes(2);
-    expect(authority.findDebtors).toHaveBeenCalledTimes(4);
+    expect(authority.findDebtorPage).toHaveBeenCalledTimes(2);
     expect(authority.countAudit).toHaveBeenCalledTimes(2);
-    expect(authority.listTechnicians).toHaveBeenCalledTimes(2);
+    // Tras una acción no se vuelven a pedir técnicos ni opciones de filtros.
+    expect(authority.listTechnicians).not.toHaveBeenCalled();
     expect(hasMessage(render(), "Se crearon 1 órdenes, pero no pudimos completar todas las asignaciones. Revise el detalle y reintente.")).toBe(true);
   });
 

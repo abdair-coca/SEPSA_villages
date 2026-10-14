@@ -92,7 +92,7 @@ test("a technician or administrator cannot act outside the role or the assigned 
 
     await t.test("a technician cannot use administrator routes", async () => {
       const order = await orderOf(techA);
-      for (const path of ["/v1/admin/reconciliation", "/v1/audit", "/v1/debtors", "/v1/orders", "/v1/technicians"]) {
+      for (const path of ["/v1/admin/reconciliation", "/v1/audit", "/v1/debtors", "/v1/debtors/filter-options", "/v1/orders", "/v1/technicians"]) {
         assert.equal((await send(server.url, "GET", path, techA.token, undefined, 403)).code, "FORBIDDEN", path);
       }
       assert.equal((await send(server.url, "POST", "/v1/orders", techA.token, { operation_id: `perm-x-${randomUUID()}`, debtor_id: "x", purpose: "CUT" }, 403)).code, "FORBIDDEN");

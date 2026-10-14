@@ -273,6 +273,36 @@
         }
       }
     },
+    "/v1/debtors/filter-options": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Combinaciones distintas de área, localidad, ruta y estado para los filtros de búsqueda; solo ADMIN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebtorFilterOptionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/v1/orders": {
       "get": {
         "tags": [
@@ -1249,6 +1279,42 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Technician"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DebtorFilterOptionsResponse": {
+        "type": "object",
+        "required": [
+          "source",
+          "options"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "area",
+                "area_name",
+                "locality",
+                "route",
+                "route_name",
+                "supply_status"
+              ],
+              "properties": {
+                "area": { "type": "string" },
+                "area_name": { "type": "string" },
+                "locality": { "type": "string" },
+                "route": { "type": "string" },
+                "route_name": { "type": "string" },
+                "supply_status": { "type": "string" }
+              },
+              "additionalProperties": false
             }
           }
         },

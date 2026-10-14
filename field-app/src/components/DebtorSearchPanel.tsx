@@ -26,6 +26,7 @@ interface DebtorSearchPanelProps {
   filters: SearchFilters;
   availableFilterOptions: AdminFilterOptions;
   debtors: DebtorRecord[];
+  totalDebtors: number;
   suppliesPageData: { items: DebtorRecord[]; page: number; totalPages: number };
   selectedDebtor: string;
   selectedDebtorIds: string[];
@@ -46,14 +47,14 @@ interface DebtorSearchPanelProps {
 }
 
 export function DebtorSearchPanel({
-  filters, availableFilterOptions, debtors, suppliesPageData, selectedDebtor, selectedDebtorIds, loading, loadError, searching, busy,
+  filters, availableFilterOptions, debtors, totalDebtors, suppliesPageData, selectedDebtor, selectedDebtorIds, loading, loadError, searching, busy,
   onFiltersChange, onAreaChange, onSearch, onClear, onToggleAll, onPrepareBatch, onSelectDebtor, onToggleDebtor, onRetry, onSuppliesPageChange,
 }: DebtorSearchPanelProps) {
-  const allDebtorsSelected = debtors.length > 0 && selectedDebtorIds.length === debtors.length;
+  const allDebtorsSelected = debtors.length > 0 && debtors.every((debtor) => selectedDebtorIds.includes(debtor.debtorId));
 
   return (
           <section className="panel operations-search" aria-labelledby="supplies-title">
-            <div className="panel-heading"><span className="panel-heading__icon panel-heading__icon--list" aria-hidden="true" /><div><span className="eyebrow">Buscar morosos</span><h2 id="supplies-title">Buscar morosos</h2><p className="panel-subtitle">Busca y selecciona un suministro para crear una orden de corte.</p></div><span className="count-badge">{debtors.length} resultados</span></div>
+            <div className="panel-heading"><span className="panel-heading__icon panel-heading__icon--list" aria-hidden="true" /><div><span className="eyebrow">Buscar morosos</span><h2 id="supplies-title">Buscar morosos</h2><p className="panel-subtitle">Busca y selecciona un suministro para crear una orden de corte.</p></div><span className="count-badge">{totalDebtors} resultados</span></div>
             <form className="admin-search-form admin-search-form--extended" onSubmit={onSearch}>
               <SearchField id="admin-search" label="Buscar morosos" value={filters.query} onChange={(query) => onFiltersChange((current) => ({ ...current, query }))} onClear={() => onFiltersChange((current) => ({ ...current, query: "" }))} busy={searching} disabled={busy} placeholder="Buscar por nombre, cuenta, área, localidad, ruta o estado" />
               <div className="compact-filters">
@@ -63,12 +64,12 @@ export function DebtorSearchPanel({
                 <label className="text-field"><span>Facturas vencidas</span><input type="number" min="0" inputMode="numeric" value={filters.minMonthsPending} onChange={(event) => onFiltersChange({ ...filters, minMonthsPending: event.target.value })} /></label>
                  <label className="text-field"><span>Estado del suministro</span><select value={filters.supplyStatus} onChange={(event) => onFiltersChange({ ...filters, supplyStatus: event.target.value })}><option value="">Todos</option>{availableFilterOptions.statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
               </div>
-               <div className="filter-actions"><button className="primary-action" type="submit" disabled={searching || busy}>{searching ? "Consultando…" : "Buscar morosos"}<span>→</span></button><button className="filter-reset" type="button" onClick={() => void onClear()} disabled={searching || busy}>Limpiar</button><button className="secondary-action filter-select-all" type="button" onClick={onToggleAll} disabled={!debtors.length || searching || busy}>{allDebtorsSelected ? "Quitar selección" : "Seleccionar todos"}</button>{selectedDebtorIds.length ? <button className="primary-action filter-batch-action" type="button" onClick={onPrepareBatch} disabled={busy}>Crear y asignar ({selectedDebtorIds.length})<span>→</span></button> : null}</div>
+               <div className="filter-actions"><button className="primary-action" type="submit" disabled={searching || busy}>{searching ? "Consultando…" : "Buscar morosos"}<span>→</span></button><button className="filter-reset" type="button" onClick={() => void onClear()} disabled={searching || busy}>Limpiar</button><button className="secondary-action filter-select-all" type="button" onClick={onToggleAll} disabled={!debtors.length || searching || busy}>{allDebtorsSelected ? "Quitar página" : "Seleccionar página"}</button>{selectedDebtorIds.length ? <button className="primary-action filter-batch-action" type="button" onClick={onPrepareBatch} disabled={busy}>Crear y asignar ({selectedDebtorIds.length})<span>→</span></button> : null}</div>
             </form>
 
             <AdminSelectionSummary selectedCount={selectedDebtorIds.length} visibleSelectedCount={suppliesPageData.items.filter((debtor) => selectedDebtorIds.includes(debtor.debtorId)).length} />
 
-             <div className="results-heading"><span><strong>{loading ? "Consultando suministros…" : `${debtors.length} suministros encontrados`}</strong><small>Ordenados por deuda pendiente</small></span></div>
+             <div className="results-heading"><span><strong>{loading ? "Consultando suministros…" : `${totalDebtors} suministros encontrados`}</strong><small>Ordenados por deuda pendiente</small></span></div>
               {loading ? <AdminLoadingState /> : loadError && !debtors.length ? <AdminErrorState message={loadError} onRetry={() => void onRetry()} /> : <>
                 <div className="admin-record-list">{suppliesPageData.items.map((debtor, index) => <DebtorItem key={debtor.debtorId} debtor={debtor} position={(suppliesPageData.page - 1) * ADMIN_SUPPLIES_PAGE_SIZE + index + 1} selected={selectedDebtor === debtor.debtorId} checked={selectedDebtorIds.includes(debtor.debtorId)} onSelect={() => onSelectDebtor(debtor.debtorId)} onToggle={() => onToggleDebtor(debtor.debtorId)} />)}</div>
                 {suppliesPageData.totalPages > 1 ? <PaginationControls className="admin-pagination supply-pagination" label="Paginación de suministros" page={suppliesPageData.page} totalPages={suppliesPageData.totalPages} onPrevious={() => onSuppliesPageChange(suppliesPageData.page - 1)} onNext={() => onSuppliesPageChange(suppliesPageData.page + 1)} /> : null}

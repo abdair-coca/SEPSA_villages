@@ -36,6 +36,9 @@ import type {
 } from "../../domain/types";
 import type { IdentityPort } from "../../ports/identity";
 import type {
+  DebtorFilterRecord,
+  DebtorPage,
+  DebtorPageQuery,
   OperationsAuthorityPort,
   TechnicalOrderAuthorizationInput,
   TechnicalOrderAuthorizationResult,
@@ -192,6 +195,15 @@ export class IndexedDbAuthorityRepository implements IdentityPort, OperationsAut
     transaction.objectStore("audit").put(auditEvent({ actorId: session.userId, actorRole: session.role, action: "FIND_DEBTORS", result: "accepted", occurredAt: new Date().toISOString() }));
     await transactionComplete(transaction);
     return result;
+  }
+
+  async findDebtorPage(query: DebtorPageQuery): Promise<DebtorPage> {
+    const debtors = await this.findDebtors(query);
+    return { debtors: debtors.slice(query.offset, query.offset + query.limit), total: debtors.length };
+  }
+
+  async listDebtorFilterRecords(session: Session): Promise<DebtorFilterRecord[]> {
+    return this.findDebtors({ session });
   }
 
   async listTechnicians(session: Session): Promise<TechnicianRecord[]> {

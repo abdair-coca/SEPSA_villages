@@ -85,3 +85,24 @@ export async function countDebtors(db: Queryable, criteria: DebtorSearchCriteria
   );
   return Number(count.rows[0]?.total ?? 0);
 }
+
+/** Fila de opciones de filtro: combinaciones distintas de área, localidad, ruta y estado (una sola consulta). */
+export interface DebtorFilterRow {
+  area: string;
+  area_name: string;
+  locality: string;
+  route: string;
+  route_name: string;
+  supply_status: string;
+}
+
+export async function listDebtorFilterRows(db: Queryable): Promise<DebtorFilterRow[]> {
+  const result = await db.query<DebtorFilterRow>(
+    `SELECT DISTINCT area, COALESCE(context->>'area_name', '') AS area_name, locality, route,
+            COALESCE(context->>'ruta_name', '') AS route_name, supply_status
+       FROM debtors WHERE source = $1
+      ORDER BY area, locality, route, supply_status`,
+    [PROVISIONAL_SOURCE],
+  );
+  return result.rows;
+}

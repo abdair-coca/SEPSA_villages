@@ -38,9 +38,28 @@ export type TechnicalOrderAuthorizationResult =
   | { status: "authorized"; order: WorkOrder }
   | { status: "not_authorized" | "unknown"; errorCode: string; order?: WorkOrder };
 
+/** Página de la búsqueda de morosos. Con `limit` y `offset` la pantalla pide solo lo que muestra. */
+export interface DebtorPageQuery extends DebtorQuery {
+  offset: number;
+  limit: number;
+}
+
+/** `total` cuenta todos los resultados de la búsqueda, no solo los de la página. */
+export interface DebtorPage {
+  debtors: DebtorRecord[];
+  total: number;
+}
+
+/** Campos de área, localidad, ruta y estado que alimentan los filtros de búsqueda (sin datos de deuda). */
+export type DebtorFilterRecord = Pick<DebtorRecord, "area" | "areaName" | "locality" | "route" | "routeName" | "supplyStatus">;
+
 export interface OperationsAuthorityPort {
-  /** Busca suministros morosos (solo ADMIN). */
+  /** Busca suministros morosos completos (solo ADMIN). La pantalla usa `findDebtorPage`. */
   findDebtors(query: DebtorQuery): Promise<DebtorRecord[]>;
+  /** Una página de la búsqueda con su total (solo ADMIN). */
+  findDebtorPage(query: DebtorPageQuery): Promise<DebtorPage>;
+  /** Combinaciones distintas para los filtros de búsqueda (solo ADMIN); no incluye datos de deuda. */
+  listDebtorFilterRecords(session: Session): Promise<DebtorFilterRecord[]>;
   listTechnicians(session: Session): Promise<TechnicianRecord[]>;
   /** Crea una orden; idempotente por `operationId`. Rechaza si el suministro ya tiene una orden activa. */
   createOrder(input: CreateOrderCommand): Promise<WorkOrder>;

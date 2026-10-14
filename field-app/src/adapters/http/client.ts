@@ -32,6 +32,9 @@ import type {
 } from "../../domain/types";
 import type { IdentityPort } from "../../ports/identity";
 import type {
+  DebtorFilterRecord,
+  DebtorPage,
+  DebtorPageQuery,
   OperationsAuthorityPort,
   TechnicalOrderAuthorizationInput,
   TechnicalOrderAuthorizationResult,
@@ -151,15 +154,30 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
     });
   }
 
+  /** Una página de la búsqueda con su total; la pantalla pide solo la página visible (`limit`/`offset`). */
+  async findDebtorPage(query: DebtorPageQuery): Promise<DebtorPage> {
+    const session = this.requireSession(query.session);
+    return this.trackAdminRead(session, async () => {
+      const params = debtorSearchParams(query);
+      params.set("limit", String(query.limit));
+      params.set("offset", String(query.offset));
+      const response = await this.request<PilotDebtorsResponseDto>(`/v1/debtors?${params}`, { method: "GET" }, session);
+      return { debtors: response.debtors.map(mapDebtor), total: requiredNumber(response.total, "total") };
+    });
+  }
+
+  /** Combinaciones distintas de área, localidad, ruta y estado en una sola consulta (`GET /v1/debtors/filter-options`). */
+  async listDebtorFilterRecords(session: Session): Promise<DebtorFilterRecord[]> {
+    const authorized = this.requireSession(session);
+    return this.trackAdminRead(authorized, async () => {
+      const response = await this.request<PilotDebtorFilterOptionsDto>("/v1/debtors/filter-options", { method: "GET" }, authorized);
+      return response.options.map(mapDebtorFilterRecord);
+    });
+  }
+
   async findDebtorsPage(query: DebtorQuery, cursor?: string): Promise<{ debtors: DebtorRecord[]; nextCursor?: string; total?: number }> {
     const session = this.requireSession(query.session);
-    const params = new URLSearchParams();
-    if (query.query?.trim()) params.set("query", query.query.trim());
-    if ("area" in query && query.area?.trim()) params.set("area", query.area.trim());
-    if ("locality" in query && query.locality?.trim()) params.set("locality", query.locality.trim());
-    if ("route" in query && query.route?.trim()) params.set("route", query.route.trim());
-    if (query.minMonthsPending !== undefined) params.set("min_months_pending", String(query.minMonthsPending));
-    if (query.supplyStatus?.trim()) params.set("supply_status", query.supplyStatus.trim());
+    const params = debtorSearchParams(query);
     params.set("limit", "100");
     if (cursor !== undefined) params.set("cursor", cursor);
     const response = await this.request<PilotDebtorsResponseDto>(`/v1/debtors?${params}`, { method: "GET" }, session);
@@ -545,6 +563,34 @@ function toSyncPayload(record: OperationRecord | VisitRecord): SyncPayload {
 }
 
 /** Mapeadores de respuestas del backend a tipos del dominio; campos ausentes quedan ausentes. */
+/** Fila de `GET /v1/debtors/filter-options` (valores tal como están en la base; vacíos cuando no hay dato). */
+interface PilotDebtorFilterOptionsDto {
+  source: "PILOT_PROVISIONAL";
+  options: Array<{ area: string; area_name: string; locality: string; route: string; route_name: string; supply_status: string }>;
+}
+
+function debtorSearchParams(query: DebtorQuery): URLSearchParams {
+  const params = new URLSearchParams();
+  if (query.query?.trim()) params.set("query", query.query.trim());
+  if ("area" in query && query.area?.trim()) params.set("area", query.area.trim());
+  if ("locality" in query && query.locality?.trim()) params.set("locality", query.locality.trim());
+  if ("route" in query && query.route?.trim()) params.set("route", query.route.trim());
+  if (query.minMonthsPending !== undefined) params.set("min_months_pending", String(query.minMonthsPending));
+  if (query.supplyStatus?.trim()) params.set("supply_status", query.supplyStatus.trim());
+  return params;
+}
+
+function mapDebtorFilterRecord(value: PilotDebtorFilterOptionsDto["options"][number]): DebtorFilterRecord {
+  return {
+    area: value.area,
+    areaName: optionalString(value.area_name),
+    locality: value.locality,
+    route: value.route,
+    routeName: optionalString(value.route_name),
+    supplyStatus: value.supply_status,
+  };
+}
+
 function mapDebtor(value: unknown): DebtorRecord {
   const raw = asRecord(value);
   const debtCents = requiredNonNegativeInteger(raw.debt_cents, "debt_cents");

@@ -3,12 +3,13 @@
  * Los valores se comparan sin distinguir mayúsculas ni espacios repetidos; `NO_DATA_FILTER_VALUE` selecciona "Sin dato".
  */
 import { NO_DATA_FILTER_VALUE, type DebtorRecord } from "../domain/types";
+import type { DebtorFilterRecord } from "../ports/authority";
 
 export interface AdminFilterOption { value: string; label: string; }
 
 export interface AdminFilterOptions { areas: AdminFilterOption[]; localities: AdminFilterOption[]; routes: AdminFilterOption[]; statuses: AdminFilterOption[]; }
 
-export function getAdminFilterOptions(records: readonly DebtorRecord[], selectedArea = "", selectedLocality = "", selectedRoute = "", selectedStatus = ""): AdminFilterOptions {
+export function getAdminFilterOptions(records: readonly DebtorFilterRecord[], selectedArea = "", selectedLocality = "", selectedRoute = "", selectedStatus = ""): AdminFilterOptions {
   const areaRecords = records.filter((record) => matchesFilterValue(record.area, selectedArea));
   return {
     areas: filterOptionEntries(records.map((record) => ({ value: record.area, label: record.areaName })), selectedArea),
