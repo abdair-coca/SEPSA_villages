@@ -89,7 +89,56 @@ describe("HTTP client: registro sincronizado del técnico (solo lectura)", () =>
 
     await expect(client.listOrderRecord(session, "order-1")).rejects.toMatchObject({ name: "NetworkUnknownError" });
   });
+
+  it("lee la foto propia con cookie de sesión y la entrega como imagen cuando el hash coincide", async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x10, 0x20]);
+    const { client, session, requests } = await loggedInClient(async () => json(await photoDto(bytes)));
+
+    const image = await client.readEvidence(session, "evidence/with spaces");
+
+    expect(requests[0]?.url.pathname).toBe("/v1/evidence/assets/evidence%2Fwith%20spaces");
+    expect(requests[0]?.init.credentials).toBe("include");
+    expect(image).toEqual({
+      evidenceId: "evidence-1",
+      mimeType: "image/jpeg",
+      contentHash: await sha256Hex(bytes),
+      dataUrl: `data:image/jpeg;base64,${toBase64(bytes)}`,
+    });
+  });
+
+  it("rechaza una foto cuyos bytes no coinciden con el hash guardado, sin mostrarla", async () => {
+    const { client, session } = await loggedInClient(async () => json({ ...(await photoDto(new Uint8Array([1, 2, 3]))), content_hash: "0".repeat(64) }));
+
+    await expect(client.readEvidence(session, "evidence-1")).rejects.toThrow("REMOTE_EVIDENCE_HASH_MISMATCH");
+  });
+
+  it("una foto ajena o inexistente responde 404 con el código del servidor", async () => {
+    const { client, session } = await loggedInClient(() => json({ code: "EVIDENCE_NOT_FOUND", message: "No se encontró la evidencia." }, 404));
+
+    await expect(client.readEvidence(session, "ajena")).rejects.toMatchObject({ code: "EVIDENCE_NOT_FOUND" });
+  });
 });
+
+async function photoDto(bytes: Uint8Array) {
+  return {
+    evidence_id: "evidence-1",
+    order_id: "order-1",
+    operation_id: "visit-1",
+    mime_type: "image/jpeg",
+    content_hash: await sha256Hex(bytes),
+    content_base64: toBase64(bytes),
+    source: "PILOT_PROVISIONAL",
+  };
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function toBase64(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes));
+}
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });

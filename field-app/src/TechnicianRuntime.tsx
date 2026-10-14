@@ -13,7 +13,7 @@ import { getStableDeviceId } from "./bootstrap/environment";
 import type { Session, WorkPackageEnvelope } from "./domain/types";
 import type { IdentityPort } from "./ports/identity";
 import type { OperationsAuthorityPort } from "./ports/authority";
-import type { TechnicianRecordPort } from "./ports/technician-record";
+import type { ServerRecordSource, TechnicianRecordPort } from "./ports/technician-record";
 import type { AppStore } from "./state/store";
 
 /** Crea el store del técnico con los adaptadores del modo actual. */
@@ -24,8 +24,13 @@ export function TechnicianRuntime({ authority, session, onLogout, roleSwitch, cr
   const [refreshAssigned, setRefreshAssigned] = useState<(() => Promise<void>)>();
   const [error, setError] = useState<string>();
   const deviceId = getStableDeviceId();
-  const listServerRecord = useMemo(
-    () => recordPort ? (orderId: string) => recordPort.listOrderRecord(session, orderId) : undefined,
+  const serverRecord = useMemo<ServerRecordSource | undefined>(
+    () => recordPort
+      ? {
+        listOrder: (orderId) => recordPort.listOrderRecord(session, orderId),
+        readEvidence: (evidenceId) => recordPort.readEvidence(session, evidenceId),
+      }
+      : undefined,
     [recordPort, session],
   );
 
@@ -72,7 +77,7 @@ export function TechnicianRuntime({ authority, session, onLogout, roleSwitch, cr
       ? <AppStateCard as="main" className="state-card" tone="error" title="No pudimos abrir jornada" description={error} action={{ label: "Volver al inicio", onClick: onLogout }} />
       : <AppStateCard as="main" className="state-card" tone="loading" title="Descargando jornada" description="Validando identidad y órdenes asignadas." />}
   </div>;
-  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection onRefreshAssigned={refreshAssigned} onLogout={onLogout} roleSwitch={roleSwitch} listServerRecord={listServerRecord} />;
+  return <FieldApp store={store} technicianId={session.userId} technicianName={session.displayName} deviceId={deviceId} enableReconnection onRefreshAssigned={refreshAssigned} onLogout={onLogout} roleSwitch={roleSwitch} serverRecord={serverRecord} />;
 }
 
 /**

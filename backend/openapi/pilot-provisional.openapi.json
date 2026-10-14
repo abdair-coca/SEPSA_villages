@@ -729,6 +729,58 @@
         }
       }
     },
+    "/v1/evidence/assets/{evidence_id}": {
+      "get": {
+        "tags": [
+          "Field"
+        ],
+        "description": "Foto de evidencia propia del técnico autenticado, con su hash guardado. Solo lectura; la lectura queda auditada (TECHNICIAN_EVIDENCE_READ). Una foto ajena o inexistente responde 404.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contenido de la foto en base64, solo TECHNICIAN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceContentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/v1/sync/operations": {
       "post": {
         "tags": [
@@ -2482,6 +2534,49 @@
               "string",
               "null"
             ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "EvidenceContentResponse": {
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "order_id",
+          "operation_id",
+          "mime_type",
+          "content_hash",
+          "content_base64",
+          "source"
+        ],
+        "properties": {
+          "evidence_id": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png"
+            ]
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 en hexadecimal de los bytes guardados; el cliente lo recalcula para comprobar la integridad."
+          },
+          "content_base64": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
           }
         },
         "additionalProperties": false

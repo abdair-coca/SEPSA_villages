@@ -140,7 +140,7 @@ En el piloto conectado, `users.role` es el rol inicial; `user_role_grants` defin
 - Excel se importa mediante scripts/migraciones; no es una dependencia de la UI ni la base definitiva.
 - Los blobs se conservan en IndexedDB. En el piloto, `EvidenceUploadPort` carga bytes por `/v1/evidence/assets`; servidor recomputa SHA-256 y guarda binding inmutable. CUT valida assets verificados antes de aceptar la operación. Las fotos se conservan en PostgreSQL de forma permanente, sin excepciones de retención (D029). La API oficial y los límites de MIME y tamaño siguen `TODO: VALIDAR CON SEPSA`.
 - La autorización externa de corte es obligatoria online inmediatamente antes de la acción física.
-- Los datos sincronizados del técnico deben poder consultarse desde otro dispositivo; la verificación en un segundo dispositivo está pendiente (D029).
+- Los datos sincronizados del técnico deben poder consultarse desde otro dispositivo. El registro (operaciones y fotos) se consulta desde el servidor y se probó en navegador con un dispositivo nuevo; la prueba con dos dispositivos físicos sigue pendiente (D029).
 
 ## PLANNED
 

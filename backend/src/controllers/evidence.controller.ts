@@ -1,5 +1,6 @@
 /**
- * HTTP de la subida de fotos de evidencia (`POST /v1/evidence/assets`, solo TECHNICIAN): valida la forma del
+ * HTTP de las fotos de evidencia del técnico: subida (`POST /v1/evidence/assets`) y lectura de su propia foto
+ * (`GET /v1/evidence/assets/:evidence_id`), solo TECHNICIAN. La subida valida la forma del
  * cuerpo (campos, formato, hash hexadecimal, base64), decodifica los bytes, llama a
  * `services/evidence.service.ts` y emite el log de seguridad. La verificación del contenido y su guardado
  * están en el servicio.
@@ -13,6 +14,7 @@ import type { SessionUser } from "../types.js";
 
 export interface EvidenceHandlers {
   uploadEvidence(request: IncomingMessage, response: ServerResponse, user: SessionUser): Promise<void>;
+  readEvidence(response: ServerResponse, user: SessionUser, evidenceId: string | undefined): Promise<void>;
 }
 
 export function createEvidenceHandlers(context: ApplicationContext): EvidenceHandlers {
@@ -39,5 +41,14 @@ export function createEvidenceHandlers(context: ApplicationContext): EvidenceHan
     sendJson(response, 200, result);
   }
 
-  return { uploadEvidence };
+  async function readEvidence(response: ServerResponse, user: SessionUser, evidenceId: string | undefined): Promise<void> {
+    requireRole(user, "TECHNICIAN");
+    if (!evidenceId || evidenceId.length > MAX_EVIDENCE_ID_LENGTH) throw new HttpError(400, "INVALID_REQUEST", "evidence_id no es válido.");
+    const result = await service.readEvidence(user, evidenceId);
+    sendJson(response, 200, result);
+  }
+
+  return { uploadEvidence, readEvidence };
 }
+
+const MAX_EVIDENCE_ID_LENGTH = 200;

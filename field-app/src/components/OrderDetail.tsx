@@ -5,7 +5,8 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import type { ActionResult, ActivityEntry, AppState, AppStore } from "../state/store";
-import type { ConnectivityMode, WorkOrder, ActionKind, OperationRecord, TechnicianRecordEntry } from "../domain/types";
+import type { ConnectivityMode, WorkOrder, ActionKind, OperationRecord } from "../domain/types";
+import type { ServerRecordSource } from "../ports/technician-record";
 import { TechnicianRecordDialog } from "./TechnicianRecordDialog";
 import { NewAuthorizationAction } from "./NewAuthorizationAction";
 import { FieldMap } from "./FieldMap";
@@ -26,7 +27,7 @@ export function OrderDetail({
   enableReconnection,
   technicianName,
   initialAction,
-  listServerRecord,
+  serverRecord,
   onBack,
 }: {
   order: WorkOrder;
@@ -36,7 +37,7 @@ export function OrderDetail({
   technicianName?: string;
   initialAction?: ActionKind | null;
   /** Registro del servidor de esta orden; sin él (modo simulado) la ficha no ofrece la consulta. */
-  listServerRecord?: (orderId: string) => Promise<TechnicianRecordEntry[]>;
+  serverRecord?: ServerRecordSource;
   onBack: () => void;
 }) {
   const [draft, setDraft] = useState<ActionKind | null>(initialAction === "VISIT" && !isManualVisitAllowed(order) ? null : initialAction ?? null);
@@ -98,7 +99,7 @@ export function OrderDetail({
         onActivityPageIndexChange={setActivityPageIndex}
         hidden={Boolean(draft)}
         uncertainActions={uncertainActions}
-        onOpenServerRecord={listServerRecord ? () => setServerRecordOpen(true) : undefined}
+        onOpenServerRecord={serverRecord ? () => setServerRecordOpen(true) : undefined}
       />
       <div className="order-detail-legacy">
         <div className="detail-navigation-bar">
@@ -160,7 +161,7 @@ export function OrderDetail({
             </button>
           ) : null}
           <div className="order-detail-actions__secondary">
-            {listServerRecord ? <button type="button" className="secondary-action" onClick={() => setServerRecordOpen(true)}>Ver registro del servidor</button> : null}
+            {serverRecord ? <button type="button" className="secondary-action" onClick={() => setServerRecordOpen(true)}>Ver registro del servidor</button> : null}
             {canRegisterVisit ? (
               <button className={canCut ? "secondary-action" : "primary-action"} disabled={Boolean(state.busyAction)} onClick={() => setDraft("VISIT")}>
                 Registrar visita
@@ -210,7 +211,7 @@ export function OrderDetail({
           }}
         />
       ) : null}
-      {serverRecordOpen && listServerRecord ? <TechnicianRecordDialog orderId={order.orderId} listRecord={listServerRecord} onClose={() => setServerRecordOpen(false)} /> : null}
+      {serverRecordOpen && serverRecord ? <TechnicianRecordDialog orderId={order.orderId} source={serverRecord} onClose={() => setServerRecordOpen(false)} /> : null}
       {actionCompletion ? <ActionCompletionDialog result={actionCompletion} onDismiss={() => setActionCompletion(undefined)} /> : null}
     </section>
   );

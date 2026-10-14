@@ -362,6 +362,14 @@ export interface OperationRecord {
   lastAuthorizationLookup?: { status: "expired" | "rejected" | "not_found"; at: string };
 }
 
+/** Foto de evidencia leída del servidor. Solo existe si sus bytes coinciden con el hash que el servidor guardó. */
+export interface TechnicianEvidenceImage {
+  evidenceId: string;
+  mimeType: "image/jpeg" | "image/png";
+  contentHash: string;
+  dataUrl: string;
+}
+
 /**
  * Operación que el servidor tiene registrada del técnico (`GET /v1/technician/record`). Es solo lectura: refleja lo
  * que llegó al servidor desde cualquier dispositivo, no el estado de la cola local de este dispositivo.

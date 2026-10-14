@@ -48,3 +48,21 @@ export async function listVerifiedEvidenceIds(client: Queryable, evidenceRefs: s
   );
   return evidence.rows.map((row) => row.evidence_id);
 }
+
+export interface EvidenceContentRow {
+  evidence_id: string;
+  order_id: string;
+  operation_id: string;
+  mime_type: string;
+  content_hash: string;
+  content: Buffer;
+}
+
+/** Foto verificada del técnico indicado; `undefined` si no existe o es de otro técnico (no se distingue, para no revelar ids ajenos). */
+export async function findTechnicianEvidenceContent(db: Queryable, evidenceId: string, technicianId: string): Promise<EvidenceContentRow | undefined> {
+  const result = await db.query<EvidenceContentRow>(
+    "SELECT evidence_id, order_id, operation_id, mime_type, content_hash, content FROM evidence_assets WHERE evidence_id = $1 AND technician_id = $2 AND status = 'verified' AND source = $3",
+    [evidenceId, technicianId, PROVISIONAL_SOURCE],
+  );
+  return result.rows[0];
+}

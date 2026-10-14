@@ -24,6 +24,7 @@ import type {
   OperationRecord,
   Session,
   TechnicianRecord,
+  TechnicianEvidenceImage,
   TechnicianRecordEntry,
   VisitRecord,
   WorkOrder,
@@ -38,7 +39,7 @@ import type {
 import type { AuthorizationAdapter, AuthRequest, AuthResponse, ConsumeRequest, ConsumeResponse, ConsumeEnablementRequest, CutAuthorizationLookupResult, ConsumeEnablementResponse, EnablementAdapter, EnablementLookupResult, EnablementRequest, EnablementResponse, RemoteResult } from "../../ports/authorization";
 import type { EvidenceUploadPort, SyncPayload, SyncTransport, SyncTransportResponse } from "../../ports/sync";
 import type { TechnicianRecordPort } from "../../ports/technician-record";
-import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotCutAuthorizationLookupDto, PilotCutConsumeResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotReconnectionConsumeResponseDto, PilotReconnectionEnablementLookupDto, PilotReconnectionEnablementResponseDto, PilotSyncResponseDto, PilotTechnicianRecordEntryDto, PilotTechnicianRecordResponseDto, PilotTechnicianResponseDto } from "./contracts";
+import type { PilotAuditResponseDto, PilotAuthorizationResponseDto, PilotBatchOrderResponseDto, PilotCutAuthorizationLookupDto, PilotCutConsumeResponseDto, PilotDebtorsResponseDto, PilotEvidenceUploadResponseDto, PilotLookupResponseDto, PilotLoginResponseDto, PilotOrderResponseDto, PilotPackageResponseDto, PilotReconnectionConsumeResponseDto, PilotReconnectionEnablementLookupDto, PilotReconnectionEnablementResponseDto, PilotSyncResponseDto, PilotEvidenceContentResponseDto, PilotTechnicianRecordEntryDto, PilotTechnicianRecordResponseDto, PilotTechnicianResponseDto } from "./contracts";
 
 /**
  * Rechazos del backend a `POST /v1/authorizations/cut` que ocurren antes de crear cualquier reserva: el corte no
@@ -261,6 +262,19 @@ export class HttpPilotClient implements IdentityPort, OperationsAuthorityPort, A
       cursor = page.next_cursor ?? undefined;
     } while (cursor !== undefined);
     return all;
+  }
+
+  /** Foto propia del técnico. Rechaza los bytes que no coinciden con el hash que guardó el servidor: no se muestra una imagen dudosa. */
+  async readEvidence(session: Session, evidenceId: string): Promise<TechnicianEvidenceImage> {
+    const authorized = this.requireSession(session);
+    const photo = await this.request<PilotEvidenceContentResponseDto>(`/v1/evidence/assets/${encodeURIComponent(evidenceId)}`, { method: "GET" }, authorized);
+    if ((await sha256Hex(decodeBase64(photo.content_base64))) !== photo.content_hash) throw new Error("REMOTE_EVIDENCE_HASH_MISMATCH");
+    return {
+      evidenceId: photo.evidence_id,
+      mimeType: photo.mime_type,
+      contentHash: photo.content_hash,
+      dataUrl: `data:${photo.mime_type};base64,${photo.content_base64}`,
+    };
   }
 
   async listAudit(query: { orderId?: string; session?: Session } = {}): Promise<AuditEvent[]> {
@@ -591,9 +605,16 @@ function provisionalPackageChecksum(workPackage: { packageId: string; technician
 }
 
 async function digestJson(value: unknown): Promise<string> {
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  return sha256Hex(new TextEncoder().encode(JSON.stringify(value)));
+}
+
+async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
 }
 
 function toTechnicianRecordEntry(entry: PilotTechnicianRecordEntryDto): TechnicianRecordEntry {

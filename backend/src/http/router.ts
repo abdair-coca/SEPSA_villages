@@ -73,6 +73,7 @@ export function createRoutes(c: RouteControllers): Route[] {
     { method: "POST", pattern: "/v1/authorizations/reconnection/consume", access: "session", handler: ({ request, response, user }) => c.authorizations.consumeReconnectionEnablement(request, response, user) },
     { method: "GET", pattern: "/v1/authorizations/reconnection/:operation_id", access: "session", handler: ({ response, user, params }) => c.authorizations.lookupReconnectionEnablement(response, user, params.operation_id) },
     { method: "POST", pattern: "/v1/evidence/assets", access: "session", handler: ({ request, response, user }) => c.evidence.uploadEvidence(request, response, user) },
+    { method: "GET", pattern: "/v1/evidence/assets/:evidence_id", access: "session", handler: ({ response, user, params }) => c.evidence.readEvidence(response, user, params.evidence_id) },
     { method: "POST", pattern: "/v1/sync/operations", access: "session", handler: ({ request, response, user }) => c.sync.syncOperation(request, response, user) },
     { method: "POST", pattern: "/v1/sync/operations/:operation_id/review", access: "session", handler: ({ request, response, user, params }) => c.sync.recordHumanReview(request, response, user, params.operation_id ?? "") },
     { method: "GET", pattern: "/v1/sync/operations/:operation_id", access: "session", handler: ({ response, user, params }) => c.sync.lookupOperation(response, user, params.operation_id) },

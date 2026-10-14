@@ -10,7 +10,7 @@ import type { PoolClient } from "pg";
 import { withTransaction } from "../db.js";
 import { HttpError } from "../http/responses.js";
 import { insertAudit } from "../repositories/audit.repository.js";
-import { findEvidenceAssetForUpdate, insertEvidenceAsset, listVerifiedEvidenceIds, type EvidenceAssetRow } from "../repositories/evidence.repository.js";
+import { findEvidenceAssetForUpdate, findTechnicianEvidenceContent, insertEvidenceAsset, listVerifiedEvidenceIds, type EvidenceAssetRow } from "../repositories/evidence.repository.js";
 import { findOrderAssignment, findOrderAssignmentForUpdate } from "../repositories/orders.repository.js";
 import { PROVISIONAL_SOURCE, type ServiceContext } from "../shared/application-context.js";
 import type { SessionUser, SyncPayload } from "../types.js";
@@ -35,8 +35,19 @@ export interface UploadEvidenceResult {
   source: string;
 }
 
+export interface EvidenceContentResult {
+  evidence_id: string;
+  order_id: string;
+  operation_id: string;
+  mime_type: string;
+  content_hash: string;
+  content_base64: string;
+  source: string;
+}
+
 export interface EvidenceService {
   uploadEvidence(user: SessionUser, input: UploadEvidenceInput): Promise<UploadEvidenceResult>;
+  readEvidence(user: SessionUser, evidenceId: string): Promise<EvidenceContentResult>;
 }
 
 export function createEvidenceService(context: ServiceContext): EvidenceService {
@@ -74,7 +85,34 @@ export function createEvidenceService(context: ServiceContext): EvidenceService 
     });
   }
 
-  return { uploadEvidence };
+  /** Foto del propio técnico, con su hash guardado. La lectura queda auditada en la misma transacción. */
+  async function readEvidence(user: SessionUser, evidenceId: string): Promise<EvidenceContentResult> {
+    return withTransaction(context.pool, async (client) => {
+      const row = await findTechnicianEvidenceContent(client, evidenceId, user.userId);
+      if (!row) throw new HttpError(404, "EVIDENCE_NOT_FOUND", "No se encontró la evidencia.");
+      await insertAudit(client, {
+        actorId: user.userId,
+        actorRole: user.role,
+        action: "TECHNICIAN_EVIDENCE_READ",
+        result: "accepted",
+        entityId: evidenceId,
+        orderId: row.order_id,
+        operationId: row.operation_id,
+        metadata: { mime_type: row.mime_type, bytes: row.content.length },
+      });
+      return {
+        evidence_id: row.evidence_id,
+        order_id: row.order_id,
+        operation_id: row.operation_id,
+        mime_type: row.mime_type,
+        content_hash: row.content_hash.trim(),
+        content_base64: row.content.toString("base64"),
+        source: PROVISIONAL_SOURCE,
+      };
+    });
+  }
+
+  return { uploadEvidence, readEvidence };
 }
 
 export async function hasVerifiedEvidence(client: PoolClient, payload: SyncPayload, technicianId: string): Promise<boolean> {

@@ -42,3 +42,4 @@ export interface PilotTechnicianRecordEntryDto {
   evidence_refs: string[]; field_capture: import("../../domain/types").FieldCapture | null;
 }
 export interface PilotTechnicianRecordResponseDto extends PilotPageDto { operations: PilotTechnicianRecordEntryDto[]; }
+export interface PilotEvidenceContentResponseDto { evidence_id: string; order_id: string; operation_id: string; mime_type: "image/jpeg" | "image/png"; content_hash: string; content_base64: string; source: "PILOT_PROVISIONAL"; }
