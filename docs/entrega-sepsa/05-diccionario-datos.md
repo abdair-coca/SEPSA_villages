@@ -253,12 +253,3 @@ Clave: Técnico (`technician_id`) + Dispositivo (`device_id`).
 - `003_reference_fields.sql` no está en el arranque del servidor. Qué migraciones aplicar a la base desplegada lo decide el equipo.
 
 Estas diferencias son técnicas. Antes de presentar el diccionario como definitivo, hay que confirmar la base desplegada con la descripción de cada tabla en PostgreSQL.
-
-## Diferencias entre migraciones
-
-- `003_reference_fields.sql` redefine columnas de `debtors` que `001` ya crea (con `ADD COLUMN IF NOT EXISTS`). En una base creada con `001` no cambia nada. `circuit`, `tariff` y `supply_status` tienen defecto `'TODO: VALIDAR CON SEPSA'` en `003`.
-- `orders.cuc` tiene tres definiciones de unicidad, redundantes entre sí.
-- `008_reconnection_schema.sql` amplía tres restricciones: `orders.status` agrega `RECONEXIÓN`; `sync_operations.action` agrega `RECONNECTION`; `cut_authorizations.action` es nueva.
-- `003_reference_fields.sql` no está en el arranque del servidor. Qué migraciones aplicar a la base desplegada lo decide el equipo.
-
-Antes de dar el diccionario por definitivo, hay que confirmar la base desplegada con la descripción de cada tabla en PostgreSQL.
