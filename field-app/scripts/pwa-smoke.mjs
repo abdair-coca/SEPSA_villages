@@ -255,10 +255,13 @@ async function connectCdp(webSocketUrl) {
         const { requestId, request } = message.params;
         let requestOrigin;
         try { requestOrigin = new URL(request.url).origin; } catch { requestOrigin = "invalid"; }
-        if (requestOrigin === appUrl) void send("Fetch.continueRequest", { requestId });
+        // El navegador cancela peticiones (navegación, modo sin conexión, Service Worker) y entonces su
+        // InterceptionId ya no existe: no hay nada que responder, así que ese error no debe tirar el proceso.
+        const answer = (method, params) => send(method, params).catch(() => undefined);
+        if (requestOrigin === appUrl) void answer("Fetch.continueRequest", { requestId });
         else {
           blockedOrigins.push(requestOrigin);
-          void send("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" });
+          void answer("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" });
         }
       }
       return;
