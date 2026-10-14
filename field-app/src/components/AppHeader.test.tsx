@@ -58,23 +58,24 @@ describe("shared app header", () => {
     expect(markup).not.toContain('aria-label="Cerrar sesión"');
   });
 
-  it("renders the Admin environment and account details in the same shell", () => {
+  it("renders the Admin account details in the same shell without environment signals", () => {
     const markup = renderToStaticMarkup(
       <AppHeader
         role="admin"
         title="Centro de control de órdenes de corte"
         description="Busca suministros con mora, genera órdenes y asigna técnicos."
-        user={{ displayName: "Ana Pérez", roleLabel: "Admin", authenticity: "SIMULATED" }}
-        status={{ tone: "environment", label: "Entorno · SIMULATED" }}
+        user={{ displayName: "Ana Pérez", roleLabel: "Admin" }}
+        status={{ tone: "positive", label: "Red disponible" }}
         onLogout={() => undefined}
       />,
     );
 
     expect(markup).toContain('<header class="app-header app-shell app-header--admin" data-shell="shared" data-variant="standard">');
     expect(markup).toContain('<div class="app-brand"><strong>SEPSA</strong><span>OPERACIONES</span></div>');
-    expect(markup).toContain('class="app-status-badge app-status-badge--environment"');
-    expect(markup).toContain("Entorno · SIMULATED");
-    expect(markup).toContain('<span>Entorno · SIMULATED</span>');
+    expect(markup).toContain('class="app-status-badge app-status-badge--positive"');
+    expect(markup).not.toContain("Entorno");
+    expect(markup).not.toContain("environment");
+    expect(markup).not.toContain("PILOT_PROVISIONAL");
     expect(markup).toContain("Ana Pérez");
     expect(markup).toContain("Admin");
     expect(markup).toContain("<h1>Centro de control de órdenes de corte</h1>");
@@ -88,7 +89,7 @@ describe("shared app header", () => {
         title="Título"
         description="Descripción"
         user={{ displayName: "Ana Pérez", roleLabel: role === "admin" ? "Admin" : "Técnico" }}
-        status={{ tone: role === "admin" ? "environment" : "positive", label: "Estado" }}
+        status={{ tone: "positive", label: "Estado" }}
         onLogout={() => undefined}
       />,
     );

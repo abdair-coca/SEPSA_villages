@@ -364,7 +364,7 @@
 @media (max-width: 760px){.admin-topbar__inner, .operations-app .admin-summary, .operations-app .operations-grid, .operations-app .admin-order-detail, .operations-app > .message{
     width: calc(100% - 32px);
   }.admin-topbar__inner,
-  .admin-topbar__tools{ flex-wrap: wrap; }.admin-topbar__inner{ padding: var(--space-12) 0; }.admin-environment{ order: 3; width: 100%; padding: var(--space-8) 0 0; border-top: 1px solid var(--line); border-right: 0; }.admin-page-status{ justify-items: start; }.operations-app .admin-workspace{ grid-template-columns: 1fr; }}
+  .admin-topbar__tools{ flex-wrap: wrap; }.admin-topbar__inner{ padding: var(--space-12) 0; }.admin-page-status{ justify-items: start; }.operations-app .admin-workspace{ grid-template-columns: 1fr; }}
 
 @media (max-width: 430px){.admin-topbar__inner, .operations-app .admin-summary, .operations-app .operations-grid, .operations-app .admin-order-detail, .operations-app > .message{ width: calc(100% - 24px); }.admin-brand-lockup > span:last-child{ display: none; }.admin-topbar__tools{ gap: var(--space-8); }.admin-user-summary{ min-width: 72px; }.admin-logout-link{ font-size: 10px; }.operations-app .overview-stats{ grid-template-columns: repeat(2, minmax(0, 1fr)); }.operations-app .overview-stat:last-child{ grid-column: span 2; }}
 

@@ -1,5 +1,5 @@
 /**
- * Encabezado común de Admin y Técnico: marca, estado (red/entorno), avatar y menú de cuenta con cambio de rol
+ * Encabezado común de Admin y Técnico: marca, estado de red, avatar y menú de cuenta con cambio de rol
  * y cierre de sesión. Variante `standard` (inicio y admin) o `minimal` (pantallas secundarias del técnico).
  * Solo presenta; no contiene reglas de autorización (ver `docs/ARCHITECTURE.md`).
  */
@@ -9,10 +9,9 @@ import { BrandLockup } from "./common/BrandLockup";
 export interface AppHeaderUser {
   displayName: string;
   roleLabel: string;
-  authenticity?: string;
 }
 
-export type AppHeaderStatusTone = "positive" | "warning" | "negative" | "environment";
+export type AppHeaderStatusTone = "positive" | "warning" | "negative";
 
 export type AppHeaderVariant = "standard" | "minimal";
 
@@ -137,7 +136,6 @@ export function AppHeader(props: AppHeaderProps) {
                 <div className="app-header__account-info">
                   <strong>{props.user.displayName}</strong>
                   <span>{props.user.roleLabel}</span>
-                  {props.user.authenticity ? <span>Entorno · {props.user.authenticity}</span> : null}
                 </div>
                 {props.roleSwitch ? (
                   <div className="app-header__menu-actions" role="group" aria-label="Rol activo">

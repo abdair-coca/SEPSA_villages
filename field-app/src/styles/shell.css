@@ -336,12 +336,6 @@
   background: #fff7f5;
 }
 
-.app-header.app-shell[data-shell="shared"] .app-status-badge--environment {
-  border-color: #d9dfe8;
-  color: #53657f;
-  background: #f8fafc;
-}
-
 .app-header.app-shell[data-shell="shared"] .app-status-badge__dot {
   width: 10px;
   height: 10px;
@@ -352,7 +346,6 @@
 
 .app-header.app-shell[data-shell="shared"] .app-status-badge__dot--warning { background: #d59c18; }
 .app-header.app-shell[data-shell="shared"] .app-status-badge__dot--negative { background: #cf4134; }
-.app-header.app-shell[data-shell="shared"] .app-status-badge__dot--environment { background: #718096; }
 
 .app-header.app-shell[data-shell="shared"] .app-header__body {
   display: grid;

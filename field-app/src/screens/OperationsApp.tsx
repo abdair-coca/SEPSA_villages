@@ -369,8 +369,7 @@ export function OperationsApp({ authority, session, onLogout, roleSwitch }: Oper
         role="admin"
         title="Centro de control de órdenes de corte"
         description="Busca suministros con mora, genera órdenes y asigna técnicos."
-        user={{ displayName: session.displayName ?? session.username, roleLabel: "Admin", authenticity: session.authenticity }}
-        status={{ tone: "environment", label: `Entorno · ${session.authenticity}` }}
+        user={{ displayName: session.displayName ?? session.username, roleLabel: "Admin" }}
         onLogout={onLogout}
         roleSwitch={roleSwitch ? { ...roleSwitch, disabled: roleSwitch.disabled || busy } : undefined}
       />
