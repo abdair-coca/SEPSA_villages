@@ -23,3 +23,14 @@ Este conjunto describe el piloto provisional del sistema de cortes y reconexione
 - Estado `Implementado`: existe en el código y tiene pruebas. No significa validado en campo ni aprobado por SEPSA.
 - Estado `Parcial` o `Pendiente`: falta una parte, o no existe todavía. Se indica qué falta.
 - Los criterios de aceptación son una propuesta. SEPSA todavía no los aprueba.
+
+## Limitaciones de la entrega
+
+- **Sin integración oficial con SEPSA.** El contrato del servidor es provisional y el adaptador no sustituye a la API que defina SEPSA (`03-arquitectura-tecnologias.md`, `12-seguridad-perfiles-acceso.md`).
+- **Corrección de datos por el técnico.** No está en la aplicación. Se resuelve con un procedimiento manual de soporte (D-c en el plan de consolidación; no se implementa).
+- **Datos de prueba.** Los deudores y órdenes son ficticios y se cargan a mano (D026). El árbol de trabajo no contiene datos de personas (D031); el historial de git sí los conserva, y su purga es una decisión de SEPSA (`14-pendientes-sepsa.md`).
+- **Plan gratuito.** El servidor y la base de datos están en planes gratuitos. La primera petición tras un periodo de inactividad puede tardar cerca de un minuto (`03-arquitectura-tecnologias.md`).
+- **Sesión.** Entrar exige conexión. Con la sesión vigente, de 7 días (D025), el técnico trabaja sin conexión.
+- **Conciliación.** El administrador ve las operaciones por conciliar en solo lectura (D024). Resolverlas no se hace desde la interfaz.
+- **Pruebas de navegador pendientes.** Las pruebas de doble toque y de dos dispositivos cubren la deduplicación en la capa de casos de uso y en el servidor, pero no hay prueba automatizada de navegador (`11-resultados-pruebas.md`).
+- **Pendientes de SEPSA.** Infraestructura, retención, responsable de datos, destino del SC08 y el resto de decisiones están en `14-pendientes-sepsa.md`.

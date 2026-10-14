@@ -2,7 +2,7 @@
 
 Fuente: preguntas para SEPSA y respuestas del equipo del 2026-10-13, y los documentos 01 a 13.
 Fecha: 2026-10-13
-Estado: entrega, copia fechada. La sección A ya está respondida y confirmada. La B corresponde a SEPSA. La C requiere cambio de código, que no se ha hecho.
+Estado: entrega, copia fechada. La sección A ya está respondida y confirmada. La B corresponde a SEPSA. La C se revisó contra el código el 2026-10-13; cada fila indica su estado.
 
 ## A. Respondido el 2026-10-13
 
@@ -43,14 +43,15 @@ El proyecto entrega la información. SEPSA define estas decisiones.
 
 ## C. Pendientes de código
 
-Estas acciones se acordaron, pero requieren cambios en el código. No se han hecho.
+Estado al 2026-10-13, comprobado contra el código.
 
-| Tema | Qué falta |
+| Tema | Estado y qué falta |
 |---|---|
-| Datos del técnico desde otro dispositivo | Verificar que un segundo dispositivo vea los cortes, visitas y fotos sincronizados (RF-36) |
-| Filas de personas en los seeds `005` y `006` | Eliminarlas del repo. `005` lo usa el bootstrap, así que hay que cambiarlo también. Reescribir el historial de git es una decisión aparte |
-| NRO_CORREL y NIV_CALIDAD | No existen en el modelo. Se añaden cuando SEPSA defina cómo los envía |
-| FECHA_CORTE y HORA_CORTE | Verificar que el momento del corte llega al servidor |
-| Revisión humana desde la pantalla | Hoy solo existe como API (RF-23) |
+| Datos del técnico desde otro dispositivo (RF-36, D029) | Parcial. El servidor guarda cortes, visitas y fotos sincronizados, y un consumo con otro dispositivo se rechaza (`backend/test/reconnection.test.ts`). Falta probar con dos dispositivos reales. |
+| Filas de personas en los seeds `005` y `006` (D031) | Hecho en el árbol de trabajo (`4ff51c6`). El historial de git no se reescribe; decidir si SEPSA exige purgarlo (sección B). |
+| NRO_CORREL y NIV_CALIDAD (D027) | Sin cambio. No están en el modelo; se añaden cuando SEPSA defina cómo los envía. |
+| FECHA_CORTE y HORA_CORTE | Verificado: el momento llega al servidor como `recorded_at` dentro del payload de la operación (`sync_operations.payload`). No hay exportación SC08 que lo use (`TODO: VALIDAR CON SEPSA`). |
+| Revisión humana desde la pantalla (RF-23, D024) | Parcial. La vista de conciliación es de solo lectura (`d9fe995`). La revisión sigue solo en la API `POST /v1/sync/operations/:id/review`. |
+| Reconsulta al volver la red (D028) | Decisión abierta. Al volver la red, la app consulta el estado de la autorización o la habilitación y, si está reservada, la consume con el mismo `operationId` (D019). D028 dice que el técnico reintenta la consulta. Hay que decidir si la recuperación automática se mantiene (y se ajusta D028) o si el código pasa a ser manual. |
 
-No quedan preguntas abiertas para el equipo.
+Queda una decisión abierta para el equipo: la reconsulta automática.

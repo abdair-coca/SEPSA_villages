@@ -56,5 +56,6 @@ La acción valida identidad, asignación, estado y datos de campo. La operación
 
 - El servidor no es la API oficial de SEPSA.
 - Sin conexión no hay corte: la autorización en línea es obligatoria.
+- Render y Neon están en planes gratuitos. La primera petición tras un periodo de inactividad puede tardar cerca de un minuto; la cola local no se pierde.
 - El límite de intentos de acceso vive en la memoria de un proceso.
 - La sesión no se liga a un dispositivo. Ver la lista de pendientes.
