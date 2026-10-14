@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { IndexedDbAuthorityRepository } from "./adapters/indexeddb/authority-repository";
 import { createSimulatedTechnicianStore, SimulatedAuthoritySyncTransport } from "./bootstrap/simulated-runtime";
 import { createUnavailableAppStore } from "./state/store";
+import { DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID } from "./state/demo-identity";
 import { FieldApp } from "./screens/FieldApp";
 import { LoginScreen } from "./screens/LoginScreen";
 import { OperationsApp } from "./screens/OperationsApp";
@@ -20,7 +21,7 @@ export default function SimulatedApp({ session, onAuthenticated, onLogout }: { s
     void authority?.seedE2eData();
   }, []);
 
-  if (!authority) return <FieldApp store={createUnavailableAppStore()} />;
+  if (!authority) return <FieldApp store={createUnavailableAppStore()} technicianId={DEMO_TECHNICIAN_ID} deviceId={DEMO_DEVICE_ID} />;
   if (!session) return <LoginScreen authority={authority} onAuthenticated={onAuthenticated} />;
   if (session.role === "ADMIN") return <OperationsApp authority={authority} session={session} onLogout={onLogout} />;
   return <TechnicianRuntime authority={authority} session={session} onLogout={onLogout} createStore={(repository, envelope, deviceId) => createSimulatedTechnicianStore(session.userId, deviceId, {

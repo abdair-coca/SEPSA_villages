@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAppStore, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID } from "./store";
+import { createAppStore } from "./store";
+import { DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID } from "./demo-identity";
 import { createDemoPackage, prepareDemoExternalValidation } from "../bootstrap/simulated-runtime";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
 import { deleteFieldDatabase } from "../adapters/indexeddb/database";
@@ -27,6 +28,7 @@ function setup(name: string, cutLookup: CutAuthorizationLookupResult["status"] =
   });
   const enablement = new MockEnablementAdapter({ mode: "online" });
   const store = createAppStore({
+    technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID,
     repository, authorization, enablement, connectivity: new MockConnectivity("online"), transport: new MockSyncTransport({ mode: "online" }),
     seedPackage: createDemoPackage("2026-09-12T10:00:00.000Z"), technicianName: DEMO_TECHNICIAN_ID,
     prepareExternalValidation: (action, order, operationId, now) => prepareDemoExternalValidation(action, order, operationId, now, { authorization, enablement }, DEMO_TECHNICIAN_ID, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID),

@@ -5,9 +5,8 @@ import {
   createAppStore,
   createUnavailableAppStore,
   selectVisibleOrders,
-  DEMO_DEVICE_ID,
-  DEMO_TECHNICIAN_ID,
 } from "./store";
+import { DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID } from "./demo-identity";
 import { createDemoPackage, prepareDemoExternalValidation } from "../bootstrap/simulated-runtime";
 import { formatSyncMessage } from "./store-results";
 import { IndexedDbLocalRepository } from "../adapters/indexeddb/repository";
@@ -37,7 +36,7 @@ function setup(name: string, configureDemoGrants = false, technicianName = DEMO_
   const prepareExternalValidation = configureDemoGrants
     ? (action: "CUT" | "RECONNECTION", order: Parameters<typeof prepareDemoExternalValidation>[1], operationId: string, now: string) => prepareDemoExternalValidation(action, order, operationId, now, { authorization, enablement }, DEMO_TECHNICIAN_ID, DEMO_DEVICE_ID, technicianName)
     : undefined;
-  const store = createAppStore({ repository, authorization, enablement, connectivity, transport, seedPackage: createDemoPackage("2026-09-12T10:00:00.000Z"), technicianName, prepareExternalValidation });
+  const store = createAppStore({ technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID, repository, authorization, enablement, connectivity, transport, seedPackage: createDemoPackage("2026-09-12T10:00:00.000Z"), technicianName, prepareExternalValidation });
   return { store, repository, connectivity, transport, authorization };
 }
 
@@ -83,7 +82,7 @@ describe("field app store", () => {
     repositories.splice(repositories.indexOf(first.repository), 1);
     const reopened = new IndexedDbLocalRepository({ dbName: "store-draft-reopen", technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID });
     repositories.push(reopened);
-    const second = createAppStore({ repository: reopened, authorization: new MockAuthorizationAdapter({ mode: "offline" }), enablement: new MockEnablementAdapter({ mode: "offline" }), connectivity: new MockConnectivity("offline"), transport: new MockSyncTransport({ mode: "offline" }) });
+    const second = createAppStore({ technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID, repository: reopened, authorization: new MockAuthorizationAdapter({ mode: "offline" }), enablement: new MockEnablementAdapter({ mode: "offline" }), connectivity: new MockConnectivity("offline"), transport: new MockSyncTransport({ mode: "offline" }) });
     await second.init();
     expect(await second.loadCaptureDraft("ORD-24017", "CUT")).toMatchObject({ reading: { value: 83.5 }, cutType: "MEDIDOR", gpsExceptionReason: "Sin señal GPS" });
     expect(await second.loadCaptureDraft("ORD-24017", "VISIT")).toBeUndefined();
@@ -207,7 +206,7 @@ describe("field app store", () => {
     const reopened = new IndexedDbLocalRepository({ dbName: "store-restart", technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID });
     repositories.push(reopened);
     const connectivity = new MockConnectivity("offline");
-    const store = createAppStore({ repository: reopened, authorization: new MockAuthorizationAdapter({ mode: "offline" }), enablement: new MockEnablementAdapter({ mode: "offline" }), connectivity, transport: new MockSyncTransport({ mode: "offline" }) });
+    const store = createAppStore({ technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID, repository: reopened, authorization: new MockAuthorizationAdapter({ mode: "offline" }), enablement: new MockEnablementAdapter({ mode: "offline" }), connectivity, transport: new MockSyncTransport({ mode: "offline" }) });
     await store.init();
     expect(store.getSnapshot()).toMatchObject({ status: "ready", syncItems: [{ action: "VISIT", status: "pending" }] });
   });
@@ -363,7 +362,7 @@ describe("field app store", () => {
   });
 
   it("renders mobile shell without out-of-scope payment, meter, or location terms", () => {
-    const markup = renderToStaticMarkup(<FieldApp store={createUnavailableAppStore()} />).toLocaleLowerCase();
+    const markup = renderToStaticMarkup(<FieldApp store={createUnavailableAppStore()} technicianId={DEMO_TECHNICIAN_ID} deviceId={DEMO_DEVICE_ID} />).toLocaleLowerCase();
     expect(markup).not.toMatch(/pago|lectura|gps/);
     expect(markup).not.toContain("datos de demostración");
     expect(markup).toContain("indexeddb no está disponible");

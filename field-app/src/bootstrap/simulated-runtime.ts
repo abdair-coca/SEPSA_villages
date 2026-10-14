@@ -12,7 +12,8 @@ import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/moc
 import { MockConnectivity } from "../adapters/mock/connectivity";
 import { MockSyncTransport } from "../adapters/mock/transport";
 import type { AppStore, PrepareExternalValidation } from "../state/store";
-import { createAppStore, DEMO_DEVICE_ID, DEMO_PACKAGE_ID, DEMO_TECHNICIAN_ID } from "../state/store";
+import { createAppStore } from "../state/store";
+import { DEMO_DEVICE_ID, DEMO_PACKAGE_ID, DEMO_TECHNICIAN_ID } from "../state/demo-identity";
 import type {
   AuthorizationAdapter,
   AuthorizationGrant,

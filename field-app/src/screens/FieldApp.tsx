@@ -27,9 +27,9 @@ import { syncThenRefreshAssigned } from "../state/field-commands";
 
 export interface FieldAppProps {
   store: AppStore;
-  technicianId?: string;
+  technicianId: string;
   technicianName?: string;
-  deviceId?: string;
+  deviceId: string;
   enableReconnection?: boolean;
   onRefreshAssigned?: () => Promise<void>;
   onLogout?: () => void;
@@ -38,9 +38,9 @@ export interface FieldAppProps {
 
 export function FieldApp({
   store,
-  technicianId = "tech-camila",
+  technicianId,
   technicianName,
-  deviceId = "device-rugged-01",
+  deviceId,
   enableReconnection = true,
   onRefreshAssigned,
   onLogout,

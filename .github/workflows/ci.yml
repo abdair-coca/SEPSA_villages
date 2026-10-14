@@ -73,7 +73,7 @@ jobs:
       - name: Production build without the simulated mode (D023)
         run: |
           npm run build
-          if grep -l "seedE2eData\|SIMULATED_AUTHORITY\|dirección simulada" dist/assets/*.js; then echo "Simulated mode leaked into the production build"; exit 1; fi
+          if grep -l "seedE2eData\|SIMULATED_AUTHORITY\|dirección simulada\|tech-camila\|device-rugged-01" dist/assets/*.js; then echo "Simulated mode leaked into the production build"; exit 1; fi
         working-directory: field-app
       - name: Smoke build with the simulated mode
         run: npm run build

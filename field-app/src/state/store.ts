@@ -32,10 +32,6 @@ import { readableError } from "./store-results";
 
 export type { EvidenceDraft } from "./evidence";
 
-export const DEMO_TECHNICIAN_ID = "tech-camila";
-export const DEMO_DEVICE_ID = "device-rugged-01";
-export const DEMO_PACKAGE_ID = "demo-field-package-v1";
-
 /** Filtro de la lista de órdenes; `REVIEW` muestra las que están en `PHYSICAL_UNKNOWN`. */
 export type OrderFilter = "ALL" | WorkOrder["status"] | "REVIEW";
 export type AppTab = "home" | "orders" | "map" | "queue";
@@ -106,9 +102,9 @@ export interface AppStoreDependencies {
   seedPackage?: WorkPackage;
   prepareExternalValidation?: PrepareExternalValidation;
   now?: () => string;
-  technicianId?: string;
+  technicianId: string;
   technicianName?: string;
-  deviceId?: string;
+  deviceId: string;
 }
 
 export type PrepareExternalValidation = (action: Exclude<ActionKind, "VISIT">, order: WorkOrder, operationId: string, now: string) => void;
@@ -142,9 +138,8 @@ interface SeedableRepository extends LocalRepository {
 /** Crea el store del técnico; `init()` carga el paquete local antes de permitir acciones. */
 export function createAppStore(dependencies: AppStoreDependencies): AppStore {
   const now = dependencies.now ?? (() => new Date().toISOString());
-  const technicianId = dependencies.technicianId ?? DEMO_TECHNICIAN_ID;
+  const { technicianId, deviceId } = dependencies;
   const technicianName = dependencies.technicianName ?? technicianId;
-  const deviceId = dependencies.deviceId ?? DEMO_DEVICE_ID;
   const listeners = new Set<() => void>();
   let snapshot: AppState = {
     status: "loading",
@@ -427,9 +422,9 @@ export function selectVisibleOrders(state: AppState): WorkOrder[] {
 
 /** El paquete local debe ser de este técnico y dispositivo y contener solo órdenes asignadas a él. */
 function assertPackageScope(workPackage: WorkPackage, dependencies: AppStoreDependencies): void {
-  if (workPackage.technicianId !== (dependencies.technicianId ?? DEMO_TECHNICIAN_ID) || workPackage.deviceId !== (dependencies.deviceId ?? DEMO_DEVICE_ID)) throw new Error("El paquete local pertenece a otra identidad.");
+  if (workPackage.technicianId !== dependencies.technicianId || workPackage.deviceId !== dependencies.deviceId) throw new Error("El paquete local pertenece a otra identidad.");
   if (!Number.isFinite(workPackage.version) || workPackage.version < 1) throw new Error("El paquete local no tiene una versión válida.");
-  if (workPackage.orders.some((order) => order.assignedTechnicianId !== (dependencies.technicianId ?? DEMO_TECHNICIAN_ID))) throw new Error("El paquete contiene órdenes fuera de asignación.");
+  if (workPackage.orders.some((order) => order.assignedTechnicianId !== dependencies.technicianId)) throw new Error("El paquete contiene órdenes fuera de asignación.");
 }
 
 function setAdapterMode(adapter: unknown, mode: ConnectivityMode): void {

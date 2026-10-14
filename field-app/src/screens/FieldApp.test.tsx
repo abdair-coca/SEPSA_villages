@@ -7,7 +7,8 @@ import { deleteFieldDatabase } from "../adapters/indexeddb/database";
 import { MockAuthorizationAdapter, MockEnablementAdapter } from "../adapters/mock/authorization";
 import { MockConnectivity } from "../adapters/mock/connectivity";
 import { MockSyncTransport } from "../adapters/mock/transport";
-import { createAppStore, DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type ActivityEntry, type AppStore } from "../state/store";
+import { createAppStore, type ActivityEntry, type AppStore } from "../state/store";
+import { DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID } from "../state/demo-identity";
 import { createDemoPackage } from "../bootstrap/simulated-runtime";
 import type { WorkOrder, WorkPackage } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
@@ -37,6 +38,8 @@ async function readyStore(name: string, seedPackage: WorkPackage = createDemoPac
   const repository = new IndexedDbLocalRepository({ dbName: name, technicianId: DEMO_TECHNICIAN_ID, deviceId: DEMO_DEVICE_ID });
   repositories.push(repository);
   const store = createAppStore({
+    technicianId: DEMO_TECHNICIAN_ID,
+    deviceId: DEMO_DEVICE_ID,
     repository,
     authorization: new MockAuthorizationAdapter({ mode: "online" }),
     enablement: new MockEnablementAdapter({ mode: "online" }),
@@ -113,7 +116,7 @@ describe("capture wizard QA recovery", () => {
 });
 
 function html(store: AppStore): string {
-  return renderToStaticMarkup(<FieldApp store={store} />).toLocaleLowerCase();
+  return renderToStaticMarkup(<FieldApp store={store} technicianId={DEMO_TECHNICIAN_ID} deviceId={DEMO_DEVICE_ID} />).toLocaleLowerCase();
 }
 
 function visitActivity(operationId: string, recordedAt: string): ActivityEntry {

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createDemoPackage } from "../bootstrap/simulated-runtime";
 import type { WorkOrder } from "../domain/types";
 import type { SyncItem } from "../ports/sync";
-import { DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID, type ActivityEntry } from "../state/store";
+import { type ActivityEntry } from "../state/store";
+import { DEMO_DEVICE_ID, DEMO_TECHNICIAN_ID } from "../state/demo-identity";
 import { adjacentJourneyOrder, orderJourneyOrders, sortActivityEntries, sortOrdersForNext, sortSyncItemsForDisplay } from "./sorting";
 
 function visitActivity(operationId: string, recordedAt: string): ActivityEntry {
