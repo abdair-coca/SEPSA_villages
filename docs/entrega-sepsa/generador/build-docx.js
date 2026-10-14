@@ -20,7 +20,6 @@ const LAND_W = 14570; // A4 apaisado (16838) menos márgenes, en twips
 let W = TEXT_W; // ancho útil de la sección en curso
 const CODE_FONT = 'Consolas';
 const CM = (cm) => Math.round(cm * 96 / 2.54); // píxeles a 96 ppp, unidad de docx para imágenes
-const PAGE_BREAK_PER_DOC = false; // D032: los documentos siguen uno tras otro para reducir páginas
 const LABEL = /^(Fuente|Fecha|Estado):\s*(.*)$/;
 
 const thin = { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF' };
@@ -48,17 +47,53 @@ function presentar(md) {
 
 // Fuentes: índice (README) y los 14 documentos. Los nombres de archivo .md se
 // sustituyen por el número de sección, porque SEPSA no recibe archivos .md.
+// Puntos de la carta (D034): cada documento del cuerpo es un apartado numerado.
+const PUNTOS = [
+  { titulo: '1. Requerimientos funcionales y técnicos, y procesos de corte y reconexión',
+    docs: { '01': '1.1', '02': '1.2' } },
+  { titulo: '2. Arquitectura, tecnologías, modelo de base de datos, diccionario de datos y código fuente',
+    docs: { '03': '2.1', '04': '2.2', '05': '2.3', '06': '2.4' } },
+  { titulo: '3. Manuales técnico, de instalación y de usuario',
+    docs: { '07': '3.1', '08': '3.2', '09': '3.3' } },
+  { titulo: '4. Plan de pruebas, criterios de aceptación y resultados',
+    docs: { '10': '4.1', '11': '4.2' } },
+  { titulo: '5. Seguridad, perfiles de acceso y tratamiento de la información',
+    docs: { '12': '5.1', '13': '5.2' } },
+  { titulo: '6. Pendientes y decisiones (transversal)',
+    docs: { '14': '6.1' } },
+];
+
+// El H1 «NN. Título» del documento pasa a apartado «X.Y Título» (H2); sus encabezados
+// de contenido bajan un nivel. Los bloques de código no se tocan.
+function enApartado(md, apartado) {
+  let dentro = false;
+  let primero = true;
+  return md.split('\n').map((linea) => {
+    if (/^```/.test(linea)) { dentro = !dentro; return linea; }
+    if (dentro) return linea;
+    if (primero && /^# \d\d\. /.test(linea)) {
+      primero = false;
+      return `## ${apartado} ${linea.replace(/^# \d\d\. /, '')}`;
+    }
+    if (/^### /.test(linea)) return `#### ${linea.slice(4)}`;
+    if (/^## /.test(linea)) return `### ${linea.slice(3)}`;
+    return linea;
+  }).join('\n');
+}
+
 // Cada parte lleva la carpeta de su archivo, para resolver las imágenes relativas.
 function loadSource() {
-  const cuerpo = fs.readdirSync(ENTREGA).filter((f) => /^\d\d-.*\.md$/.test(f)).sort();
-  const anexos = fs.readdirSync(path.join(ENTREGA, 'anexos')).filter((f) => /^A\d\d-.*\.md$/.test(f)).sort();
   const readme = fs.readFileSync(path.join(ENTREGA, 'README.md'), 'utf8')
     .replace(/^# .*$/m, '# Índice de la entrega');
   const parts = [{ md: readme, dir: ENTREGA }];
-  for (const f of cuerpo) parts.push({ md: fs.readFileSync(path.join(ENTREGA, f), 'utf8'), dir: ENTREGA });
-  for (const f of anexos) {
-    const dir = path.join(ENTREGA, 'anexos');
-    parts.push({ md: fs.readFileSync(path.join(dir, f), 'utf8'), dir });
+  for (const punto of PUNTOS) {
+    let primeraParte = true;
+    for (const [nn, apartado] of Object.entries(punto.docs)) {
+      const archivo = fs.readdirSync(ENTREGA).find((f) => f.startsWith(`${nn}-`) && f.endsWith('.md'));
+      let md = enApartado(fs.readFileSync(path.join(ENTREGA, archivo), 'utf8'), apartado);
+      if (primeraParte) { md = `# ${punto.titulo}\n\n${md}`; primeraParte = false; }
+      parts.push({ md, dir: ENTREGA });
+    }
   }
   return parts.map((p) => ({
     dir: p.dir,
@@ -282,7 +317,7 @@ function blocks(tokens, ctx) {
         out.push(new Paragraph({
           heading: lvl,
           children: runs(tok.tokens),
-          pageBreakBefore: tok.depth === 1 && (PAGE_BREAK_PER_DOC || tok.text.startsWith('Anexo A01')),
+          pageBreakBefore: tok.depth === 1,
         }));
         break;
       }

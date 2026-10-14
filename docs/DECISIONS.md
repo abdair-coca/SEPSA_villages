@@ -197,6 +197,12 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 
 ## D033 — Cuerpo resumido y anexos de detalle
 
-**Estado:** vigente
+**Estado:** reemplazada por D034
 **Decisión:** La entrega tiene dos niveles. El cuerpo (índice y documentos 01 a 14) resume cada punto de la carta. Los anexos A01 a A14 (`docs/entrega-sepsa/anexos/`) conservan el detalle completo: tablas, matrices, criterios, evidencias y pendientes. El documento 04 no tiene anexo porque ya es breve. No se elimina información: cada dato de las fuentes aparece en el resumen o en su anexo.
 **Consecuencia:** Un cambio de dato se hace en el anexo y en el resumen que lo cita. La copia Word pone los anexos después del cuerpo; medida con LibreOffice, mide unas 13 páginas de cuerpo y 24 de anexos (37 en total, cerca de las 36 de D030). Reducir el cuerpo más exige quitar contenido de un anexo, decisión que no se ha tomado.
+
+## D034 — Estructura por punto de la carta, sin anexos
+
+**Estado:** vigente
+**Decisión:** La entrega sigue la estructura de la carta de SEPSA: cinco puntos y un apartado transversal. Cada apartado tiene subtítulos numerados (1.1, 1.2…). Cada documento de `docs/entrega-sepsa/` es un apartado con su detalle completo; no hay anexos ni resúmenes separados. La copia Word numera los apartados según el índice de `README.md`. La entrega no muestra códigos de commit: la trazabilidad queda en el historial de git y en las decisiones.
+**Consecuencia:** D033 queda sustituida. Un cambio se hace en el apartado que lo describe. La copia Word mide 31 páginas medidas con LibreOffice.
