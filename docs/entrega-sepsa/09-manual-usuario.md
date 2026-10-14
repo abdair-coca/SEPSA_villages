@@ -6,15 +6,23 @@ Estado: entrega, copia fechada. Describe la interfaz tal como está hoy.
 
 **Regla principal: sin autorización en línea vigente, no hay corte.** Sin conexión se puede trabajar y registrar una visita, pero no se corta.
 
+Las capturas de este manual son del modo simulado, con datos de demostración, no datos reales.
+
 ## 1. Administrador
 
 **Entrar.** Escribir usuario y contraseña y pulsar **Ingresar**. La contraseña nunca se guarda en la aplicación; **Recordar usuario en este dispositivo** guarda solo el usuario. La sesión dura 7 días. Entrar requiere conexión.
+
+![Pantalla de acceso](img/login-390.png)
 
 **Cambiar de rol.** Si la cuenta tiene los dos roles, el menú de perfil ofrece **Cambiar a Técnico** o **Cambiar a Administrador**. El cambio requiere conexión.
 
 **Buscar morosos.** En **Buscar morosos** se usan el buscador o los filtros **Área**, **Localidad**, **Ruta**, **Facturas vencidas** y **Estado del suministro**. Los resultados se ordenan por deuda. Antes de crear la orden se revisan cliente, dirección, cuenta, medidor, deuda y estado. Si ya hay una orden activa para el suministro, no se crea otra. La elegibilidad la decide el administrador al seleccionar el suministro.
 
+![Centro de control del administrador: búsqueda de morosos y datos del suministro](img/admin-panel-1280.png)
+
 **Crear y asignar.** Con los suministros marcados, pulsar **Crear orden de corte** o **Crear y asignar orden de corte**. En **Creación masiva** se revisa la lista, se elige el técnico en **Asignar a técnico** y se pulsa **Aceptar y crear órdenes**. Cada orden queda con creador, técnico, versión y estado `GENERADO`, y la acción queda en auditoría.
+
+![Creación masiva: selección del técnico y confirmación de las órdenes](img/admin-crear-asignar-1280.png)
 
 **Operaciones por conciliar.** Lista de solo lectura: conflictos, autorizaciones usadas cuya operación no llegó y operaciones cerradas porque la autorización no se usó. El técnico las verifica desde su dispositivo.
 
@@ -25,6 +33,8 @@ Estado: entrega, copia fechada. Describe la interfaz tal como está hoy.
 **Antes de salir (con internet).** Conectarse, abrir **SEPSA Campo**, pulsar **Enviar pendientes y actualizar** para descargar las órdenes, y revisar que la cabecera muestre **Red disponible**. No borrar los datos del navegador: ahí están las órdenes y las operaciones pendientes.
 
 **Jornada.** La pantalla **Jornada de campo** muestra la **Orden actual** y permite **Abrir orden** y **Marcar incidencia**. La barra inferior tiene **Inicio**, **Mis órdenes**, **Mapa** y **Pendientes**.
+
+![Jornada de campo](img/tecnico-inicio-390.png) ![Detalle de la orden con Registrar corte](img/tecnico-detalle-390.png) ![Excepción de foto con justificación obligatoria](img/tecnico-excepcion-foto-390.png)
 
 **Registrar un corte.** En el detalle de la orden, **Registrar corte** pide:
 
