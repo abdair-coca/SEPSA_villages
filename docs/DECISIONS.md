@@ -206,3 +206,9 @@ Solo contiene decisiones que un agente no debe reinterpretar sin una instrucció
 **Estado:** vigente
 **Decisión:** La entrega sigue la estructura de la carta de SEPSA: cinco puntos y un apartado transversal. Cada apartado tiene subtítulos numerados (1.1, 1.2…). Cada documento de `docs/entrega-sepsa/` es un apartado con su detalle completo; no hay anexos ni resúmenes separados. La copia Word numera los apartados según el índice de `README.md`. La entrega no muestra códigos de commit: la trazabilidad queda en el historial de git y en las decisiones.
 **Consecuencia:** D033 queda sustituida. Un cambio se hace en el apartado que lo describe. La copia Word mide 31 páginas medidas con LibreOffice.
+
+## D035 — `docs/archive/` fuera del árbol de entrega
+
+**Estado:** vigente
+**Decisión:** `docs/archive/` sale del árbol versionado. Contenía especificaciones anteriores y datos de personas (cédula, correo institucional, nombres de clientes, cuentas y medidores). Sus hallazgos abiertos pasan a `docs/operations/verificacion-entrega.md` (sección Hallazgos abiertos). El seed `002_seed.sql` conserva el usuario de un técnico real por decisión del equipo; queda como pendiente de SEPSA en `14-pendientes-sepsa.md`, sección B.
+**Consecuencia:** El historial de git conserva los archivos y no se reescribe (D031). Reescribirlo es una decisión aparte que requiere aprobación explícita. Los enlaces a `docs/archive/` se retiran de `README.md`, `AGENTS.md`, `docs/PROJECT.md` y `docs/ARCHITECTURE.md`.

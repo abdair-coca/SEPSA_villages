@@ -87,3 +87,23 @@ No ejecutado en esta revisión: `npm test` del backend y `npm run e2e:browser`, 
 4. Pedir a una persona no técnica la revisión de textos (3.4).
 5. Decidir si `e2e:browser` y `npm test` del backend se ejecutan contra una base de prueba antes de la entrega.
 6. Registro del técnico (2.7): verificado a mano el 2026-10-14. No queda pendiente.
+
+## Hallazgos abiertos
+
+Registrados durante la limpieza estructural (2026-10-11) y el cierre del plan de entrega (2026-10-13). Estaban en `docs/archive/`, que sale del árbol (D035). No se han revalidado: antes de tomar uno, comprobar que sigue vigente.
+
+- **Pantallas que importan adaptadores.** `screens/FieldApp.tsx` usa `adapters/browser/connectivity` y `screens/LoginScreen.tsx` usa `adapters/browser/session-persistence`. Son excepciones registradas en `KNOWN_ADAPTER_EXCEPTIONS` de `field-app/src/architecture.test.ts`. Corregirlo cambia las props de las pantallas; va en una tarea aparte.
+- **Etiquetas del administrador.** `screens/OperationsApp.tsx` tiene etiquetas propias con textos distintos a `utils/labels.ts` (p. ej. «Generada» frente a «Por ejecutar»). Unificarlas es una decisión de producto.
+- **Tamaño de componentes.** `screens/OperationsApp.tsx` (425 líneas) y `components/FieldMap.tsx` (416) siguen por encima de ~300. Lo que queda es estado y efectos de una sola pieza; separarlo pide un hook propio.
+- **Pruebas de paneles en línea.** `OperationsApp.requests.test.tsx` usa `elements()` para expandir componentes. Cualquier panel en línea que se extraiga necesita el mismo tratamiento.
+- **Robustez de `smoke:pwa`.** Falló una vez justo después de `smoke:ui` y pasó en el reintento. Posible carrera de puerto o de servidor.
+- **Validación de sincronización.** `services/sync-payload-validation.service.ts` mezcla validación de forma (400) y reglas de dominio de la captura de corte. Separarlas es un cambio de diseño aparte.
+- **Ruta de cierre de sesión.** `POST /v1/auth/logout` figura como pública en la tabla de rutas aunque el OpenAPI declare seguridad. El test lo documenta.
+- **Errores de TypeScript en el backend.** `tsc --noUnusedLocals` da 9 errores, todos en `test/application.test.ts` y `test/reconnection.test.ts`.
+- **Clasificación de errores de corte.** `use-cases/process.ts` (`uncertainError`) decide por palabras del mensaje. Conviene basarlo solo en códigos.
+- **Mensajes técnicos en inglés.** Los errores internos de IndexedDB y las invariantes de `use-cases/sync.ts` siguen en inglés. Si alguno llega a pantalla, se traduce.
+- **Reparto del CSS.** `styles/app.css` no se puede repartir por componente sin cambiar la cascada: los dueños de clases compartidas (`.panel`, `.panel-heading`, `.primary-action`, `.app-header`) forman un ciclo. Hace falta consolidar esos overrides y ampliar el inventario de estados (notificaciones, banners, modales) antes de verificar. Un intento se revirtió porque una notificación de 360 px quedó a 58 px de ancho.
+- **Tokens duplicados.** `tokens.css` redefine nueve tokens dentro de `.field-app` y `[data-ui-theme="field"]`. Un literal solo se sustituye por `var(--token)` si vale lo mismo en ambos ámbitos.
+- **Capturas visuales.** Algunos estados muestran identificadores técnicos que cambian entre ejecuciones. La lista de órdenes del técnico cambia de altura en saltos de 56 px. Las capturas de esos estados se comparan sin propiedades de color.
+- **Migración 008.** `008_reconnection_schema.sql` se reejecuta en cada arranque (DROP y ADD de constraints con bloqueo exclusivo). Es idempotente, pero conviene revisarla antes de aumentar el tráfico del piloto.
+- **Cobertura de pruebas.** Huecos listados en el plan de pruebas (RF-09, RF-10, RF-14, RF-16, RF-19, RF-22, RF-27, RF-33, RF-35). Algunos ya tienen prueba; revisar la lista contra el código antes de cerrarla.

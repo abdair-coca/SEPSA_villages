@@ -30,7 +30,7 @@ La entrega sigue la estructura de la carta de SEPSA: cinco puntos y un apartado 
 
 - **Sin integración oficial con SEPSA.** El contrato del servidor es provisional y el adaptador no sustituye a la API que defina SEPSA (apartados 2.1 y 5.1).
 - **Corrección de datos por el técnico.** No está en la aplicación. Se resuelve con un procedimiento manual de soporte (no se implementa).
-- **Datos de prueba.** Los deudores y órdenes son ficticios y se cargan a mano (D026). El código no contiene datos de personas (D031); la purga de copias anteriores es una decisión de SEPSA (`14-pendientes-sepsa.md`).
+- **Datos de prueba.** Los deudores y órdenes son ficticios y se cargan a mano (D026). El árbol no contiene los seeds con filas de personas (D031). El seed `002` conserva el usuario de un técnico real, por decisión del equipo (D035). La purga de copias anteriores y el tratamiento de ese usuario son decisiones de SEPSA (`14-pendientes-sepsa.md`).
 - **Plan gratuito.** El servidor y la base de datos están en planes gratuitos. La primera petición tras un periodo de inactividad puede tardar cerca de un minuto (`03-arquitectura-tecnologias.md`).
 - **Sesión.** Entrar exige conexión. Con la sesión vigente, de 7 días (D025), el técnico trabaja sin conexión.
 - **Conciliación.** El administrador ve las operaciones por conciliar en solo lectura (D024). Resolverlas no se hace desde la interfaz.

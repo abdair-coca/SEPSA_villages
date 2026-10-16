@@ -4,7 +4,7 @@ Piloto offline-first para administrar órdenes de corte, asignarlas a técnicos 
 
 ## Empezar
 
-Lee [docs/PROJECT.md](docs/PROJECT.md) y [docs/RULES.md](docs/RULES.md). Luego consulta solo el feature y el código relacionados. La documentación anterior está en [docs/archive/](docs/archive/README.md).
+Lee [docs/PROJECT.md](docs/PROJECT.md) y [docs/RULES.md](docs/RULES.md). Luego consulta solo el feature y el código relacionados.
 
 ## Estado actual
 

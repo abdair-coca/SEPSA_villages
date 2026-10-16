@@ -54,7 +54,7 @@ La falta de conexión permite trabajo local, nunca autoriza un corte físico. Un
 ## Restricciones de contexto
 
 - Leer `docs/RULES.md` y este documento antes de una tarea normal.
-- Leer solo el feature relacionado y el código afectado; no cargar `docs/archive/` por defecto.
+- Leer solo el feature relacionado y el código afectado.
 - Consultar `docs/ARCHITECTURE.md` para cambios de capas, persistencia, API o sincronización.
 - Consultar `docs/DOMAIN.md` para entidades, estados y relaciones.
 - Consultar `docs/DECISIONS.md` cuando una decisión vigente pueda verse afectada.
@@ -74,5 +74,3 @@ La falta de conexión permite trabajo local, nunca autoriza un corte físico. Un
 - [Guía de evaluación del piloto](operations/guia-evaluacion.md): cómo probar cada flujo y qué esperar, sin credenciales.
 - [Lista de verificación de la entrega](operations/verificacion-entrega.md): criterio, estado y evidencia de cada tarea del plan de consolidación.
 - [Entrega documental para SEPSA](entrega-sepsa/README.md): copia fechada de estas fuentes, con sus pendientes en `14-pendientes-sepsa.md`. No es fuente de reglas; si cambia una fuente, la entrega se actualiza en la misma tarea (D021).
-
-El material anterior se conserva en [archive/](archive/README.md) solo para investigación histórica o revisión de decisiones previas.

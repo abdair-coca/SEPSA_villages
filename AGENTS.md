@@ -9,7 +9,7 @@ For every task, read only:
 3. the relevant feature document
 4. the relevant code and tests
 
-Read `docs/ARCHITECTURE.md`, `docs/DOMAIN.md` or `docs/DECISIONS.md` only when the task touches those areas. Do not read `docs/archive/` by default.
+Read `docs/ARCHITECTURE.md`, `docs/DOMAIN.md` or `docs/DECISIONS.md` only when the task touches those areas.
 
 ## Development workflow
 
@@ -53,8 +53,8 @@ The user authorizes committing every finished task on `main`. Commit at the end 
 | Cut, visit, GPS, photo or field capture | `docs/features/cuts.md` + `docs/features/readings.md` |
 | Offline queue or retry | `docs/features/synchronization.md` |
 | Folder layout, naming or code comments | `docs/ARCHITECTURE.md` (Mapa del código) |
-| Open findings from the structural cleanup | `docs/archive/limpieza-estructural/TASK.md` (Hallazgos section) |
-| Open pending items and conflicts from the SEPSA delivery | `docs/archive/entrega-sepsa/TASK.md` (Pendientes and Hallazgos sections) |
+| Open findings from the structural cleanup and the delivery | `docs/operations/verificacion-entrega.md` (Hallazgos abiertos section) |
+| Open pending items and conflicts from the SEPSA delivery | `docs/entrega-sepsa/14-pendientes-sepsa.md` (sections B and C) |
 | SEPSA delivery (copy of the active sources, dated; index and pending items) | `docs/entrega-sepsa/README.md`; pending items in `docs/entrega-sepsa/14-pendientes-sepsa.md` |
 | SEPSA answers and decisions of 2026-10-13 (SC08 scope, eligibility, final reading, inconclusive lookup, evidence) | `docs/DECISIONS.md` (D027–D030) and the active feature documents they cite |
 | SEPSA pending items for code (seeds, other-device data, lookup retry coverage) | `docs/entrega-sepsa/14-pendientes-sepsa.md` (section C) |

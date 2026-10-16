@@ -19,7 +19,7 @@ PostgreSQL
 
 ## Frontend
 
-`field-app/` contiene una aplicación React + TypeScript. El código se organiza por tipo: `src/domain` define entidades y políticas; `src/ports` define interfaces; `src/use-cases` contiene casos de uso; `src/adapters` conecta IndexedDB, navegador, simulación y HTTP; `src/state` compone el estado de la jornada; `src/bootstrap` construye los stores según el modo; `src/services` agrupa servicios de navegador sin UI; `src/screens` contiene las pantallas de administración, campo y login; `src/components` los componentes (genéricos en `src/components/common`); `src/utils` funciones puras de presentación y `src/styles` las hojas de estilo. La estructura objetivo y las reglas de dependencias están en `docs/archive/limpieza-estructural/PLAN.md` (plan cerrado).
+`field-app/` contiene una aplicación React + TypeScript. El código se organiza por tipo: `src/domain` define entidades y políticas; `src/ports` define interfaces; `src/use-cases` contiene casos de uso; `src/adapters` conecta IndexedDB, navegador, simulación y HTTP; `src/state` compone el estado de la jornada; `src/bootstrap` construye los stores según el modo; `src/services` agrupa servicios de navegador sin UI; `src/screens` contiene las pantallas de administración, campo y login; `src/components` los componentes (genéricos en `src/components/common`); `src/utils` funciones puras de presentación y `src/styles` las hojas de estilo. Las reglas de dependencias las comprueba `field-app/src/architecture.test.ts`.
 
 ### UI compartida
 

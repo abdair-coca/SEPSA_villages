@@ -37,6 +37,7 @@ El proyecto entrega la información. SEPSA define estas decisiones.
 | Registro de cambios operativos | No definido en el piloto |
 | Responsable, custodia y retención de datos personales (clientes, técnicos, sesiones y auditoría) | Sin definir. El sistema no borra datos |
 | Copias anteriores de los datos de personas de los seeds `005` y `006` | Los seeds se retiraron del código (D031). Decidir si SEPSA exige purgar las copias anteriores |
+| Usuario de un técnico real en el seed `002` (`jhonny.moya`) | Se conserva por decisión del equipo (D035). Decidir si SEPSA exige sustituirlo, y si la base ya cargada debe renombrarse |
 | API oficial y su integración | Hay un adaptador provisional |
 | Destino del SC08: archivo o API | El sistema no genera hoy un archivo SC08. `TODO: VALIDAR CON SEPSA` |
 | Relación cliente, cuenta y suministro | Supuesto del piloto: una cuenta y un suministro por fila. `TODO: VALIDAR CON SEPSA` |
